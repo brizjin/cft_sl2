@@ -18,9 +18,6 @@ class Hello(object):
 	def __init__(self, arg):
 		super(Hello, self).__init__()
 		self.arg = arg
-		
-		
-
 class PathHelper(object):
 	"""docstring for PathHelper"""
 	def __init__(self, file_name):
@@ -352,7 +349,6 @@ class quickCommand(sublime_plugin.WindowCommand):
 
 	def on_done(self, c):
 		print c
-
 def with_exec_time(callback):
 	dbeg = datetime.datetime.now()
 	r = None
@@ -363,7 +359,6 @@ def with_exec_time(callback):
 
 	print callback.__name__ + ', выполнена за ' + delta_str
 	return r
-
 def call_async(call_func,on_complete=None,msg=None):
 	class ThreadProgress():
 	    def __init__(self, thread, message):
@@ -406,9 +401,6 @@ def call_async(call_func,on_complete=None,msg=None):
 			if on_complete:
 				sublime.set_timeout(on_complete, 0)
 	RunInThread(on_complete).start()
-
-
-
 class cft_settings_class(object):
 	def __init__(self):
 		self.file_path = os.path.join(sublime.packages_path(),plugin_name,"cache","cft_settings.json")
@@ -437,7 +429,6 @@ class cft_settings_class(object):
 				self.settings = json.loads(r)
 				#print "s=",self.settings,self
 cft_settings = cft_settings_class()	
-
 class timer(object):
 	def __init__(self):
 		self.begin = datetime.datetime.now()
@@ -460,8 +451,6 @@ class timer(object):
 		if TIMER_DEBUG:
 			print "%-6s"%self.get_time(),"%-6s"%self.get_time_delta_str(self.last,datetime.datetime.now()),text
 			self.last = datetime.datetime.now()
-
-
 def call_cache(call_func,file_name,cache_save_complete):
 	def call_and_save():
 		t = timer()
@@ -487,6 +476,8 @@ def call_cache(call_func,file_name,cache_save_complete):
 		rez = call_and_save()		
 	t.print_time("call_cache")
 	return rez
+
+
 
 class FileReader(object):
 	def __init__(self):
@@ -523,7 +514,32 @@ class FileReader(object):
 		t.print_time("Тексты sql загружены за")
 		#print self.cft_schema
 		#print "file_loading_completed"
-		
+class File(object):
+	def sub(p_str,from_str,to_str,p_start=0):
+		begin = p_str.find(from_str,p_start)#-len(from_str)
+		end = p_str.rfind(to_str,p_start)+len(to_str)
+		return p_str[begin:end].strip()
+	@staticmethod
+	def read(file_path):
+		file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
+		f = open(file_path,"r")
+		text = f.read()
+		f.close()
+
+		fileName, fileExtension = os.path.splitext(file_path)
+		if fileExtension == '.tst':
+			text = sub(text,"declare","end;")
+		return text
+	@staticmethod
+	def exists(file_path):
+		file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
+		return os.path.exists(file_path)
+	@staticmethod
+	def write(file_path,text):
+		file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
+		f = open(file_path,"w")
+		f.write(text)
+		f.close()
 
 
 
@@ -597,6 +613,7 @@ class cftDB(object):
 
 	def connect(self,connection_string):
 		self.connection_string 	= connection_string
+		self.load_classes()
 	def load(self):
 		t = timer()
 		self.connection 	= cx_Oracle.connect(self.connection_string)		
@@ -611,9 +628,37 @@ class cftDB(object):
 		t.print_interval("self.parse")
 		#self.parse_json()
 		return 1
+	def load_classes(self):
+		class ClassXmlParser(dict):	
+			def __init__(self,xml_text):
+				super(ClassXmlParser, self).__init__()
+				self.xml_text = '<?xml version="1.0" encoding="windows-1251"?>' + xml_text
+				self.parser = xml.parsers.expat.ParserCreate()
+				self.parser.StartElementHandler  = self.start_element
+				self.parser.Parse(self.xml_text, 1)
+			def start_element(self,name, attrs):
+				if name == 'CLASS':
+					cl = cftDB.db_row(db,attrs)
+					self[cl.id] = cl
+
+		class_file = "cache\\classes.xml";
+		t = timer()
+		cl_xml = None
+		if File.exists(class_file):
+			cl_xml = File.read(class_file)
+		else:
+			sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl"""
+			cl_xml = self.select_in_tmp_connection(sql)
+			File.write(class_file,cl_xml)
+
+		t.print_time("load_classes")
+
+		self.classes = ClassXmlParser(cl_xml)
+		print self.classes["PR_CRED"].name
 
 	
 	def select(self,sql,*args):
+
 		return self.select_cursor(self.cursor,sql,*args)
 	def select_in_tmp_connection(self,sql,*args):
 		connection 	= cx_Oracle.connect(self.connection_string)
@@ -626,11 +671,11 @@ class cftDB(object):
 		try:			
 			cursor.execute(sql,args)			
 			desc  = [d[0].lower() for d in cursor.description]						
-			table = [[(lambda: unicode(t,'1251') if t.__class__ == str else t)() for t in row] for row in cursor]#Конвертнем все строковые значения в юникод		
+			table = [[(lambda: unicode(t,'1251') if t.__class__ == str else t)() for t in row] for row in cursor]#Конвертнем все строковые значения в юникод				
 			table = [[(lambda: "" if not t else t)() for t in row] for row in table] #Заменяем все значение None на пустую строку
 			
 			#print "desc_len=",len(desc),"table_len",len(table)
-			value = None
+			#value = None
 			if len(desc)==1 and len(table)==1:
 				if t.__class__.__name__ == 'LOB':
 					lob_str = table[0][0].read()
@@ -644,7 +689,7 @@ class cftDB(object):
 			error, = e.args
 			#print error
 			if error.__class__.__name__ == 'str':
-				print error
+				print "error",error
 			elif error.code == 28:
 				print "Повторная инициализация"
 				self.connect(self.connection_string)
@@ -670,8 +715,8 @@ class cftDB(object):
 				self.classes = dict()
 
 				self.parser = xml.parsers.expat.ParserCreate()
-				self.parser.StartElementHandler = self.start_element
-				self.parser.EndElementHandler = self.end_element
+				self.parser.StartElementHandler  = self.start_element
+				self.parser.EndElementHandler 	 = self.end_element
 				self.parser.CharacterDataHandler = self.char_data
 
 				self.xml_text = '<?xml version="1.0" encoding="windows-1251"?>' + self.xml_text
@@ -736,9 +781,8 @@ class connectCommand(sublime_plugin.WindowCommand):
 	def on_done(self, input):		
 		self.window.run_command('show_panel', {"panel": "console", "toggle": "true"})
 		db.connect(input)
-		#call_async(db.load,self.on_db_load_complete,"Подключение","Успешно подключенно")
-		call_async(db.load,self.on_db_load_complete,msg="Подключение")
-		#call_async(db.load_from_cache,self.on_db_load_complete,"Подключение","Успешно подключенно")
+		#call_async(db.load,self.on_db_load_complete,msg="Подключение")
+
 		
 		# import cProfile
 		# profiler = cProfile.Profile()
@@ -844,7 +888,7 @@ class save_methodCommand(sublime_plugin.TextCommand):
 				sublime_src_text = aview.substr(sublime.Region(0,aview.size()))
 				db_src_text = m.get_sources()
 
-				r = re.compile(r' +$', re.MULTILINE)
+				r = re.compile(r' +$', re.MULTILINE) #Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
 				sublime_src_text = r.sub('',sublime_src_text)
 
 				#print sublime_src_text
