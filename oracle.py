@@ -441,15 +441,25 @@ cft_settings = cft_settings_class()
 class timer(object):
 	def __init__(self):
 		self.begin = datetime.datetime.now()
-	def get_time(self):
-		delta 		= datetime.datetime.now() - self.begin
+		self.last = datetime.datetime.now()
+	def get_time_delta_str(self,begin,end):
+		delta 		= end - begin
 		delta_str 	= (datetime.datetime.min + delta).time().strftime("%H:%M:%S.%f").strip("0:") 
 		return delta_str
+	def get_time(self):
+		#delta 		= datetime.datetime.now() - self.begin
+		#delta_str 	= (datetime.datetime.min + delta).time().strftime("%H:%M:%S.%f").strip("0:") 
+		#return delta_str
+		return self.get_time_delta_str(self.begin,datetime.datetime.now())
 	def get_now(self):
 		return datetime.datetime.now().strftime("%H:%M:%S")
 	def print_time(self,text):
 		if TIMER_DEBUG:
-			print text,"за",self.get_time(),"сек."
+			print text,"за",self.get_time(),"сек."	
+	def print_interval(self,text):
+		if TIMER_DEBUG:
+			print "%-6s"%self.get_time(),"%-6s"%self.get_time_delta_str(self.last,datetime.datetime.now()),text
+			self.last = datetime.datetime.now()
 
 
 def call_cache(call_func,file_name,cache_save_complete):
@@ -463,7 +473,7 @@ def call_cache(call_func,file_name,cache_save_complete):
 			cache_save_complete(rez)
 			t.print_time("Кэш обновлен из базы")
 		return rez
-
+	t = timer()
 	file_path = os.path.join(sublime.packages_path(),plugin_name,"cache",file_name)
 	rez = None
 	if os.path.exists(file_path):		
@@ -475,6 +485,7 @@ def call_cache(call_func,file_name,cache_save_complete):
 	else:
 		#print "Из базы"
 		rez = call_and_save()		
+	t.print_time("call_cache")
 	return rez
 
 class FileReader(object):
@@ -587,20 +598,22 @@ class cftDB(object):
 	def connect(self,connection_string):
 		self.connection_string 	= connection_string
 	def load(self):
-		
+		t = timer()
 		self.connection 	= cx_Oracle.connect(self.connection_string)		
+		t.print_interval("self.connection")
 		self.cursor 		= self.connection.cursor()
 		self.fr 			= FileReader()
-
+		t.print_interval("self.cursor + reader")
 		txt = call_cache(lambda:self.select_in_tmp_connection(self.fr.cft_schema_sql),"methods.xml",self.parse)
+		t.print_interval("self.call_cache")
 		#txt = self.select(self.fr.cft_schema_sql)
 		self.parse(txt)
+		t.print_interval("self.parse")
 		#self.parse_json()
 		return 1
 
 	
 	def select(self,sql,*args):
-		""" """
 		return self.select_cursor(self.cursor,sql,*args)
 	def select_in_tmp_connection(self,sql,*args):
 		connection 	= cx_Oracle.connect(self.connection_string)
@@ -643,19 +656,15 @@ class cftDB(object):
 			else:
 				print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
 			#return []
-
-	
-
 	def get_sid(self):
-		return self.select("select sys_context('userenv','sid') sid, sid from v$mystat where rownum=1")[0]["sid"]
 
+		return self.select("select sys_context('userenv','sid') sid, sid from v$mystat where rownum=1")[0]["sid"]
 	def print_classes(self):
 		for c in self.classes:
 			print c
 	def parse(self,txt):
 		class ParseXml(object):	
 			def __init__(self,xml_text):
-				self.t = timer()
 				self.xml_text = xml_text
 				self.cur_class = None
 				self.classes = dict()
@@ -667,7 +676,6 @@ class cftDB(object):
 
 				self.xml_text = '<?xml version="1.0" encoding="windows-1251"?>' + self.xml_text
 				self.parser.Parse(self.xml_text, 1)
-				self.t.print_time("ParseXml")
 
 			def start_element(self,name, attrs):
 				if name == 'class':
@@ -713,10 +721,6 @@ class cftDB(object):
 				print "error=",error
 			else:
 				print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
-		
-
-
-
 	def __getattribute__(self, key):
 		if key == 'classes':				
 			if not hasattr(self,'classes'):
@@ -725,17 +729,17 @@ class cftDB(object):
 		v = object.__getattribute__(self, key)		
 		return v
 
+db = cftDB()
 class connectCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		self.window.show_input_panel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done, self.on_change, self.on_cancel)
-	def on_done(self, input):
-		t = timer()
+	def on_done(self, input):		
 		self.window.run_command('show_panel', {"panel": "console", "toggle": "true"})
-		db.connect(input)		
+		db.connect(input)
 		#call_async(db.load,self.on_db_load_complete,"Подключение","Успешно подключенно")
 		call_async(db.load,self.on_db_load_complete,msg="Подключение")
 		#call_async(db.load_from_cache,self.on_db_load_complete,"Подключение","Успешно подключенно")
-		t.print_time("Connection")
+		
 		# import cProfile
 		# profiler = cProfile.Profile()
 		# profiler.runcall(db.load)
@@ -747,9 +751,10 @@ class connectCommand(sublime_plugin.WindowCommand):
 	def on_cancel(self):
 		pass
 	def on_db_load_complete(self):
+		
 		pass
 
-db = cftDB()
+
 #fr = FileReader()
 #views = dict()
 
@@ -826,7 +831,6 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 
 	def on_cancel(self):
 		pass
-
 class save_methodCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		try:
