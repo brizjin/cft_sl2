@@ -9,6 +9,9 @@ import threading
 import datetime
 import xml.parsers.expat
 plugin_name = "CFT"
+plugin_path = os.path.join(sublime.packages_path(),plugin_name)
+cache_path  = os.path.join(plugin_path,"cache")
+
 TIMER_DEBUG = True
 #import cftdb
 #from cftdb import call_async
@@ -446,7 +449,8 @@ class timer(object):
 		return datetime.datetime.now().strftime("%H:%M:%S")
 	def print_time(self,text):
 		if TIMER_DEBUG:
-			print text,"за",self.get_time(),"сек."	
+			print text,"за",self.get_time(),"сек."
+			self.last = datetime.datetime.now()	
 	def print_interval(self,text):
 		if TIMER_DEBUG:
 			print "%-6s"%self.get_time(),"%-6s"%self.get_time_delta_str(self.last,datetime.datetime.now()),text
@@ -514,14 +518,14 @@ class FileReader(object):
 		t.print_time("Тексты sql загружены за")
 		#print self.cft_schema
 		#print "file_loading_completed"
-class File(object):
+class file(object):
 	def sub(p_str,from_str,to_str,p_start=0):
 		begin = p_str.find(from_str,p_start)#-len(from_str)
 		end = p_str.rfind(to_str,p_start)+len(to_str)
 		return p_str[begin:end].strip()
 	@staticmethod
 	def read(file_path):
-		file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
+		#file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
 		f = open(file_path,"r")
 		text = f.read()
 		f.close()
@@ -530,20 +534,40 @@ class File(object):
 		if fileExtension == '.tst':
 			text = sub(text,"declare","end;")
 		return text
-	@staticmethod
-	def exists(file_path):
-		file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
-		return os.path.exists(file_path)
+	#@staticmethod
+	#def exists(file_path):
+	#	file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
+	#	return os.path.exists(file_path)
 	@staticmethod
 	def write(file_path,text):
-		file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
+		#file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
 		f = open(file_path,"w")
 		f.write(text)
 		f.close()
 
+def cache(file_name,load_func,load_complete_func,is_up_to_date = True):
+	value = None
+	if os.path.exists(file_name) and is_up_to_date:
+		value = file.read(file_name)
+		call_async(lambda:cache(file_name,load_func,load_complete_func,False))
+	else:
+		value = load_func()
+		file.write(file_name,value)
+	load_complete_func(value)
 
 
 class cftDB(object):
+	class ClassXmlParser(dict):	
+		def __init__(self,xml_text):
+			super(cftDB.ClassXmlParser, self).__init__()
+			self.xml_text = '<?xml version="1.0" encoding="windows-1251"?>' + xml_text
+			self.parser = xml.parsers.expat.ParserCreate()
+			self.parser.StartElementHandler  = self.start_element
+			self.parser.Parse(self.xml_text, 1)
+		def start_element(self,name, attrs):
+			if name == 'CLASS':
+				cl = cftDB.db_row(db,attrs)
+				self[cl.id] = cl
 	class db_row(object):
 		def __init__(self,db,p_list):			
 			self.db = db
@@ -628,33 +652,34 @@ class cftDB(object):
 		t.print_interval("self.parse")
 		#self.parse_json()
 		return 1
-	def load_classes(self):
-		class ClassXmlParser(dict):	
-			def __init__(self,xml_text):
-				super(ClassXmlParser, self).__init__()
-				self.xml_text = '<?xml version="1.0" encoding="windows-1251"?>' + xml_text
-				self.parser = xml.parsers.expat.ParserCreate()
-				self.parser.StartElementHandler  = self.start_element
-				self.parser.Parse(self.xml_text, 1)
-			def start_element(self,name, attrs):
-				if name == 'CLASS':
-					cl = cftDB.db_row(db,attrs)
-					self[cl.id] = cl
-
-		class_file = "cache\\classes.xml";
+	def select_clases(self):
 		t = timer()
-		cl_xml = None
-		if File.exists(class_file):
-			cl_xml = File.read(class_file)
-		else:
-			sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl"""
-			cl_xml = self.select_in_tmp_connection(sql)
-			File.write(class_file,cl_xml)
+		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl"""
+		value = self.select_in_tmp_connection(sql)
+		t.print_time("select_clases")
+		return value
+	def parse_classes(self,text):
+		self.classes = self.ClassXmlParser(text)
+	def load_classes(self):
+		cache(os.path.join(cache_path,"classes.xml")
+			 ,self.select_clases
+			 ,self.parse_classes)		
 
-		t.print_time("load_classes")
+		# class_file = "cache\\classes.xml";
+		# t = timer()
+		# cl_xml = None
+		# if File.exists(class_file):
+		# 	cl_xml = File.read(class_file)
+		# else:
+		# 	sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl"""
+		# 	cl_xml = self.select_in_tmp_connection(sql)
+		# 	File.write(class_file,cl_xml)
 
-		self.classes = ClassXmlParser(cl_xml)
-		print self.classes["PR_CRED"].name
+		# t.print_time("load_classes")
+
+		# self.classes = self.ClassXmlParser(cl_xml)
+		# t.print_interval("after parser")
+		# print self.classes["PR_CRED"].name
 
 	
 	def select(self,sql,*args):
@@ -778,9 +803,11 @@ db = cftDB()
 class connectCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		self.window.show_input_panel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done, self.on_change, self.on_cancel)
-	def on_done(self, input):		
+	def on_done(self, input):
+		t = timer()
 		self.window.run_command('show_panel', {"panel": "console", "toggle": "true"})
 		db.connect(input)
+		t.print_time("db.connect")
 		#call_async(db.load,self.on_db_load_complete,msg="Подключение")
 
 		
