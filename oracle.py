@@ -5,7 +5,7 @@ import json
 import cx_Oracle
 import os
 import sublime
-import threading
+import threading,thread
 import datetime
 import xml.parsers.expat
 plugin_name = "CFT"
@@ -526,6 +526,7 @@ class file(object):
 	@staticmethod
 	def read(file_path):
 		#file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
+		#t = timer()
 		f = open(file_path,"r")
 		text = f.read()
 		f.close()
@@ -533,11 +534,9 @@ class file(object):
 		fileName, fileExtension = os.path.splitext(file_path)
 		if fileExtension == '.tst':
 			text = sub(text,"declare","end;")
+		#t.print_time("file.read" + file_path)
 		return text
-	#@staticmethod
-	#def exists(file_path):
-	#	file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
-	#	return os.path.exists(file_path)
+
 	@staticmethod
 	def write(file_path,text):
 		#file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
@@ -546,15 +545,45 @@ class file(object):
 		f.close()
 
 def cache(file_name,load_func,load_complete_func,is_up_to_date = True):
+	t = timer()
 	value = None
 	if os.path.exists(file_name) and is_up_to_date:
 		value = file.read(file_name)
-		call_async(lambda:cache(file_name,load_func,load_complete_func,False))
+		call_async(lambda:cache(file_name,load_func,load_complete_func,False),lambda:t.print_time(u"Обновление кэша и загрузка новых данных " + load_func.__name__))
 	else:
 		value = load_func()
 		file.write(file_name,value)
+		
 	load_complete_func(value)
+	
+	if is_up_to_date:
+		t.print_time(u"Загрузка из кэша")
 
+class ConnectionMenu(object):
+	def __init__(self):
+		pass
+	def show(self):
+		sublime.active_window().show_input_panel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done, self.on_change, self.on_cancel)
+	def on_done(self, input):
+		#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
+		db.connect(input)
+		if self.continue_func:
+			lock.acquire()
+			lock.release()
+			print "Откроем"
+			self.continue_func()
+	def show_and_continue(self,callback_func):
+		if db.is_loaded and callback_func:		
+			callback_func()
+		else:
+			self.continue_func = callback_func
+			self.show()
+	def on_change(self, input):
+		pass		
+	def on_cancel(self):
+		pass
+	def on_db_load_complete(self):
+		pass
 
 class cftDB(object):
 	class ClassXmlParser(dict):	
@@ -633,11 +662,12 @@ class cftDB(object):
 		def __init__(self, db, p_list):
 			super(cftDB.view_row, self).__init__(db,p_list)
 	def __init__(self):
-		a = ""
-
+		self.ConnectionMenu = ConnectionMenu()
+		self.is_loaded = False
 	def connect(self,connection_string):
 		self.connection_string 	= connection_string
-		self.load_classes()
+		
+		call_async(self.load_classes)
 	def load(self):
 		t = timer()
 		self.connection 	= cx_Oracle.connect(self.connection_string)		
@@ -660,10 +690,16 @@ class cftDB(object):
 		return value
 	def parse_classes(self,text):
 		self.classes = self.ClassXmlParser(text)
-	def load_classes(self):
+	def load_classes(self):		
+		
+		lock.acquire()
+
 		cache(os.path.join(cache_path,"classes.xml")
 			 ,self.select_clases
-			 ,self.parse_classes)		
+			 ,self.parse_classes)
+		
+		self.is_loaded = True
+		lock.release()
 
 		# class_file = "cache\\classes.xml";
 		# t = timer()
@@ -792,30 +828,43 @@ class cftDB(object):
 			else:
 				print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
 	def __getattribute__(self, key):
-		if key == 'classes':				
-			if not hasattr(self,'classes'):
-				sublime.active_window().run_command('connect',{})
-				return
+		if key == 'classes':			
+			#ждем завершения первоначальной загрузки
+			lock.acquire()
+			lock.release()
 		v = object.__getattribute__(self, key)		
 		return v
 
 db = cftDB()
+lock = thread.allocate_lock()
+
+
+
+
 class connectCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		self.window.show_input_panel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done, self.on_change, self.on_cancel)
 	def on_done(self, input):
+		
+		# import hotshot
+		# prof = hotshot.Profile(os.path.join(cache_path,"your_project.prof"))
+		# prof.start()
+
 		t = timer()
 		self.window.run_command('show_panel', {"panel": "console", "toggle": "true"})
 		db.connect(input)
 		t.print_time("db.connect")
 		#call_async(db.load,self.on_db_load_complete,msg="Подключение")
 
-		
+		# prof.stop()
+		# prof.close()
+
 		# import cProfile
 		# profiler = cProfile.Profile()
-		# profiler.runcall(db.load)
+		# profiler.runcall(lambda:db.connect(input))
 		# profiler.print_stats()
-		
+		#lock.release()
+		#print "connect done"
 
 	def on_change(self, input):
 		pass		
@@ -824,21 +873,15 @@ class connectCommand(sublime_plugin.WindowCommand):
 	def on_db_load_complete(self):
 		
 		pass
-
-
-#fr = FileReader()
-#views = dict()
-
 class cft_openCommand(sublime_plugin.WindowCommand):
 	def run(self):
+		db.ConnectionMenu.show_and_continue(self.open_methods)
+		
+	def open_methods(self):
 		used_classes = [db.classes[clk].text for clk in cft_settings.get("used_classes")]
 		classes      = [clv.text for clk,clv in db.classes.iteritems() if clk not in cft_settings.get("used_classes")]
-		#print cft_settings.get("used_classes"),cft_settings
-		
 		used_classes.extend(classes)
-
 		self.window.show_quick_panel(used_classes,self.on_done,sublime.MONOSPACE_FONT)
-
 	def on_done(self, selected_class):
 		if selected_class >= 0:
 			#print db.classes.values()[selected_class].name,selected_class
