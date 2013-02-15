@@ -585,6 +585,12 @@ class ConnectionMenu(object):
 	def on_db_load_complete(self):
 		pass
 
+def ShowInputPanel(caption,value,on_done,on_change=None,on_cancel=None):
+	on_change = on_change  if on_change else lambda input:None
+	on_cancel = on_chancel if on_cancel else lambda: None
+	sublime.active_window().show_input_panel(caption,value,on_done,on_change,on_cancel)
+
+
 class cftDB(object):
 	class ClassXmlParser(dict):	
 		def __init__(self,xml_text):
@@ -666,7 +672,6 @@ class cftDB(object):
 		self.is_loaded = False
 	def connect(self,connection_string):
 		self.connection_string 	= connection_string
-		
 		call_async(self.load_classes)
 	def load(self):
 		t = timer()
@@ -843,7 +848,8 @@ lock = thread.allocate_lock()
 
 class connectCommand(sublime_plugin.WindowCommand):
 	def run(self):
-		self.window.show_input_panel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done, self.on_change, self.on_cancel)
+		#self.window.show_input_panel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done, self.on_change, self.on_cancel)
+		ShowInputPanel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done)
 	def on_done(self, input):
 		
 		# import hotshot
