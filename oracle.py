@@ -6,7 +6,7 @@ import cx_Oracle
 import os
 import sublime
 import threading,thread
-import datetime
+import datetime,time
 import xml.parsers.expat
 plugin_name = "CFT"
 plugin_path = os.path.join(sublime.packages_path(),plugin_name)
@@ -380,6 +380,7 @@ def call_async(call_func,on_complete=None,msg=None):
 	            delta = datetime.datetime.now() - self.d_begin
 	            delta_str = (datetime.datetime.min + delta).time().strftime("%H:%M:%S.%f").strip("0:")            
 	            how_long = unicode("Выполненно за %s сек" % delta_str,'utf-8')
+	            how_long = unicode(self.message + ". ",'utf-8') + how_long if self.message else how_long
 	            sublime.status_message(how_long)
 	            return
 
@@ -398,11 +399,23 @@ def call_async(call_func,on_complete=None,msg=None):
 	        sublime.set_timeout(lambda: self.run(i), 100)
 	class RunInThread(threading.Thread):
 		def run(self):
-			if msg:								
+			if msg:
 				ThreadProgress(self,msg)
+			#t = timer()
 			self.result = call_func()
+			#t.print_time(msg + ' ' if msg else '' + "call_async func:" + call_func.__name__)
 			if on_complete:
-				sublime.set_timeout(on_complete, 0)
+				def on_done():
+					#t = timer()
+					if not self.result:
+						on_complete()
+					elif self.result.__class__ == tuple:
+						on_complete(*self.result)
+					else:
+						on_complete(self.result)
+					#t.print_time(msg + ' ' + "call_async on_complete:" + on_complete.__name__)
+				sublime.set_timeout(on_done, 0)	
+
 	RunInThread(on_complete).start()
 class cft_settings_class(object):
 	def __init__(self):
@@ -455,33 +468,27 @@ class timer(object):
 		if TIMER_DEBUG:
 			print "%-6s"%self.get_time(),"%-6s"%self.get_time_delta_str(self.last,datetime.datetime.now()),text
 			self.last = datetime.datetime.now()
-def call_cache(call_func,file_name,cache_save_complete):
-	def call_and_save():
-		t = timer()
-		rez = call_func()		
-		f = open(file_path,"w")
-		f.write(rez)
-		f.close()
-		if cache_save_complete:			
-			cache_save_complete(rez)
-			t.print_time("Кэш обновлен из базы")
-		return rez
-	t = timer()
-	file_path = os.path.join(sublime.packages_path(),plugin_name,"cache",file_name)
-	rez = None
-	if os.path.exists(file_path):		
-		f = open(file_path,"r")
-		rez = f.read()
-		f.close()
-		call_async(call_and_save)#,msg="Обновление файлового кэша запроса")
-		
-	else:
-		#print "Из базы"
-		rez = call_and_save()		
-	t.print_time("call_cache")
-	return rez
+class EventHook(object):
 
+    def __init__(self):
+        self.__handlers = []
 
+    def __iadd__(self, handler):
+        self.__handlers.append(handler)
+        return self
+
+    def __isub__(self, handler):
+        self.__handlers.remove(handler)
+        return self
+
+    def fire(self, *args, **keywargs):
+        for handler in self.__handlers:
+            handler(*args, **keywargs)
+
+    def clearObjectHandlers(self, inObject):
+        for theHandler in self.__handlers:
+            if theHandler.im_self == inObject:
+                self -= theHandler
 
 class FileReader(object):
 	def __init__(self):
@@ -527,6 +534,9 @@ class file(object):
 	def read(file_path):
 		#file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
 		#t = timer()
+		if not os.path.exists(file_path):
+			return ''
+
 		f = open(file_path,"r")
 		text = f.read()
 		f.close()
@@ -543,52 +553,6 @@ class file(object):
 		f = open(file_path,"w")
 		f.write(text)
 		f.close()
-
-def cache(file_name,load_func,load_complete_func,is_up_to_date = True):
-	t = timer()
-	value = None
-	if os.path.exists(file_name) and is_up_to_date:
-		value = file.read(file_name)
-		call_async(lambda:cache(file_name,load_func,load_complete_func,False),lambda:t.print_time(u"Обновление кэша и загрузка новых данных " + load_func.__name__))
-	else:
-		value = load_func()
-		file.write(file_name,value)
-		
-	load_complete_func(value)
-	
-	if is_up_to_date:
-		t.print_time(u"Загрузка из кэша")
-
-class ConnectionMenu(object):
-	def __init__(self):
-		pass
-	def show(self):
-		sublime.active_window().show_input_panel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done, self.on_change, self.on_cancel)
-	def on_done(self, input):
-		#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
-		db.connect(input)
-		if self.continue_func:
-			lock.acquire()
-			lock.release()
-			print "Откроем"
-			self.continue_func()
-	def show_and_continue(self,callback_func):
-		if db.is_loaded and callback_func:		
-			callback_func()
-		else:
-			self.continue_func = callback_func
-			self.show()
-	def on_change(self, input):
-		pass		
-	def on_cancel(self):
-		pass
-	def on_db_load_complete(self):
-		pass
-
-def ShowInputPanel(caption,value,on_done,on_change=None,on_cancel=None):
-	on_change = on_change  if on_change else lambda input:None
-	on_cancel = on_chancel if on_cancel else lambda: None
-	sublime.active_window().show_input_panel(caption,value,on_done,on_change,on_cancel)
 
 
 class cftDB(object):
@@ -652,77 +616,36 @@ class cftDB(object):
 					print "error=",error
 				else:
 					print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
-			
-		
-		# def __getattribute__(self, key):			
-		# 	v = object.__getattribute__(self, key)
-		# 	if key == 'sources':				
-		# 		return v()				
-		# 	return v
-		# def __setattr__(self, key,value):						
-		# 	if key == 'sources':				
-		# 		return self.set_sources(value)
-		# 	v = object.__setattr__(self, key, value)							
-		# 	return v
+	
 	class view_row(db_row):	
 		def __init__(self, db, p_list):
 			super(cftDB.view_row, self).__init__(db,p_list)
 	def __init__(self):
-		self.ConnectionMenu = ConnectionMenu()
-		self.is_loaded = False
+		self.on_classes_cache_loaded = EventHook()
 	def connect(self,connection_string):
 		self.connection_string 	= connection_string
 		call_async(self.load_classes)
+		call_async(self.load)
 	def load(self):
-		t = timer()
 		self.connection 	= cx_Oracle.connect(self.connection_string)		
-		t.print_interval("self.connection")
 		self.cursor 		= self.connection.cursor()
-		self.fr 			= FileReader()
-		t.print_interval("self.cursor + reader")
-		txt = call_cache(lambda:self.select_in_tmp_connection(self.fr.cft_schema_sql),"methods.xml",self.parse)
-		t.print_interval("self.call_cache")
-		#txt = self.select(self.fr.cft_schema_sql)
-		self.parse(txt)
-		t.print_interval("self.parse")
-		#self.parse_json()
 		return 1
-	def select_clases(self):
+	def select_classes(self):
 		t = timer()
 		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl"""
 		value = self.select_in_tmp_connection(sql)
-		t.print_time("select_clases")
+		t.print_time("select_classes")
 		return value
-	def parse_classes(self,text):
+	def parse_classes(self,text,type=None):		
 		self.classes = self.ClassXmlParser(text)
-	def load_classes(self):		
-		
-		lock.acquire()
+		if type == "cache":
+			self.on_classes_cache_loaded.fire()
+	def load_classes(self):
+		call_async(lambda:(file.read(os.path.join(cache_path,"classes.xml")),"cache"),self.parse_classes,'Загрузка кэша')
+		call_async(self.select_classes,self.parse_classes,'Обновление кэша классов')
+	def is_connected(self):
+		return hasattr(self,"cursor") and hasattr(self,"connection") and self.select("select * from dual")[0][0] == 'X'
 
-		cache(os.path.join(cache_path,"classes.xml")
-			 ,self.select_clases
-			 ,self.parse_classes)
-		
-		self.is_loaded = True
-		lock.release()
-
-		# class_file = "cache\\classes.xml";
-		# t = timer()
-		# cl_xml = None
-		# if File.exists(class_file):
-		# 	cl_xml = File.read(class_file)
-		# else:
-		# 	sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl"""
-		# 	cl_xml = self.select_in_tmp_connection(sql)
-		# 	File.write(class_file,cl_xml)
-
-		# t.print_time("load_classes")
-
-		# self.classes = self.ClassXmlParser(cl_xml)
-		# t.print_interval("after parser")
-		# print self.classes["PR_CRED"].name
-
-	
 	def select(self,sql,*args):
 
 		return self.select_cursor(self.cursor,sql,*args)
@@ -753,17 +676,10 @@ class cftDB(object):
 			
 		except cx_Oracle.DatabaseError as e:
 			error, = e.args
-			#print error
 			if error.__class__.__name__ == 'str':
 				print "error",error
-			elif error.code == 28:
-				print "Повторная инициализация"
-				self.connect(self.connection_string)
-				if self.select("select * from dual")[0][0] == 'X':
-					print "Повторное выполнение запроса"
-					return self.select(sql)
-				else:
-					return []
+			elif error.code == 28:#ошибка нет подключения
+				return []
 			else:
 				print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
 			#return []
@@ -832,19 +748,22 @@ class cftDB(object):
 				print "error=",error
 			else:
 				print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
-	def __getattribute__(self, key):
-		if key == 'classes':			
-			#ждем завершения первоначальной загрузки
-			lock.acquire()
-			lock.release()
-		v = object.__getattribute__(self, key)		
-		return v
+	# def __getattribute__(self, key):
+	# 	if key == 'classes':			
+	# 		#ждем завершения первоначальной загрузки
+	# 		lock.acquire()
+	# 		lock.release()
+	# 	v = object.__getattribute__(self, key)		
+	# 	return v
+
+	# def __getattr__(self,key):
+	# 	if key == 'classes':			
+	# 		#ждем завершения первоначальной загрузки
+	# 		print "Ожидание загрузки"
+	# 		lock.acquire()
+	# 		lock.release()
 
 db = cftDB()
-lock = thread.allocate_lock()
-
-
-
 
 class connectCommand(sublime_plugin.WindowCommand):
 	def run(self):
@@ -856,14 +775,11 @@ class connectCommand(sublime_plugin.WindowCommand):
 		# prof = hotshot.Profile(os.path.join(cache_path,"your_project.prof"))
 		# prof.start()
 
-		t = timer()
+		#t = timer()
 		self.window.run_command('show_panel', {"panel": "console", "toggle": "true"})
 		db.connect(input)
-		t.print_time("db.connect")
-		#call_async(db.load,self.on_db_load_complete,msg="Подключение")
+		#t.print_time("db.connect")
 
-		# prof.stop()
-		# prof.close()
 
 		# import cProfile
 		# profiler = cProfile.Profile()
@@ -879,9 +795,16 @@ class connectCommand(sublime_plugin.WindowCommand):
 	def on_db_load_complete(self):
 		
 		pass
+
 class cft_openCommand(sublime_plugin.WindowCommand):
 	def run(self):
-		db.ConnectionMenu.show_and_continue(self.open_methods)
+		#db.ConnectionMenu.show_and_continue(self.open_methods)
+		if not db.is_connected():
+			#sublime.active_window().run_command('connect',{"after_connect":self.open_methods,"test_text":"hello_world"})
+			db.on_classes_cache_loaded += self.open_methods
+			sublime.active_window().run_command('connect',{})
+		else:
+			self.open_methods()
 		
 	def open_methods(self):
 		used_classes = [db.classes[clk].text for clk in cft_settings.get("used_classes")]
