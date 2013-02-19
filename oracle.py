@@ -748,52 +748,18 @@ class cftDB(object):
 				print "error=",error
 			else:
 				print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
-	# def __getattribute__(self, key):
-	# 	if key == 'classes':			
-	# 		#ждем завершения первоначальной загрузки
-	# 		lock.acquire()
-	# 		lock.release()
-	# 	v = object.__getattribute__(self, key)		
-	# 	return v
-
-	# def __getattr__(self,key):
-	# 	if key == 'classes':			
-	# 		#ждем завершения первоначальной загрузки
-	# 		print "Ожидание загрузки"
-	# 		lock.acquire()
-	# 		lock.release()
 
 db = cftDB()
 
 class connectCommand(sublime_plugin.WindowCommand):
 	def run(self):
-		#self.window.show_input_panel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done, self.on_change, self.on_cancel)
-		ShowInputPanel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done)
+		self.window.show_input_panel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done, self.on_change, self.on_cancel)
 	def on_done(self, input):
-		
-		# import hotshot
-		# prof = hotshot.Profile(os.path.join(cache_path,"your_project.prof"))
-		# prof.start()
-
-		#t = timer()
 		self.window.run_command('show_panel', {"panel": "console", "toggle": "true"})
 		db.connect(input)
-		#t.print_time("db.connect")
-
-
-		# import cProfile
-		# profiler = cProfile.Profile()
-		# profiler.runcall(lambda:db.connect(input))
-		# profiler.print_stats()
-		#lock.release()
-		#print "connect done"
-
 	def on_change(self, input):
 		pass		
 	def on_cancel(self):
-		pass
-	def on_db_load_complete(self):
-		
 		pass
 
 class cft_openCommand(sublime_plugin.WindowCommand):
