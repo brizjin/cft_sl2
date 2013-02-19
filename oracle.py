@@ -362,7 +362,7 @@ def with_exec_time(callback):
 
 	print callback.__name__ + ', выполнена за ' + delta_str
 	return r
-def call_async(call_func,on_complete=None,msg=None):
+def call_async(call_func,on_complete=None,msg=None,async_callback=False):
 	class ThreadProgress():
 	    def __init__(self, thread, message):
 	        self.thread = thread
@@ -414,9 +414,17 @@ def call_async(call_func,on_complete=None,msg=None):
 					else:
 						on_complete(self.result)
 					#t.print_time(msg + ' ' + "call_async on_complete:" + on_complete.__name__)
-				sublime.set_timeout(on_done, 0)	
-
+				if async_callback:
+					on_done()
+				else:
+					sublime.set_timeout(on_done, 0)
+				
 	RunInThread(on_complete).start()
+
+def call_async_seq(calls_arr,msg=None):
+	for f in calls_arr:
+		call_async(f)	
+
 class cft_settings_class(object):
 	def __init__(self):
 		self.file_path = os.path.join(sublime.packages_path(),plugin_name,"cache","cft_settings.json")
@@ -517,12 +525,12 @@ class FileReader(object):
 		return text
 
 	def load(self):
-		t = timer()
+		#t = timer()
 		self.cft_schema_sql = self.read("cft_schema.sql")		
 		self.method_sources = self.read("method_sources.tst")
 		self.save_method_sources = self.read("save_method_sources.tst")
 		self.method_sources_json = self.read("method_sources_json.tst")
-		t.print_time("Тексты sql загружены за")
+		#t.print_time("Тексты sql загружены за")
 		#print self.cft_schema
 		#print "file_loading_completed"
 class file(object):
@@ -559,6 +567,7 @@ class cftDB(object):
 	class ClassXmlParser(dict):	
 		def __init__(self,xml_text):
 			super(cftDB.ClassXmlParser, self).__init__()
+			print 'len=',len(xml_text)
 			self.xml_text = '<?xml version="1.0" encoding="windows-1251"?>' + xml_text
 			self.parser = xml.parsers.expat.ParserCreate()
 			self.parser.StartElementHandler  = self.start_element
@@ -622,27 +631,34 @@ class cftDB(object):
 			super(cftDB.view_row, self).__init__(db,p_list)
 	def __init__(self):
 		self.on_classes_cache_loaded = EventHook()
+		self.on_methods_cache_loaded = EventHook()
+		self.is_methods_ready = False
+
 	def connect(self,connection_string):
 		self.connection_string 	= connection_string
 		call_async(self.load_classes)
 		call_async(self.load)
+		call_async(self.read_sql)
+	def read_sql(self):
+		self.fr = FileReader()
 	def load(self):
 		self.connection 	= cx_Oracle.connect(self.connection_string)		
 		self.cursor 		= self.connection.cursor()
 		return 1
 	def select_classes(self):
-		t = timer()
 		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl"""
 		value = self.select_in_tmp_connection(sql)
-		t.print_time("select_classes")
 		return value
-	def parse_classes(self,text,type=None):		
+	def parse_classes(self,text):		
 		self.classes = self.ClassXmlParser(text)
-		if type == "cache":
-			self.on_classes_cache_loaded.fire()
+		
 	def load_classes(self):
-		call_async(lambda:(file.read(os.path.join(cache_path,"classes.xml")),"cache"),self.parse_classes,'Загрузка кэша')
-		call_async(self.select_classes,self.parse_classes,'Обновление кэша классов')
+		call_async(lambda:(file.read(os.path.join(cache_path,"classes.xml")),"class_cache"),self.parse,async_callback=True)
+		call_async(self.select_classes,lambda *args:self.save_and_parse(os.path.join(cache_path,"classes.xml"),*args),async_callback=True)
+		
+		call_async(lambda:(file.read(os.path.join(cache_path,"methods.xml")),"methods_cache"),self.parse,async_callback=True)
+		call_async(lambda:self.select_in_tmp_connection(file.read(os.path.join(plugin_path,"sql","cft_schema.sql"))),
+				   lambda *args:self.save_and_parse(os.path.join(cache_path,"methods.xml"),*args),async_callback=True)
 	def is_connected(self):
 		return hasattr(self,"cursor") and hasattr(self,"connection") and self.select("select * from dual")[0][0] == 'X'
 
@@ -689,7 +705,11 @@ class cftDB(object):
 	def print_classes(self):
 		for c in self.classes:
 			print c
-	def parse(self,txt):
+	def save_and_parse(self,file_name,txt,type=None):
+		file.write(file_name,txt)
+		self.parse(txt,type)
+
+	def parse(self,txt,type=None):
 		class ParseXml(object):	
 			def __init__(self,xml_text):
 				self.xml_text = xml_text
@@ -705,7 +725,7 @@ class cftDB(object):
 				self.parser.Parse(self.xml_text, 1)
 
 			def start_element(self,name, attrs):
-				if name == 'class':
+				if name.lower() == 'class':
 					self.cur_class = cftDB.db_row(db,attrs)
 					self.cur_class.meths = dict()
 					self.cur_class.views = dict()
@@ -721,6 +741,12 @@ class cftDB(object):
 			def char_data(self,data):
 				pass
 		self.classes = ParseXml(txt).classes
+		if type == "class_cache":
+			self.on_classes_cache_loaded.fire()
+		elif type == 'methods_cache':
+			self.is_methods_ready = True
+			self.on_methods_cache_loaded.fire()
+
 	def parse_json(self):
 		try:
 			t = timer()
@@ -764,20 +790,25 @@ class connectCommand(sublime_plugin.WindowCommand):
 
 class cft_openCommand(sublime_plugin.WindowCommand):
 	def run(self):
-		#db.ConnectionMenu.show_and_continue(self.open_methods)
 		if not db.is_connected():
-			#sublime.active_window().run_command('connect',{"after_connect":self.open_methods,"test_text":"hello_world"})
-			db.on_classes_cache_loaded += self.open_methods
+			db.on_classes_cache_loaded += lambda:sublime.set_timeout(self.open_classes,0)
 			sublime.active_window().run_command('connect',{})
 		else:
-			self.open_methods()
-		
-	def open_methods(self):
+			self.open_classes()
+
+	def open_classes(self):
 		used_classes = [db.classes[clk].text for clk in cft_settings.get("used_classes")]
 		classes      = [clv.text for clk,clv in db.classes.iteritems() if clk not in cft_settings.get("used_classes")]
 		used_classes.extend(classes)
-		self.window.show_quick_panel(used_classes,self.on_done,sublime.MONOSPACE_FONT)
-	def on_done(self, selected_class):
+		self.window.show_quick_panel(used_classes,self.is_methods_ready,sublime.MONOSPACE_FONT)
+
+	def is_methods_ready(self,selected_class):
+	 	if not db.is_methods_ready:
+	 		db.on_methods_cache_loaded += lambda:sublime.set_timeout(lambda:self.open_methods(selected_class),0)
+	 	else:
+	 		self.open_methods(selected_class)
+
+	def open_methods(self, selected_class):
 		if selected_class >= 0:
 			#print db.classes.values()[selected_class].name,selected_class
 			used_classes = [db.classes[clk] for clk in cft_settings.get("used_classes")]
