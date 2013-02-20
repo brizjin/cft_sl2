@@ -421,38 +421,31 @@ def call_async(call_func,on_complete=None,msg=None,async_callback=False):
 				
 	RunInThread(on_complete).start()
 
-def call_async_seq(calls_arr,msg=None):
-	for f in calls_arr:
-		call_async(f)	
-
-class cft_settings_class(object):
+class cft_settings_class(dict):
 	def __init__(self):
-		self.file_path = os.path.join(sublime.packages_path(),plugin_name,"cache","cft_settings.json")
-		self.settings = {}
-		self.settings["used_classes"] = list()
+		super(cft_settings_class,self).__init__()
+		self.file_path = os.path.join(plugin_path,"cache","cft_settings.json")
+		self["used_classes"] = list()
 		call_async(self.load)
-	def set(self,name,value):
-		self.settings[name] = value
-		call_async(self.save)
-	def get(self,name):
-		#print "all=", self.settings
-		p = self.settings[name]
-		#print "p=",p
-		return p
 	def save(self):
 		f = open(self.file_path,"w")
-		f.write(json.dumps(self.settings))
+		f.write(json.dumps(self))
 		f.close()
 	def load(self):
-		if os.path.exists(self.file_path):
-			f = open(self.file_path,"r")
-			r = f.read()
-			#print "settings=",r
-			f.close()
-			if len(r)>0:
-				self.settings = json.loads(r)
-				#print "s=",self.settings,self
-cft_settings = cft_settings_class()	
+		r = file.read(self.file_path)
+		if len(r)>0:
+			a = json.loads(r)
+			super(cft_settings_class,self).__init__(json.loads(r))
+	def update_used_class(self,class_id):
+		used_classes = cft_settings["used_classes"]
+		if class_id in used_classes:
+			used_classes.remove(class_id)				
+		used_classes.insert(0,class_id)		
+		cft_settings.save()
+
+cft_settings = cft_settings_class()
+
+
 class timer(object):
 	def __init__(self):
 		self.begin = datetime.datetime.now()
@@ -564,18 +557,6 @@ class file(object):
 
 
 class cftDB(object):
-	class ClassXmlParser(dict):	
-		def __init__(self,xml_text):
-			super(cftDB.ClassXmlParser, self).__init__()
-			print 'len=',len(xml_text)
-			self.xml_text = '<?xml version="1.0" encoding="windows-1251"?>' + xml_text
-			self.parser = xml.parsers.expat.ParserCreate()
-			self.parser.StartElementHandler  = self.start_element
-			self.parser.Parse(self.xml_text, 1)
-		def start_element(self,name, attrs):
-			if name == 'CLASS':
-				cl = cftDB.db_row(db,attrs)
-				self[cl.id] = cl
 	class db_row(object):
 		def __init__(self,db,p_list):			
 			self.db = db
@@ -646,11 +627,12 @@ class cftDB(object):
 		self.cursor 		= self.connection.cursor()
 		return 1
 	def select_classes(self):
-		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl"""
+		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
+				 where (select count(1) from methods m where m.class_id = cl.id) > 0
+  				 	or (select count(1) from criteria cr where cr.class_id = cl.id) > 0"""
+
 		value = self.select_in_tmp_connection(sql)
 		return value
-	def parse_classes(self,text):		
-		self.classes = self.ClassXmlParser(text)
 		
 	def load_classes(self):
 		call_async(lambda:(file.read(os.path.join(cache_path,"classes.xml")),"class_cache"),self.parse,async_callback=True)
@@ -699,16 +681,13 @@ class cftDB(object):
 			else:
 				print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
 			#return []
+
 	def get_sid(self):
 
 		return self.select("select sys_context('userenv','sid') sid, sid from v$mystat where rownum=1")[0]["sid"]
-	def print_classes(self):
-		for c in self.classes:
-			print c
 	def save_and_parse(self,file_name,txt,type=None):
 		file.write(file_name,txt)
 		self.parse(txt,type)
-
 	def parse(self,txt,type=None):
 		class ParseXml(object):	
 			def __init__(self,xml_text):
@@ -746,34 +725,23 @@ class cftDB(object):
 		elif type == 'methods_cache':
 			self.is_methods_ready = True
 			self.on_methods_cache_loaded.fire()
-
 	def parse_json(self):
-		try:
-			t = timer()
-			print "parse_json",t.get_time()
-			#self.db.cursor.setinputsizes(source_code=cx_Oracle.CLOB)
-			out_clob = self.cursor.var(cx_Oracle.CLOB)
-			#err_num  = self.db.cursor.var(cx_Oracle.NUMBER)
-			print "parse_json2 before exe",t.get_time()
-			self.cursor.execute(self.fr.method_sources_json,out_clob=out_clob)				
-			print "parse_json3 after exe",t.get_time()
-			out_clob = unicode(out_clob.getvalue().read(),'1251')
-			print "parse_json4 clob_read",t.get_time()
-			self.classes = json.loads(out_clob)["classes"]
-			print "parse_json5 json_load",t.get_time()
-			# dir_path = os.path.join(sublime.packages_path(),plugin_name,"cache")
-			# file_path = os.path.join(dir_path,'methods_json.json')
-			# f = open(file_path,"r")
-			# out_clob = f.read()
-			# f.close()
-			self.classes = json.loads(out_clob)["classes"]
-			
-		except cx_Oracle.DatabaseError as e:
-			error, = e.args
-			if error.__class__.__name__ == 'str':
-				print "error=",error
-			else:
-				print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
+		out_clob = self.cursor.var(cx_Oracle.CLOB)
+		self.cursor.execute(self.fr.method_sources_json,out_clob=out_clob)				
+		out_clob = unicode(out_clob.getvalue().read(),'1251')
+		self.classes = json.loads(out_clob)["classes"]
+		self.classes = json.loads(out_clob)["classes"]
+
+	def get_classes(self):
+		#t = timer()
+		used_classes 	 = [db.classes[clk] for clk in cft_settings["used_classes"] if db.classes.has_key(clk)]
+		not_used_classes = [clv for clk,clv in db.classes.iteritems() if clk not in cft_settings.get("used_classes")]
+		used_classes.extend(not_used_classes)		
+		#t.print_time("get_classes")
+		return used_classes
+
+	#def get_classes_text(self):
+	#	return [clv.text for clv in self.get_classes()]
 
 db = cftDB()
 
@@ -797,12 +765,11 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 			self.open_classes()
 
 	def open_classes(self):
-		used_classes = [db.classes[clk].text for clk in cft_settings.get("used_classes")]
-		classes      = [clv.text for clk,clv in db.classes.iteritems() if clk not in cft_settings.get("used_classes")]
-		used_classes.extend(classes)
-		self.window.show_quick_panel(used_classes,self.is_methods_ready,sublime.MONOSPACE_FONT)
+		self.classes = db.get_classes()
+		self.window.show_quick_panel([clv.text for clv in self.classes],self.is_methods_ready,sublime.MONOSPACE_FONT)
 
 	def is_methods_ready(self,selected_class):
+		
 	 	if not db.is_methods_ready:
 	 		db.on_methods_cache_loaded += lambda:sublime.set_timeout(lambda:self.open_methods(selected_class),0)
 	 	else:
@@ -810,24 +777,18 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 
 	def open_methods(self, selected_class):
 		if selected_class >= 0:
-			#print db.classes.values()[selected_class].name,selected_class
-			used_classes = [db.classes[clk] for clk in cft_settings.get("used_classes")]
-			classes  	 = [v for v in db.classes.values() if v not in used_classes]
-			
-			used_classes.extend(classes)
 
-			self.current_class = used_classes[selected_class]
+			self.current_class = self.classes[selected_class]
+			
+			if db.get_classes() != self.classes and db.classes.has_key(self.current_class.id): #Если за время выбора класса, список классов обновился. Перезагрузим текущий класс
+		 		self.current_class = db.classes[self.current_class.id]
+			
+
 			meths = [mv.text for mk,mv in self.current_class.meths.iteritems()]
 			self.window.show_quick_panel(meths,self.method_on_done,sublime.MONOSPACE_FONT)
 			
-			used_classes = cft_settings.get("used_classes")
-			if self.current_class.id in used_classes:	
-				used_classes.remove(self.current_class.id)				
-				used_classes.insert(0,self.current_class.id)
-				cft_settings.save()
-			else:
-				used_classes.append(self.current_class.id)
-				cft_settings.save()
+			cft_settings.update_used_class(self.current_class.id)
+
 
 	def method_on_done(self,input):
 
@@ -842,23 +803,11 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 				view = sublime.active_window().new_file()
 				view.set_name(m.name)
 				view.set_scratch(True)
-				#view.set_syntax_file(os.path.join(sublime.packages_path(),plugin_name,"PL_SQL (Oracle).tmLanguage"))
 				view.set_syntax_file("Packages/CFT/PL_SQL (Oracle).tmLanguage")
-				#views[view.id] = m
-				#print view
-				#print sublime.active_window().views()
-				# for v in sublime.active_window().views():
-				# 	 if v.id() == view.id():
-				# 	 	print v,view
-				# 	 	v.cft_method = m			
-				#print view.id()
-				#views[view.id()] = m
 				view.settings().set("cft_method",{"cft_class":m.class_ref.id,"cft_method":m.id})
-
 				
 				text = m.get_sources()
-				#m.GetMehtodSection(self.current_class.id.upper(),m.short_name.upper(),"EXECUTE")		
-				#text = m.get_source()
+
 				write(text)
 				sublime.active_window().focus_view(view)
 
