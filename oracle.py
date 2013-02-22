@@ -523,6 +523,8 @@ class FileReader(object):
 		self.method_sources = self.read("method_sources.tst")
 		self.save_method_sources = self.read("save_method_sources.tst")
 		self.method_sources_json = self.read("method_sources_json.tst")
+		self.save_criteria_text  = self.read("save_criteria_text.tst")
+		
 		#t.print_time("Тексты sql загружены за")
 		#print self.cft_schema
 		#print "file_loading_completed"
@@ -601,7 +603,7 @@ class cftDB(object):
 			try:
 				t = timer()
 				#print value
-
+				#print "cursor2=",len(self.db.fr.save_method_sources)
 				self.db.cursor.setinputsizes(source_code=cx_Oracle.CLOB)
 				err_clob = self.db.cursor.var(cx_Oracle.CLOB)
 				err_num  = self.db.cursor.var(cx_Oracle.NUMBER)
@@ -636,10 +638,32 @@ class cftDB(object):
 			#return [self.text,u"Представление"]
 			return u"Представление: " + self.text
 		def get_sources(self):
-			#text_out = self.db.cursor.var(cx_Oracle.CLOB)
-			#self.db.cursor.execute(self.db.fr.method_sources,(self.class_ref.id, self.short_name.upper(),text_out))
-			print self.short_name
 			return self.db.select("select cr.condition from criteria cr where short_name = :view_short_name",self.short_name)
+		def set_sources(self,value):
+			try:
+				t = timer()
+				#save_criteria_text.tst
+				#print "set_sourses_view",self.id,self.name,self.short_name,self.class_ref.id
+				self.db.cursor.setinputsizes(view_src=cx_Oracle.CLOB)
+
+				self.db.cursor.execute(self.db.fr.save_criteria_text,view_short_name=self.short_name,view_id=self.id,view_name=self.name,view_class=self.class_ref.id,view_src=value)				
+				# err_num = int(err_num.getvalue())
+				# if err_num == 0:
+				# 	sublime.status_message(u"Успешно откомпилированно за %s сек" % t.get_time())
+				print u"Успешно откомпилированно за %s сек" % t.get_time()
+				# else:
+				# 	err_msg = unicode(err_clob.getvalue().read(),'1251').strip()
+				# 	sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
+				# 	sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))
+				# 	print "**********************************************"
+				# 	print "** %s" % t.get_now()
+				# 	print err_msg
+				self.db.connection.commit()
+			except cx_Oracle.DatabaseError, e:
+				print "ошибка"
+				error, = e
+				print error.code,error.message,error.context,error
+
 
 
 	def __init__(self):
@@ -837,14 +861,14 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 			m = None
 			if len(self.current_class.meths.values()) > 0:
 				#m = self.current_class.meths.values()[input]
-				m = self.current_class.get_objects()[input]
+				obj = self.current_class.get_objects()[input]
 				view = sublime.active_window().new_file()
-				view.set_name(m.name)
+				view.set_name(obj.name)
 				view.set_scratch(True)
 				view.set_syntax_file("Packages/CFT/PL_SQL (Oracle).tmLanguage")
-				view.settings().set("cft_method",{"cft_class":m.class_ref.id,"cft_method":m.id})
+				view.settings().set("cft_object",{"cft_class":obj.class_ref.id,"obj_input":input})
 				
-				text = m.get_sources()
+				text = obj.get_sources()
 
 				write(text)
 				sublime.active_window().focus_view(view)
@@ -864,21 +888,22 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			t = timer()
 
 			aview = sublime.active_window().active_view()
-			if aview.settings().has("cft_method"):
-				m = aview.settings().get("cft_method")
-				m = db.classes[m["cft_class"]].meths[m["cft_method"]]
-				
+			if aview.settings().has("cft_object"):
+
+				obj = aview.settings().get("cft_object")
+				#m = db.classes[m["cft_class"]].meths[m["cft_method"]]
+				obj = db.classes[obj["cft_class"]].get_objects()[obj["obj_input"]]
 				sublime_src_text = aview.substr(sublime.Region(0,aview.size()))
-				db_src_text = m.get_sources()
+				db_src_text = obj.get_sources()
 
 				r = re.compile(r' +$', re.MULTILINE) #Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
 				sublime_src_text = r.sub('',sublime_src_text)
 
 				#print sublime_src_text
-				if sublime_src_text != db_src_text:
-					m.set_sources(sublime_src_text)
-				else:
-					print "Текст операции не изменился ", t.get_time()
+				#if sublime_src_text != db_src_text:
+				obj.set_sources(sublime_src_text)
+				#else:
+				#	print "Текст операции не изменился ", t.get_time()
 		except Exception as e:
 			print e
 class close_methodCommand(sublime_plugin.TextCommand):
