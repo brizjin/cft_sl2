@@ -585,8 +585,8 @@ class cftDB(object):
 			objs = []
 			objs.extend([mv for mk,mv in self.meths.iteritems()])
 			objs.extend([vv for vk,vv in self.views.iteritems()])
-			objs.sort(lambda objs,: objs.name)
-			return objs
+			return sorted(objs,key = lambda obj: obj.name)
+			
 
 	class method_row(db_row):
 		def __init__(self, db, p_class, p_list):
@@ -635,6 +635,12 @@ class cftDB(object):
 		def get_text(self):
 			#return [self.text,u"Представление"]
 			return u"Представление: " + self.text
+		def get_sources(self):
+			#text_out = self.db.cursor.var(cx_Oracle.CLOB)
+			#self.db.cursor.execute(self.db.fr.method_sources,(self.class_ref.id, self.short_name.upper(),text_out))
+			print self.short_name
+			return self.db.select("select cr.condition from criteria cr where short_name = :view_short_name",self.short_name)
+
 
 	def __init__(self):
 		self.on_classes_cache_loaded = EventHook()
@@ -677,7 +683,6 @@ class cftDB(object):
 				return False
 		except Exception, e:
 			return False
-		
 
 	def select(self,sql,*args):
 
@@ -817,7 +822,7 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 
 			#meths = [mv.text for mk,mv in self.current_class.meths.iteritems()]
 			#self.window.show_quick_panel(meths,self.method_on_done,sublime.MONOSPACE_FONT)
-			self.window.show_quick_panel(self.current_class.get_objects(),self.method_on_done,sublime.MONOSPACE_FONT)
+			self.window.show_quick_panel([obj.get_text() for obj in self.current_class.get_objects()],self.method_on_done,sublime.MONOSPACE_FONT)
 			
 			cft_settings.update_used_class(self.current_class.id)
 
@@ -831,7 +836,8 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 		if input >= 0:
 			m = None
 			if len(self.current_class.meths.values()) > 0:
-				m = self.current_class.meths.values()[input]
+				#m = self.current_class.meths.values()[input]
+				m = self.current_class.get_objects()[input]
 				view = sublime.active_window().new_file()
 				view.set_name(m.name)
 				view.set_scratch(True)
