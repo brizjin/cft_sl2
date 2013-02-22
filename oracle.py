@@ -570,6 +570,24 @@ class cftDB(object):
 					setattr(self,d[0],d[1])
 		def __getitem__(self,index):
 			return self.dir()[index]
+	class class_row(db_row):
+		def __init__(self, db, p_list):
+			super(cftDB.class_row, self).__init__(db,p_list)
+			self.meths = dict()
+			self.views = dict()
+		def add_method(self,attrs):
+			m = cftDB.method_row(self.db,self,attrs)
+			self.meths[m.id] = m
+		def add_view(self,attrs):
+			v = cftDB.view_row(self.db,self,attrs)
+			self.views[v.id] = v
+		def get_objects(self):
+			objs = []
+			objs.extend([mv for mk,mv in self.meths.iteritems()])
+			objs.extend([vv for vk,vv in self.views.iteritems()])
+			objs.sort(lambda objs,: objs.name)
+			return objs
+
 	class method_row(db_row):
 		def __init__(self, db, p_class, p_list):
 			super(cftDB.method_row, self).__init__(db,p_list)
@@ -606,10 +624,18 @@ class cftDB(object):
 					print "error=",error
 				else:
 					print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
-	
+		def get_text(self):
+			#return [self.text,u"Метод"]
+			return u"Метод:         " + self.text
+
 	class view_row(db_row):	
-		def __init__(self, db, p_list):
+		def __init__(self, db, p_class, p_list):
 			super(cftDB.view_row, self).__init__(db,p_list)
+			self.class_ref = p_class
+		def get_text(self):
+			#return [self.text,u"Представление"]
+			return u"Представление: " + self.text
+
 	def __init__(self):
 		self.on_classes_cache_loaded = EventHook()
 		self.on_methods_cache_loaded = EventHook()
@@ -642,7 +668,16 @@ class cftDB(object):
 		call_async(lambda:self.select_in_tmp_connection(file.read(os.path.join(plugin_path,"sql","cft_schema.sql"))),
 				   lambda *args:self.save_and_parse(os.path.join(cache_path,"methods.xml"),*args),async_callback=True)
 	def is_connected(self):
-		return hasattr(self,"cursor") and hasattr(self,"connection") and self.select("select * from dual")[0][0] == 'X'
+		#return hasattr(self,"cursor") and hasattr(self,"connection") and self.select("select * from dual")[0][0] == 'X'
+		try:
+			if hasattr(self,"connection"):
+				self.connection.ping()
+				return True
+			else:
+				return False
+		except Exception, e:
+			return False
+		
 
 	def select(self,sql,*args):
 
@@ -705,16 +740,12 @@ class cftDB(object):
 
 			def start_element(self,name, attrs):
 				if name.lower() == 'class':
-					self.cur_class = cftDB.db_row(db,attrs)
-					self.cur_class.meths = dict()
-					self.cur_class.views = dict()
+					self.cur_class = cftDB.class_row(db,attrs)
 					self.classes[self.cur_class.id] = self.cur_class
 				if name == 'method':					
-					m = cftDB.method_row(db,self.cur_class,attrs)
-					self.cur_class.meths[m.id] = m
+					self.cur_class.add_method(attrs)
 				if name == 'view':					
-					v = cftDB.view_row(db,attrs)
-					self.cur_class.views[v.id] = v
+					self.cur_class.add_view(attrs)
 			def end_element(self,name):
 				pass
 			def char_data(self,data):
@@ -780,12 +811,13 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 
 			self.current_class = self.classes[selected_class]
 			
-			if db.get_classes() != self.classes and db.classes.has_key(self.current_class.id): #Если за время выбора класса, список классов обновился. Перезагрузим текущий класс
-		 		self.current_class = db.classes[self.current_class.id]
+			if db.get_classes() != self.classes and db.classes.has_key(self.current_class.id): #Если за время выбора класса, список классов обновился. 
+		 		self.current_class = db.classes[self.current_class.id]						   #Перезагрузим текущий класс
 			
 
-			meths = [mv.text for mk,mv in self.current_class.meths.iteritems()]
-			self.window.show_quick_panel(meths,self.method_on_done,sublime.MONOSPACE_FONT)
+			#meths = [mv.text for mk,mv in self.current_class.meths.iteritems()]
+			#self.window.show_quick_panel(meths,self.method_on_done,sublime.MONOSPACE_FONT)
+			self.window.show_quick_panel(self.current_class.get_objects(),self.method_on_done,sublime.MONOSPACE_FONT)
 			
 			cft_settings.update_used_class(self.current_class.id)
 
