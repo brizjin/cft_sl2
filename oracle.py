@@ -8,6 +8,7 @@ import sublime
 import threading,thread
 import datetime,time
 import xml.parsers.expat
+import sys,traceback
 plugin_name = "CFT"
 plugin_path = os.path.join(sublime.packages_path(),plugin_name)
 cache_path  = os.path.join(plugin_path,"cache")
@@ -399,31 +400,88 @@ def call_async(call_func,on_complete=None,msg=None,async_callback=False):
 	        sublime.set_timeout(lambda: self.run(i), 100)
 	class RunInThread(threading.Thread):
 		def run(self):
-			if msg:
-				ThreadProgress(self,msg)
-			#t = timer()
-			self.result = call_func()
-			#t.print_time(msg + ' ' if msg else '' + "call_async func:" + call_func.__name__)
-			if on_complete:
-				def on_done():
-					#t = timer()
-					if not self.result:
-						on_complete()
-					elif self.result.__class__ == tuple:
-						on_complete(*self.result)
+			try:
+				if msg:
+					ThreadProgress(self,msg)
+				#t = timer()
+				self.result = call_func()
+				#t.print_time(msg + ' ' if msg else '' + "call_async func:" + call_func.__name__)
+				if on_complete:
+					def on_done():
+						#t = timer()
+						if not self.result:
+							on_complete()
+						elif self.result.__class__ == tuple:
+							on_complete(*self.result)
+						else:
+							on_complete(self.result)
+						#t.print_time(msg + ' ' + "call_async on_complete:" + on_complete.__name__)
+					if async_callback:
+						on_done()
 					else:
-						on_complete(self.result)
-					#t.print_time(msg + ' ' + "call_async on_complete:" + on_complete.__name__)
-				if async_callback:
-					on_done()
-				else:
-					sublime.set_timeout(on_done, 0)
+						sublime.set_timeout(on_done, 0)
+			except Exception,e:
+				exc_type, exc_value, exc_traceback = sys.exc_info()
+				print "*** Ошибка асинхронного вызова:",e
+				traceback.print_exception(exc_type, exc_value, exc_traceback,
+					                          limit=10, file=sys.stdout)
+				
 				
 	RunInThread(on_complete).start()
+class FileReader(object):
+	def __init__(self):
+		self.dir_path = os.path.join(sublime.packages_path(),plugin_name,"sql")
+		self.load()
+		#call_async(self.load)
 
+
+	
+	@staticmethod
+	def read(file_path):
+		if not os.path.exists(file_path):
+			return ''
+
+		f = open(file_path,"r")
+		text = f.read()
+		f.close()
+
+		fileName, fileExtension = os.path.splitext(file_path)
+		
+		if fileExtension == '.tst':
+			def sub(p_str,from_str,to_str,p_start=0):
+				begin = p_str.find(from_str,p_start)#-len(from_str)
+				end = p_str.rfind(to_str,p_start)+len(to_str)
+				return p_str[begin:end].strip()
+
+			text = sub(text,"declare","end;")
+		return text
+
+	@staticmethod
+	def write(file_path,text):
+		#file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
+		f = open(file_path,"w")
+		f.write(text)
+		f.close()
+
+	def substr(self,p_str,from_str,to_str,p_start=0):
+		begin = p_str.find(from_str,p_start)+1
+		end = p_str.find(to_str,p_start)
+		return p_str[begin:end].strip()
+
+
+
+	def load(self):
+		
+		self.cft_schema_sql 	 = self.read(os.path.join(plugin_path,"sql","cft_schema.sql"))
+		self.method_sources 	 = self.read(os.path.join(plugin_path,"sql","method_sources.tst"))
+		self.save_method_sources = self.read(os.path.join(plugin_path,"sql","save_method_sources.tst"))
+		self.method_sources_json = self.read(os.path.join(plugin_path,"sql","method_sources_json.tst"))
+		self.save_criteria_text  = self.read(os.path.join(plugin_path,"sql","save_criteria_text.tst"))
+
+		
 class cft_settings_class(dict):
 	def __init__(self):
-		super(cft_settings_class,self).__init__()
+		super(cft_settings_class,self).__init__()		
 		self.file_path = os.path.join(plugin_path,"cache","cft_settings.json")
 		self["used_classes"] = list()
 		call_async(self.load)
@@ -432,7 +490,7 @@ class cft_settings_class(dict):
 		f.write(json.dumps(self))
 		f.close()
 	def load(self):
-		r = file.read(self.file_path)
+		r = FileReader.read(self.file_path)
 		if len(r)>0:
 			a = json.loads(r)
 			super(cft_settings_class,self).__init__(json.loads(r))
@@ -491,71 +549,10 @@ class EventHook(object):
             if theHandler.im_self == inObject:
                 self -= theHandler
 
-class FileReader(object):
-	def __init__(self):
-		self.dir_path = os.path.join(sublime.packages_path(),plugin_name,"sql")
-		self.load()
-		#call_async(self.load)
-	
-	def substr(self,p_str,from_str,to_str,p_start=0):
-		begin = p_str.find(from_str,p_start)+1
-		end = p_str.find(to_str,p_start)
-		return p_str[begin:end].strip()
 
-	def sub(self,p_str,from_str,to_str,p_start=0):
-		begin = p_str.find(from_str,p_start)#-len(from_str)
-		end = p_str.rfind(to_str,p_start)+len(to_str)
-		return p_str[begin:end].strip()
-
-	def read(self,file_path):
-		f = open(os.path.join(self.dir_path,file_path),"r")
-		text = f.read()
-		f.close()
-
-		fileName, fileExtension = os.path.splitext(file_path)
-		if fileExtension == '.tst':
-			text = self.sub(text,"declare","end;")
-		return text
-
-	def load(self):
-		#t = timer()
-		self.cft_schema_sql = self.read("cft_schema.sql")		
-		self.method_sources = self.read("method_sources.tst")
-		self.save_method_sources = self.read("save_method_sources.tst")
-		self.method_sources_json = self.read("method_sources_json.tst")
-		self.save_criteria_text  = self.read("save_criteria_text.tst")
 		
-		#t.print_time("Тексты sql загружены за")
-		#print self.cft_schema
-		#print "file_loading_completed"
-class file(object):
-	def sub(p_str,from_str,to_str,p_start=0):
-		begin = p_str.find(from_str,p_start)#-len(from_str)
-		end = p_str.rfind(to_str,p_start)+len(to_str)
-		return p_str[begin:end].strip()
-	@staticmethod
-	def read(file_path):
-		#file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
-		#t = timer()
-		if not os.path.exists(file_path):
-			return ''
 
-		f = open(file_path,"r")
-		text = f.read()
-		f.close()
 
-		fileName, fileExtension = os.path.splitext(file_path)
-		if fileExtension == '.tst':
-			text = sub(text,"declare","end;")
-		#t.print_time("file.read" + file_path)
-		return text
-
-	@staticmethod
-	def write(file_path,text):
-		#file_path = os.path.join(sublime.packages_path(),plugin_name,file_path)
-		f = open(file_path,"w")
-		f.write(text)
-		f.close()
 
 
 class cftDB(object):
@@ -588,8 +585,6 @@ class cftDB(object):
 			objs.extend([mv for mk,mv in self.meths.iteritems()])
 			objs.extend([vv for vk,vv in self.views.iteritems()])
 			return sorted(objs,key = lambda obj: obj.name)
-			
-
 	class method_row(db_row):
 		def __init__(self, db, p_class, p_list):
 			super(cftDB.method_row, self).__init__(db,p_list)
@@ -629,7 +624,6 @@ class cftDB(object):
 		def get_text(self):
 			#return [self.text,u"Метод"]
 			return u"Метод:         " + self.text
-
 	class view_row(db_row):	
 		def __init__(self, db, p_class, p_list):
 			super(cftDB.view_row, self).__init__(db,p_list)
@@ -691,11 +685,11 @@ class cftDB(object):
 		return value
 		
 	def load_classes(self):
-		call_async(lambda:(file.read(os.path.join(cache_path,"classes.xml")),"class_cache"),self.parse,async_callback=True)
+		call_async(lambda:(FileReader.read(os.path.join(cache_path,"classes.xml")),"class_cache"),self.parse,async_callback=True)
 		call_async(self.select_classes,lambda *args:self.save_and_parse(os.path.join(cache_path,"classes.xml"),*args),async_callback=True)
 		
-		call_async(lambda:(file.read(os.path.join(cache_path,"methods.xml")),"methods_cache"),self.parse,async_callback=True)
-		call_async(lambda:self.select_in_tmp_connection(file.read(os.path.join(plugin_path,"sql","cft_schema.sql"))),
+		call_async(lambda:(FileReader.read(os.path.join(cache_path,"methods.xml")),"methods_cache"),self.parse,async_callback=True)
+		call_async(lambda:self.select_in_tmp_connection(FileReader.read(os.path.join(plugin_path,"sql","cft_schema.sql"))),
 				   lambda *args:self.save_and_parse(os.path.join(cache_path,"methods.xml"),*args),async_callback=True)
 	def is_connected(self):
 		#return hasattr(self,"cursor") and hasattr(self,"connection") and self.select("select * from dual")[0][0] == 'X'
@@ -750,7 +744,7 @@ class cftDB(object):
 
 		return self.select("select sys_context('userenv','sid') sid, sid from v$mystat where rownum=1")[0]["sid"]
 	def save_and_parse(self,file_name,txt,type=None):
-		file.write(file_name,txt)
+		FileReader.write(file_name,txt)
 		self.parse(txt,type)
 	def parse(self,txt,type=None):
 		class ParseXml(object):	

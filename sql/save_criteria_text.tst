@@ -51,7 +51,7 @@ EXT_DOCS_SVOD
 view_src
 4
 type main is ------hello
-  select a (a,'HELLO356','second5')
+  select a (a,'HELLO356',''second5'')
   in ::[EXT_DOCS_SVOD]
 ;
 5
