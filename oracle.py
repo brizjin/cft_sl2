@@ -421,10 +421,13 @@ def call_async(call_func,on_complete=None,msg=None,async_callback=False):
 					else:
 						sublime.set_timeout(on_done, 0)
 			except Exception,e:
-				exc_type, exc_value, exc_traceback = sys.exc_info()
 				print "*** Ошибка асинхронного вызова:",e
-				traceback.print_exception(exc_type, exc_value, exc_traceback,
-					                          limit=10, file=sys.stdout)
+				print "*** При вызове ",call_func.im_class,call_func.__name__
+				if sys != None:
+					exc_type, exc_value, exc_traceback = sys.exc_info()
+					
+					traceback.print_exception(exc_type, exc_value, exc_traceback,
+						                          limit=10, file=sys.stdout)
 				
 				
 	RunInThread(on_complete).start()
@@ -604,14 +607,12 @@ class cftDB(object):
 				self.db.cursor.execute(self.db.fr.save_method_sources,class_name=self.class_ref.id, method_name=self.short_name.upper(),source_code=value,out=err_clob,out_count=err_num)				
 				err_num = int(err_num.getvalue())
 
-				view = sublime.active_window().active_view()
-				
-				if err_num == 0:
-					sublime.status_message(u"Успешно откомпилированно за %s сек" % t.get_time())
-					print u"Успешно откомпилированно за %s сек" % t.get_time()
 
-					view.erase_regions('cft-errors')
-					view.settings().set("cft-errors",dict())
+				self.errors = self.db.select("select * from ERRORS t where t.method_id = :method_id order by class,type,sequence,line,position,text",self.id)
+				self.errors_num = err_num
+
+				if err_num == 0:					
+					print u"Успешно откомпилированно за %s сек" % t.get_time()
 				else:
 					err_msg = unicode(err_clob.getvalue().read(),'1251').strip()
 					#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
@@ -619,25 +620,6 @@ class cftDB(object):
 					print "**********************************************"
 					print "** %s" % t.get_now()
 					print err_msg
-
-					regions = []
-					regions_dict = dict()
-
-					for err in self.db.select("select * from ERRORS t where t.method_id = :method_id order by class,type,sequence,line,position,text",self.id):
-						lineno = err.line
-						text_point = view.text_point(lineno - 1, 0)
-						l = view.text_point(lineno, 0) - text_point - 1
-						regions.append(sublime.Region(text_point, text_point + l))
-						regions_dict[str(err.line)] = err.text
-
-					view.settings().set("cft-errors",regions_dict)
-					view.add_regions(
-									'cft-errors',
-									regions,
-									'keyword', 'dot', 4 | 32)
-					#view.fold(sublime.Region(10,15))
-					
-					#view.sel().add(cur_sel)
 
 				self.db.connection.commit()
 			except cx_Oracle.DatabaseError as e:
@@ -836,6 +818,44 @@ class connectCommand(sublime_plugin.WindowCommand):
 	def on_cancel(self):
 		pass
 
+class dataView(object):
+	def __init__(self,view=None):
+		if view:
+			print view
+			self.view = view
+		else:
+			self.view = sublime.active_window().new_file()
+
+		
+	@property
+	def data(self):
+		try:
+			#if self.view.settings().has("cft_object"):
+
+			value = self.view.settings().get("cft_object")
+			if value["type"] == "method_row":
+				value = db.classes[value["class"]].meths[value["id"]]
+			return value
+		except Exception,e:
+			print "*** Ошибка настроек представления:",e
+			if sys != None:
+				exc_type, exc_value, exc_traceback = sys.exc_info()
+				traceback.print_exception(exc_type, exc_value, exc_traceback,
+													limit=10, file=sys.stdout)
+			
+
+	@data.setter
+	def data(self,value):
+		if value.__class__.__name__ == "method_row":
+			self.view.settings().set("cft_object",{"id": value.id,"class" : value.class_ref.id, "type": value.__class__.__name__})
+
+
+	def focus(self):
+		sublime.active_window().focus_view(self.view)
+
+	def __getattr__(self, name):
+		return getattr(self.view,name)
+
 class cft_openCommand(sublime_plugin.WindowCommand):
 	def run(self):		
 		if not db.is_connected():
@@ -861,12 +881,13 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 			self.current_class = self.classes[selected_class]
 			
 			if db.get_classes() != self.classes and db.classes.has_key(self.current_class.id): #Если за время выбора класса, список классов обновился. 
-		 		self.current_class = db.classes[self.current_class.id]						   #Перезагрузим текущий класс
+				self.current_class = db.classes[self.current_class.id]						   #Перезагрузим текущий класс
 			
 
 			#meths = [mv.text for mk,mv in self.current_class.meths.iteritems()]
 			#self.window.show_quick_panel(meths,self.method_on_done,sublime.MONOSPACE_FONT)
-			self.window.show_quick_panel([obj.get_text() for obj in self.current_class.get_objects()],self.method_on_done,sublime.MONOSPACE_FONT)
+			self.list_objs = self.current_class.get_objects()
+			self.window.show_quick_panel([obj.get_text() for obj in self.list_objs],self.method_on_done,sublime.MONOSPACE_FONT)
 			
 			cft_settings.update_used_class(self.current_class.id)
 
@@ -880,17 +901,24 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 		if input >= 0:
 			if len(self.current_class.meths.values()) > 0:
 				#m = self.current_class.meths.values()[input]
-				obj = self.current_class.get_objects()[input]
-				view = sublime.active_window().new_file()
+				#obj = self.current_class.get_objects()[input]
+				obj = self.list_objs[input]
+				#view = sublime.active_window().new_file()
+				view = dataView()
 				view.set_name(obj.name)
 				view.set_scratch(True)
 				view.set_syntax_file("Packages/CFT/PL_SQL (Oracle).tmLanguage")
-				view.settings().set("cft_object",{"cft_class":obj.class_ref.id,"obj_input":input})
+
+				#view.settings().set("cft_object",{"id": obj.id,"class" : obj.class_ref.id, "type": obj.__class__.__name__})
+				view.data = obj
+				
 				
 				text = obj.get_sources()
 
 				write(text)
-				sublime.active_window().focus_view(view)
+
+				view.focus()
+				
 
 			else:
 				sublime.status_message(u"У класса нет методов для открытия")
@@ -901,31 +929,72 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 
 	def on_cancel(self):
 		pass
+
+class MarkErrors(sublime_plugin.TextCommand):
+	def run(self,edit):
+
+
+
+		if err_num == 0:
+			sublime.status_message(u"Успешно откомпилированно за %s сек" % t.get_time())
+			print u"Успешно откомпилированно за %s сек" % t.get_time()
+
+			view.erase_regions('cft-errors')
+			view.settings().set("cft-errors",dict())
+		else:
+			err_msg = unicode(err_clob.getvalue().read(),'1251').strip()
+			#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
+			sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))
+			print "**********************************************"
+			print "** %s" % t.get_now()
+			print err_msg
+
+			regions = []
+			regions_dict = dict()
+
+			for err in regions_dict:
+				lineno = err.line
+				text_point = view.text_point(lineno - 1, 0)
+				l = view.text_point(lineno, 0) - text_point - 1
+				regions.append(sublime.Region(text_point, text_point + l))
+				regions_dict[str(err.line)] = err.text
+
+			view.settings().set("cft-errors",regions_dict)
+			view.add_regions(
+							'cft-errors',
+							regions,
+							'keyword', 'dot', 4 | 32)
+
+			#view.fold(sublime.Region(10,15))
+			#view.sel().add(cur_sel)
+
 class save_methodCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
+		if not db.is_connected():
+			db.on_classes_cache_loaded += lambda:sublime.set_timeout(self.save,0)
+			sublime.active_window().run_command('connect',{})
+		else:
+			self.save()
+	def save(self):
 		try:
+			view = dataView(sublime.active_window().active_view())
+			obj = view.data
+			sublime_src_text = view.substr(sublime.Region(0,view.size()))
+			db_src_text = obj.get_sources()
 
-			aview = sublime.active_window().active_view()
-			if aview.settings().has("cft_object"):
+			r = re.compile(r' +$', re.MULTILINE) #Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
+			sublime_src_text = r.sub('',sublime_src_text)
 
-				obj = aview.settings().get("cft_object")
-				#m = db.classes[m["cft_class"]].meths[m["cft_method"]]
-				obj = db.classes[obj["cft_class"]].get_objects()[obj["obj_input"]]
-				sublime_src_text = aview.substr(sublime.Region(0,aview.size()))
-				db_src_text = obj.get_sources()
-
-				r = re.compile(r' +$', re.MULTILINE) #Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
-				sublime_src_text = r.sub('',sublime_src_text)
-
-				#print sublime_src_text
-				#if sublime_src_text != db_src_text:
+			#print sublime_src_text
+			if sublime_src_text != db_src_text:
 				obj.set_sources(sublime_src_text)
-				#else:
-				#	print "Текст операции не изменился ", t.get_time()
+			else:
+				print "Текст операции не изменился"
 
 
 		except Exception as e:
 			print e
+
 class close_methodCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 
