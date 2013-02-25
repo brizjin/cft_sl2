@@ -492,7 +492,6 @@ class cft_settings_class(dict):
 	def load(self):
 		r = FileReader.read(self.file_path)
 		if len(r)>0:
-			a = json.loads(r)
 			super(cft_settings_class,self).__init__(json.loads(r))
 	def update_used_class(self,class_id):
 		used_classes = cft_settings["used_classes"]
@@ -604,16 +603,42 @@ class cftDB(object):
 				err_num  = self.db.cursor.var(cx_Oracle.NUMBER)
 				self.db.cursor.execute(self.db.fr.save_method_sources,class_name=self.class_ref.id, method_name=self.short_name.upper(),source_code=value,out=err_clob,out_count=err_num)				
 				err_num = int(err_num.getvalue())
+
+				view = sublime.active_window().active_view()
+				
 				if err_num == 0:
 					sublime.status_message(u"Успешно откомпилированно за %s сек" % t.get_time())
 					print u"Успешно откомпилированно за %s сек" % t.get_time()
+
+					view.erase_regions('cft-errors')
+					view.settings().set("cft-errors",dict())
 				else:
 					err_msg = unicode(err_clob.getvalue().read(),'1251').strip()
-					sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
+					#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
 					sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))
 					print "**********************************************"
 					print "** %s" % t.get_now()
 					print err_msg
+
+					regions = []
+					regions_dict = dict()
+
+					for err in self.db.select("select * from ERRORS t where t.method_id = :method_id order by class,type,sequence,line,position,text",self.id):
+						lineno = err.line
+						text_point = view.text_point(lineno - 1, 0)
+						l = view.text_point(lineno, 0) - text_point - 1
+						regions.append(sublime.Region(text_point, text_point + l))
+						regions_dict[str(err.line)] = err.text
+
+					view.settings().set("cft-errors",regions_dict)
+					view.add_regions(
+									'cft-errors',
+									regions,
+									'keyword', 'dot', 4 | 32)
+					#view.fold(sublime.Region(10,15))
+					
+					#view.sel().add(cur_sel)
+
 				self.db.connection.commit()
 			except cx_Oracle.DatabaseError as e:
 				error, = e.args
@@ -699,7 +724,7 @@ class cftDB(object):
 				return True
 			else:
 				return False
-		except Exception, e:
+		except Exception:
 			return False
 
 	def select(self,sql,*args):
@@ -801,6 +826,7 @@ db = cftDB()
 
 class connectCommand(sublime_plugin.WindowCommand):
 	def run(self):
+		print "cft open command"
 		self.window.show_input_panel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done, self.on_change, self.on_cancel)
 	def on_done(self, input):
 		self.window.run_command('show_panel', {"panel": "console", "toggle": "true"})
@@ -811,7 +837,7 @@ class connectCommand(sublime_plugin.WindowCommand):
 		pass
 
 class cft_openCommand(sublime_plugin.WindowCommand):
-	def run(self):
+	def run(self):		
 		if not db.is_connected():
 			db.on_classes_cache_loaded += lambda:sublime.set_timeout(self.open_classes,0)
 			sublime.active_window().run_command('connect',{})
@@ -852,7 +878,6 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 			view.insert(edit, view.size(), string)
 			view.end_edit(edit)
 		if input >= 0:
-			m = None
 			if len(self.current_class.meths.values()) > 0:
 				#m = self.current_class.meths.values()[input]
 				obj = self.current_class.get_objects()[input]
@@ -879,7 +904,6 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 class save_methodCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		try:
-			t = timer()
 
 			aview = sublime.active_window().active_view()
 			if aview.settings().has("cft_object"):
@@ -898,6 +922,8 @@ class save_methodCommand(sublime_plugin.TextCommand):
 				obj.set_sources(sublime_src_text)
 				#else:
 				#	print "Текст операции не изменился ", t.get_time()
+
+
 		except Exception as e:
 			print e
 class close_methodCommand(sublime_plugin.TextCommand):
@@ -994,3 +1020,14 @@ class el(sublime_plugin.EventListener):
 
 		return (a,completion_flags)
 		#return a
+	def on_selection_modified(self, view):
+		row, col = view.rowcol(view.sel()[0].a)
+		row = row + 1 
+		cft_errors = view.settings().get("cft-errors")
+
+		if cft_errors != None:
+			if cft_errors.has_key(str(row)):
+				view.set_status('cft-errors',cft_errors[str(row)])
+			else:
+				view.set_status('cft-errors',"")
+		
