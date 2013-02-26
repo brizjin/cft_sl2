@@ -422,7 +422,7 @@ def call_async(call_func,on_complete=None,msg=None,async_callback=False):
 						sublime.set_timeout(on_done, 0)
 			except Exception,e:
 				print "*** Ошибка асинхронного вызова:",e
-				print "*** При вызове ",call_func.im_class,call_func.__name__
+				print "*** При вызове ",call_func.im_class if hasattr(call_func,"im_class") else "",call_func.__name__
 				if sys != None:
 					exc_type, exc_value, exc_traceback = sys.exc_info()
 					
@@ -664,13 +664,41 @@ class cftDB(object):
 				print "ошибка"
 				error, = e
 				print error.code,error.message,error.context,error
+	class class_collection(dict):
+		def __init__(self, db):
+			super(cftDB.class_collection, self).__init__()
+			self.db = db
+		cur_class = None
+		def parse(self,xml_text):
+			
+			def start_element(name, attrs):
+				if name.lower() == 'class':
+					self.cur_class = cftDB.class_row(db,attrs)
+					self[self.cur_class.id] = self.cur_class
+				if name == 'method':
+					self.cur_class.add_method(attrs)
+				if name == 'view':
+					self.cur_class.add_view(attrs)
+			def end_element(name):
+				pass
+			def char_data(data):
+				pass
 
+			parser = xml.parsers.expat.ParserCreate()
+			parser.StartElementHandler  = start_element
+			parser.EndElementHandler 	= end_element
+			parser.CharacterDataHandler = char_data
+			
+			xml_text = '<?xml version="1.0" encoding="windows-1251"?>' + xml_text
+			parser.Parse(xml_text, 1)
 
+			
 
 	def __init__(self):
 		self.on_classes_cache_loaded = EventHook()
 		self.on_methods_cache_loaded = EventHook()
 		self.is_methods_ready = False
+		self.classes_lock = thread.allocate_lock()
 
 	def connect(self,connection_string):
 		self.connection_string 	= connection_string
@@ -693,11 +721,11 @@ class cftDB(object):
 		
 	def load_classes(self):
 		call_async(lambda:(FileReader.read(os.path.join(cache_path,"classes.xml")),"class_cache"),self.parse,async_callback=True)
-		call_async(self.select_classes,lambda *args:self.save_and_parse(os.path.join(cache_path,"classes.xml"),*args),async_callback=True)
+		call_async(self.select_classes,lambda txt:self.save_and_parse(os.path.join(cache_path,"classes.xml"),txt,"class_select"),async_callback=True)
 		
 		call_async(lambda:(FileReader.read(os.path.join(cache_path,"methods.xml")),"methods_cache"),self.parse,async_callback=True)
 		call_async(lambda:self.select_in_tmp_connection(FileReader.read(os.path.join(plugin_path,"sql","cft_schema.sql"))),
-				   lambda *args:self.save_and_parse(os.path.join(cache_path,"methods.xml"),*args),async_callback=True)
+				   lambda txt:self.save_and_parse(os.path.join(cache_path,"methods.xml"),txt,"method_select"),async_callback=True)
 	def is_connected(self):
 		#return hasattr(self,"cursor") and hasattr(self,"connection") and self.select("select * from dual")[0][0] == 'X'
 		try:
@@ -780,12 +808,31 @@ class cftDB(object):
 				pass
 			def char_data(self,data):
 				pass
-		self.classes = ParseXml(txt).classes
-		if type == "class_cache":
-			self.on_classes_cache_loaded.fire()
-		elif type == 'methods_cache':
-			self.is_methods_ready = True
-			self.on_methods_cache_loaded.fire()
+		try:
+			#self.classes = ParseXml(txt).classes
+			#print "before assign classes",type
+			self.classes_lock.acquire()
+			new_classes = cftDB.class_collection(self)			
+			#print "after assign classes",type
+			new_classes.parse(txt)
+			self.classes = new_classes
+			#print "after parse classes",type
+
+			if type == "class_cache":
+				self.on_classes_cache_loaded.fire()
+			elif type == 'methods_cache':
+				self.is_methods_ready = True
+				self.on_methods_cache_loaded.fire()
+			
+			self.classes_lock.release()
+		except Exception,e:
+			print "*** Ошибка загрузки классов:",e
+			if sys != None:
+				exc_type, exc_value, exc_traceback = sys.exc_info()
+				traceback.print_exception(exc_type, exc_value, exc_traceback,
+					                          limit=10, file=sys.stdout)
+
+
 	def parse_json(self):
 		out_clob = self.cursor.var(cx_Oracle.CLOB)
 		self.cursor.execute(self.fr.method_sources_json,out_clob=out_clob)				
