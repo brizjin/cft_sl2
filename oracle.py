@@ -10,8 +10,9 @@ import datetime,time
 import xml.parsers.expat
 import sys,traceback
 plugin_name = "CFT"
-plugin_path = os.path.join(sublime.packages_path(),plugin_name)
-cache_path  = os.path.join(plugin_path,"cache")
+plugin_path 			= os.path.join(sublime.packages_path(),plugin_name)
+cache_path  			= os.path.join(plugin_path,"cache")
+used_classes_file_path 	= os.path.join(plugin_path,"cache","cft_settings.json")
 
 TIMER_DEBUG = True
 #import cftdb
@@ -484,7 +485,7 @@ class FileReader(object):
 		
 class cft_settings_class(dict):
 	def __init__(self):
-		super(cft_settings_class,self).__init__()		
+		super(cft_settings_class,self).__init__()
 		self.file_path = os.path.join(plugin_path,"cache","cft_settings.json")
 		self["used_classes"] = list()
 		call_async(self.load)
@@ -578,6 +579,7 @@ class cftDB(object):
 			self.views = dict()
 		def add_method(self,attrs):
 			m = cftDB.method_row(self.db,self,attrs)
+			#print m.id
 			self.meths[m.id] = m
 		def add_view(self,attrs):
 			v = cftDB.view_row(self.db,self,attrs)
@@ -587,6 +589,45 @@ class cftDB(object):
 			objs.extend([mv for mk,mv in self.meths.iteritems()])
 			objs.extend([vv for vk,vv in self.views.iteritems()])
 			return sorted(objs,key = lambda obj: obj.name)
+		def update(self):
+			t = timer()
+			sql = """select xmlelement("classes",xmlagg(xmlelement("class",XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)
+                                              ,xmlelement("meths",(select xmlagg(xmlelement("method",xmlattributes(m.id  as id,m.short_name  as short_name,m.name  as name,rpad(m.name ,40,' ') || lpad(m.short_name ,30,' ')as text)) order by m.name)  from methods m where m.class_id = cl.id))
+                                              ,xmlelement("views",(select xmlagg(xmlelement("view"  ,xmlattributes(cr.id as id,cr.short_name as short_name,cr.name as name,rpad(cr.name,40,' ') || lpad(cr.short_name,30,' ')as text)) order by cr.name) from criteria cr where cr.class_id = cl.id))
+                                              )
+                                  )
+					                 ).getclobval() classes  
+					from classes cl
+					where cl.id = :class_id"""
+			xml_class = self.db.select(sql,self.id)
+			
+			self.meths = dict()
+			self.views = dict()
+
+			def start_element(name, attrs):
+				#if name.lower() == 'class':
+				#	self.cur_class = cftDB.class_row(db,attrs)
+				#	self[self.cur_class.id] = self.cur_class
+				if name == 'method':
+					self.add_method(attrs)
+				if name == 'view':
+					self.add_view(attrs)
+			def end_element(name):
+				pass
+			def char_data(data):
+				pass
+
+			parser = xml.parsers.expat.ParserCreate()
+			parser.StartElementHandler  = start_element
+			parser.EndElementHandler 	= end_element
+			parser.CharacterDataHandler = char_data
+			
+			xml_class = '<?xml version="1.0" encoding="windows-1251"?>' + xml_class
+			parser.Parse(xml_class, 1)
+
+			t.print_time("select class update")
+
+
 	class method_row(db_row):
 		def __init__(self, db, p_class, p_list):
 			super(cftDB.method_row, self).__init__(db,p_list)
@@ -668,7 +709,8 @@ class cftDB(object):
 		def __init__(self, db):
 			super(cftDB.class_collection, self).__init__()
 			self.db = db
-		cur_class = None
+			self.cur_class = None
+
 		def parse(self,xml_text):
 			
 			def start_element(name, attrs):
@@ -692,7 +734,28 @@ class cftDB(object):
 			xml_text = '<?xml version="1.0" encoding="windows-1251"?>' + xml_text
 			parser.Parse(xml_text, 1)
 
+		@property
+		def as_list(self):
+			#t = timer()
+			used_classes 	 = [db.classes[clk] for clk in cft_settings["used_classes"] if db.classes.has_key(clk)]
+			not_used_classes = [clv for clk,clv in db.classes.iteritems() if clk not in cft_settings.get("used_classes")]
+			used_classes.extend(not_used_classes)		
+			#t.print_time("get_classes")
+			return used_classes
+
+		@property
+		def used(self):
+			#if not hasattr(self,"used_settings"):				
+			#	self.used_settings = sublime.load_settings("used_classes.json")			
 			
+			if not hasattr(self,"used_classes"):
+				text = FileReader.read(used_classes_file_path)
+				if len(text)>0:
+					self.json.loads(text)
+				self.used_classes = self.used_settings.get("classes")
+
+
+
 
 	def __init__(self):
 		self.on_classes_cache_loaded = EventHook()
@@ -705,6 +768,7 @@ class cftDB(object):
 		call_async(self.load_classes)
 		call_async(self.load)
 		call_async(self.read_sql)
+
 	def read_sql(self):
 		self.fr = FileReader()
 	def load(self):
@@ -721,11 +785,11 @@ class cftDB(object):
 		
 	def load_classes(self):
 		call_async(lambda:(FileReader.read(os.path.join(cache_path,"classes.xml")),"class_cache"),self.parse,async_callback=True)
-		call_async(self.select_classes,lambda txt:self.save_and_parse(os.path.join(cache_path,"classes.xml"),txt,"class_select"),async_callback=True)
+		call_async(self.select_classes,lambda txt:self.save_and_parse(os.path.join(cache_path,"classes.xml"),txt,"class_select"),"Загрузка списка классов",async_callback=True)
 		
-		call_async(lambda:(FileReader.read(os.path.join(cache_path,"methods.xml")),"methods_cache"),self.parse,async_callback=True)
-		call_async(lambda:self.select_in_tmp_connection(FileReader.read(os.path.join(plugin_path,"sql","cft_schema.sql"))),
-				   lambda txt:self.save_and_parse(os.path.join(cache_path,"methods.xml"),txt,"method_select"),async_callback=True)
+		#call_async(lambda:(FileReader.read(os.path.join(cache_path,"methods.xml")),"methods_cache"),self.parse,async_callback=True)
+		#call_async(lambda:self.select_in_tmp_connection(FileReader.read(os.path.join(plugin_path,"sql","cft_schema.sql"))),
+		#		   lambda txt:self.save_and_parse(os.path.join(cache_path,"methods.xml"),txt,"method_select"),async_callback=True)
 	def is_connected(self):
 		#return hasattr(self,"cursor") and hasattr(self,"connection") and self.select("select * from dual")[0][0] == 'X'
 		try:
@@ -782,32 +846,6 @@ class cftDB(object):
 		FileReader.write(file_name,txt)
 		self.parse(txt,type)
 	def parse(self,txt,type=None):
-		class ParseXml(object):	
-			def __init__(self,xml_text):
-				self.xml_text = xml_text
-				self.cur_class = None
-				self.classes = dict()
-
-				self.parser = xml.parsers.expat.ParserCreate()
-				self.parser.StartElementHandler  = self.start_element
-				self.parser.EndElementHandler 	 = self.end_element
-				self.parser.CharacterDataHandler = self.char_data
-
-				self.xml_text = '<?xml version="1.0" encoding="windows-1251"?>' + self.xml_text
-				self.parser.Parse(self.xml_text, 1)
-
-			def start_element(self,name, attrs):
-				if name.lower() == 'class':
-					self.cur_class = cftDB.class_row(db,attrs)
-					self.classes[self.cur_class.id] = self.cur_class
-				if name == 'method':					
-					self.cur_class.add_method(attrs)
-				if name == 'view':					
-					self.cur_class.add_view(attrs)
-			def end_element(self,name):
-				pass
-			def char_data(self,data):
-				pass
 		try:
 			#self.classes = ParseXml(txt).classes
 			#print "before assign classes",type
@@ -913,23 +951,24 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 
 	def open_classes(self):
 		self.classes = db.get_classes()
-		self.window.show_quick_panel([clv.text for clv in self.classes],self.is_methods_ready,sublime.MONOSPACE_FONT)
+		self.window.show_quick_panel([clv.text for clv in self.classes],self.open_methods,sublime.MONOSPACE_FONT)
 
-	def is_methods_ready(self,selected_class):
+	#def is_methods_ready(self,selected_class):
 		
-	 	if not db.is_methods_ready:
-	 		db.on_methods_cache_loaded += lambda:sublime.set_timeout(lambda:self.open_methods(selected_class),0)
-	 	else:
-	 		self.open_methods(selected_class)
+	 	#if not db.is_methods_ready:
+	 	#	db.on_methods_cache_loaded += lambda:sublime.set_timeout(lambda:self.open_methods(selected_class),0)
+	 	#else:
+	 	#self.open_methods(selected_class)
 
 	def open_methods(self, selected_class):
 		if selected_class >= 0:
 
 			self.current_class = self.classes[selected_class]
 			
-			if db.get_classes() != self.classes and db.classes.has_key(self.current_class.id): #Если за время выбора класса, список классов обновился. 
-				self.current_class = db.classes[self.current_class.id]						   #Перезагрузим текущий класс
-			
+			#if db.get_classes() != self.classes and db.classes.has_key(self.current_class.id): #Если за время выбора класса, список классов обновился. 
+				#print "Загрузка была из кэша обновим из базы"
+				#self.current_class = db.classes[self.current_class.id]						   #Перезагрузим текущий класс
+			self.current_class.update()
 
 			#meths = [mv.text for mk,mv in self.current_class.meths.iteritems()]
 			#self.window.show_quick_panel(meths,self.method_on_done,sublime.MONOSPACE_FONT)
