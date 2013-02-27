@@ -562,6 +562,7 @@ class cftDB(object):
 	class db_row(object):
 		def __init__(self,db,p_list):			
 			self.db = db
+			self.list = p_list
 			if p_list.__class__ == dict:
 				#super(db_row,self).__init__(p_list.values())			
 				for k,v in p_list.iteritems():
@@ -572,6 +573,24 @@ class cftDB(object):
 					setattr(self,d[0],d[1])
 		def __getitem__(self,index):
 			return self.dir()[index]
+		def __str__(self):
+			return "__str__"# [r for r in self.dir()]
+		def __repr__(self):
+			try:
+				#print self.list
+				s = '('
+				for r in self.list:
+					if r[1].__class__== int:
+						s += "%s : %-3i|" % (r[0],r[1])
+					else:
+						s += "%s : %s|" % (r[0],r[1].encode('utf-8')) #ljust
+
+				return s + ")\n"
+				#return self.list[5][1].encode('utf-8')
+				
+			except Exception,e:
+				print "*** Ошибка repr:",e				
+
 	class class_row(db_row):
 		def __init__(self, db, p_list):
 			super(cftDB.class_row, self).__init__(db,p_list)
@@ -648,9 +667,7 @@ class cftDB(object):
 				self.db.cursor.execute(self.db.fr.save_method_sources,class_name=self.class_ref.id, method_name=self.short_name.upper(),source_code=value,out=err_clob,out_count=err_num)				
 				err_num = int(err_num.getvalue())
 
-
-				self.errors = self.db.select("select * from ERRORS t where t.method_id = :method_id order by class,type,sequence,line,position,text",self.id)
-				self.errors_num = err_num
+				
 
 				if err_num == 0:					
 					print u"Успешно откомпилированно за %s сек" % t.get_time()
@@ -669,6 +686,14 @@ class cftDB(object):
 					print "error=",error
 				else:
 					print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
+
+		def errors(self):
+			self.errors = self.db.select("select * from ERRORS t where t.method_id = :method_id order by class,type,sequence,line,position,text",self.id)
+			if not self.errors:
+				self.errors = " "
+			return self.errors
+			#self.errors_num = err_num
+
 		def get_text(self):
 			#return [self.text,u"Метод"]
 			return u"Метод:         " + self.text
@@ -893,7 +918,7 @@ db = cftDB()
 
 class connectCommand(sublime_plugin.WindowCommand):
 	def run(self):
-		print "cft open command"
+		print "CONNECT"
 		self.window.show_input_panel(u"Схема/Пользователь@База_данных:","ibs/ibs@cfttest", self.on_done, self.on_change, self.on_cancel)
 	def on_done(self, input):
 		self.window.run_command('show_panel', {"panel": "console", "toggle": "true"})
@@ -906,43 +931,111 @@ class connectCommand(sublime_plugin.WindowCommand):
 class dataView(object):
 	def __init__(self,view=None):
 		if view:
-			print view
+			#print view
 			self.view = view
 		else:
 			self.view = sublime.active_window().new_file()
-
-		
 	@property
 	def data(self):
 		try:
 			#if self.view.settings().has("cft_object"):
-
-			value = self.view.settings().get("cft_object")
-			if value["type"] == "method_row":
-				value = db.classes[value["class"]].meths[value["id"]]
-			return value
+			if hasattr(self,"_data"):
+				return self._data
+			else:
+				value = self.view.settings().get("cft_object")
+				db.classes[value["class"]].update()
+				if value["type"] == "method_row":
+					value = db.classes[value["class"]].meths[value["id"]]
+				self._data = value
+				return value
 		except Exception,e:
 			print "*** Ошибка настроек представления:",e
 			if sys != None:
 				exc_type, exc_value, exc_traceback = sys.exc_info()
 				traceback.print_exception(exc_type, exc_value, exc_traceback,
 													limit=10, file=sys.stdout)
-			
-
 	@data.setter
 	def data(self,value):
 		if value.__class__.__name__ == "method_row":
 			self.view.settings().set("cft_object",{"id": value.id,"class" : value.class_ref.id, "type": value.__class__.__name__})
-
-
+			self._data = value
 	def focus(self):
-		sublime.active_window().focus_view(self.view)
 
+		sublime.active_window().focus_view(self.view)
 	def __getattr__(self, name):
+
 		return getattr(self.view,name)
+	def get_method_section(self,name):
+		src_text = sublime.Region(0,self.view.size())
+		src_text = self.view.substr(src_text)
+		
+		regexp = r'-+\n-+(.)*-+\n-+'
+		p = re.compile(regexp)
+		arr = p.split(src_text)
+
+		# B = arr[2].strip('\n')
+		# V = arr[4].strip('\n')
+		# G = arr[6].strip('\n')
+		# L = arr[8].strip('\n')
+		# S = arr[10].strip('\n')
+
+		t = {'EXECUTE'   : 0,
+			 'VALIDATE'  : 2,
+			 'PUBLIC'    : 4,
+			 'PRIVATE'   : 6,
+			 'VBSCRIPT'  : 8}
+
+		return arr[t[name]]#.strip('\n')
+
+	def get_view_line_by_section_line(self,section_line,section_name):
+		if section_name == 'EXECUTE':
+			print 'EXECUTE'
+			return section_line
+		elif section_name == 'VALIDATE':
+			return self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   + 3 + section_line
+		elif section_name == 'PUBLIC':
+			return self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   + 3 + \
+				   self.view.rowcol(len(self.get_method_section('VALIDATE')))[0]  + 3 + section_line
+		elif section_name == 'PRIVATE':
+			return  self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]  + 3 + \
+					self.view.rowcol(len(self.get_method_section('VALIDATE')))[0] + 3 + \
+					self.view.rowcol(len(self.get_method_section('PUBLIC')))[0]   + 3 + section_line
+
+
+	def mark_errors(self):
+		#print "errors:",self.data.errors()
+		#print "line 7 is ",self.get_view_line_by_section_line(3,"PRIVATE")
+		self.view.erase_regions('cft-errors')
+		self.view.settings().set("cft-errors",dict())
+
+		warnings = []
+		errors = []
+		regions_dict = dict()
+
+		for row in self.data.errors():
+			lineno = self.get_view_line_by_section_line(row.line,row.type)
+			text_point = self.view.text_point(lineno - 1, 0)
+			l = self.view.text_point(lineno, 0) - text_point - 1
+			if row.list[6][1] == 'W': #6,1 это поле class
+				warnings.append(sublime.Region(text_point, text_point + l))
+			elif row.list[6][1] == 'E':
+				errors.append(sublime.Region(text_point, text_point + l))
+			regions_dict[str(self.get_view_line_by_section_line(row.line,row.type))] = row.text
+
+		self.view.settings().set("cft-errors",regions_dict)
+		self.view.add_regions(
+						'cft-warnings',
+						warnings,
+						'comment', 'dot', 4 | 32)
+		self.view.add_regions(
+						'cft-errors',
+						errors,
+						'keyword', 'dot', 4 | 32)
+
 
 class cft_openCommand(sublime_plugin.WindowCommand):
-	def run(self):		
+	def run(self):
+		print "OPEN MEHTODS"
 		if not db.is_connected():
 			db.on_classes_cache_loaded += lambda:sublime.set_timeout(self.open_classes,0)
 			sublime.active_window().run_command('connect',{})
@@ -1076,6 +1169,8 @@ class save_methodCommand(sublime_plugin.TextCommand):
 				obj.set_sources(sublime_src_text)
 			else:
 				print "Текст операции не изменился"
+
+			view.mark_errors()
 
 
 		except Exception as e:
