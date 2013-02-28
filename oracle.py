@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import with_statement
 import sublime, sublime_plugin, sublime_plugin
 import re
 import json
@@ -9,6 +10,9 @@ import threading,thread
 import datetime,time
 import xml.parsers.expat
 import sys,traceback
+
+
+
 plugin_name = "CFT"
 plugin_path 			= os.path.join(sublime.packages_path(),plugin_name)
 cache_path  			= os.path.join(plugin_path,"cache")
@@ -652,22 +656,36 @@ class cftDB(object):
 			super(cftDB.method_row, self).__init__(db,p_list)
 			self.class_ref = p_class
 		def get_sources(self):
+			conn = self.db.pool.acquire()
+			cursor = conn.cursor()
+			text_out = cursor.var(cx_Oracle.CLOB)
+			cursor.execute(self.db.fr.method_sources,(self.class_ref.id, self.short_name.upper(),text_out))
+			value = unicode(text_out.getvalue().read(),'1251')
+			self.db.pool.release(conn)
+
+			return value
+
+		def get_sources_with_no_pool(self):
+			t=timer()
 			text_out = self.db.cursor.var(cx_Oracle.CLOB)
 			self.db.cursor.execute(self.db.fr.method_sources,(self.class_ref.id, self.short_name.upper(),text_out))
-			return unicode(text_out.getvalue().read(),'1251')
+			value = unicode(text_out.getvalue().read(),'1251')
+			t.print_time("get_source")
+			return value
+
+
 		def set_sources(self,value):
 			#print "set_sources_method",value
 			try:
 				t = timer()
-				#print value
-				#print "cursor2=",len(self.db.fr.save_method_sources)
-				self.db.cursor.setinputsizes(source_code=cx_Oracle.CLOB)
-				err_clob = self.db.cursor.var(cx_Oracle.CLOB)
-				err_num  = self.db.cursor.var(cx_Oracle.NUMBER)
-				self.db.cursor.execute(self.db.fr.save_method_sources,class_name=self.class_ref.id, method_name=self.short_name.upper(),source_code=value,out=err_clob,out_count=err_num)				
+				conn = self.db.pool.acquire()
+				cursor = conn.cursor()
+				cursor.setinputsizes(source_code=cx_Oracle.CLOB)
+				err_clob = cursor.var(cx_Oracle.CLOB)
+				err_num  = cursor.var(cx_Oracle.NUMBER)
+				cursor.execute(self.db.fr.save_method_sources,class_name=self.class_ref.id, method_name=self.short_name.upper(),source_code=value,out=err_clob,out_count=err_num)				
 				err_num = int(err_num.getvalue())
-
-				
+		
 
 				if err_num == 0:					
 					print u"Успешно откомпилированно за %s сек" % t.get_time()
@@ -676,22 +694,57 @@ class cftDB(object):
 					#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
 					sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))
 					print "**********************************************"
-					print "** %s" % t.get_now()
+					print "** Ошибки компиляции %s за %s"% (self.short_name.encode('1251'),t.get_now())
+					print "**********************************************"
 					print err_msg
 
-				self.db.connection.commit()
-			except cx_Oracle.DatabaseError as e:
-				error, = e.args
-				if error.__class__.__name__ == 'str':
-					print "error=",error
+				conn.commit()
+				self.db.pool.release(conn)		
+			except Exception,e:
+				print "*** Ошибка выполнения method_row.set_sources:",e
+				if sys != None:
+					exc_type, exc_value, exc_traceback = sys.exc_info()
+					traceback.print_exception(exc_type, exc_value, exc_traceback,
+						                          limit=10, file=sys.stdout)
+		def set_sources_with_no_pool(self,value):
+			#print "set_sources_method",value
+			try:
+				t = timer()
+
+
+				self.db.cursor.setinputsizes(source_code=cx_Oracle.CLOB)
+				err_clob = self.db.cursor.var(cx_Oracle.CLOB)
+				err_num  = self.db.cursor.var(cx_Oracle.NUMBER)
+				self.db.cursor.execute(self.db.fr.save_method_sources,class_name=self.class_ref.id, method_name=self.short_name.upper(),source_code=value,out=err_clob,out_count=err_num)				
+				err_num = int(err_num.getvalue())
+		
+
+				if err_num == 0:					
+					print u"Успешно откомпилированно за %s сек" % t.get_time()
 				else:
-					print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
+					err_msg = unicode(err_clob.getvalue().read(),'1251').strip()
+					#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
+					sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))
+					print "**********************************************"
+					print "** Ошибки компиляции %s за %s"% (self.short_name.encode('1251'),t.get_now())
+					print "**********************************************"
+					print err_msg
+
+				self.db.connection.commit()	
+			except Exception,e:
+				print "*** Ошибка выполнения method_row.set_sources:",e
+				if sys != None:
+					exc_type, exc_value, exc_traceback = sys.exc_info()
+					traceback.print_exception(exc_type, exc_value, exc_traceback,
+						                          limit=10, file=sys.stdout)
+			finally:
+				t.print_time("set_sources")
 
 		def errors(self):
-			self.errors = self.db.select("select * from ERRORS t where t.method_id = :method_id order by class,type,sequence,line,position,text",self.id)
-			if not self.errors:
-				self.errors = " "
-			return self.errors
+			errors = self.db.select("select * from ERRORS t where t.method_id = :method_id order by class,type,sequence,line,position,text",self.id)
+			if not errors:
+				errors = list()
+			return errors
 			#self.errors_num = err_num
 
 		def get_text(self):
@@ -783,13 +836,28 @@ class cftDB(object):
 
 
 	def __init__(self):
-		self.on_classes_cache_loaded = EventHook()
-		self.on_methods_cache_loaded = EventHook()
-		self.is_methods_ready = False
-		self.classes_lock = thread.allocate_lock()
+		self.on_classes_cache_loaded 	= EventHook()
+		self.on_methods_cache_loaded 	= EventHook()
+		self.is_methods_ready 			= False
+		self.classes_lock 				= thread.allocate_lock()
+		self.select_lock 				= thread.allocate_lock()
+		self.connection_lock 			= thread.allocate_lock()
+		
 
 	def connect(self,connection_string):
 		self.connection_string 	= connection_string
+
+		user_ = str(connection_string[:connection_string.find('/')])
+		pass_ = str(connection_string[connection_string.find('/')+1:connection_string.find('@')])
+		dsn_  = str(connection_string[connection_string.find('@')+1:])
+
+		self.pool = cx_Oracle.SessionPool(user 		= user_,
+										  password 	= pass_,
+										  dsn 		= dsn_,
+										  min 		= 1,
+										  max 		= 5,
+										  increment = 1,
+										  threaded  = True)
 		call_async(self.load_classes)
 		call_async(self.load)
 		call_async(self.read_sql)
@@ -797,15 +865,18 @@ class cftDB(object):
 	def read_sql(self):
 		self.fr = FileReader()
 	def load(self):
-		self.connection 	= cx_Oracle.connect(self.connection_string)		
-		self.cursor 		= self.connection.cursor()
+		self.connection 				= cx_Oracle.connect(self.connection_string)		
+		self.cursor 					= self.connection.cursor()
+		#self.connection 	= cx_Oracle.connect(self.connection_string)		
+		#self.cursor 		= self.connection.cursor()
 		return 1
 	def select_classes(self):
 		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
 				 where (select count(1) from methods m where m.class_id = cl.id) > 0
   				 	or (select count(1) from criteria cr where cr.class_id = cl.id) > 0"""
 
-		value = self.select_in_tmp_connection(sql)
+		#value = self.select_in_tmp_connection(sql)
+		value = self.select(sql)
 		return value
 		
 	def load_classes(self):
@@ -818,50 +889,115 @@ class cftDB(object):
 	def is_connected(self):
 		#return hasattr(self,"cursor") and hasattr(self,"connection") and self.select("select * from dual")[0][0] == 'X'
 		try:
-			if hasattr(self,"connection"):
-				self.connection.ping()
+			# if hasattr(self,"connection"):
+			# 	self.connection.ping()
+			# 	return True
+			# else:
+			# 	return False
+			if hasattr(self,"pool"):
 				return True
-			else:
-				return False
+			return False
 		except Exception:
 			return False
 
-	def select(self,sql,*args):
 
-		return self.select_cursor(self.cursor,sql,*args)
-	def select_in_tmp_connection(self,sql,*args):
-		connection 	= cx_Oracle.connect(self.connection_string)
-		cursor 		= connection.cursor()
-		value 		= self.select_cursor(cursor,sql,*args)
-		cursor.close()
-		connection.close()
-		return value
-	def select_cursor(self,cursor,sql,*args):
+
+	def select(self,sql,*args):
+		value = None
+		# if not self.select_lock.acquire(False):
+		# 	try:
+		# 		print "select in new connection"
+		# 		self.connection_lock.acquire()
+		# 		connection 	= cx_Oracle.connect(self.connection_string)
+		# 		cursor 		= connection.cursor()
+		# 		self.connection_lock.release()
+		# 		value 		= self.select_cursor(cursor,sql,*args)
+		# 		print "finished",value
+		# 		#cursor.close()
+		# 		#connection.close()
+		# 	except Exception, e:
+		# 		error, = e.args
+		# 		print "db.select_cursor.EXCEPTION:",error.code,error.message,error.context,e
+		# 		if sys != None:
+		# 			exc_type, exc_value, exc_traceback = sys.exc_info()
+		# 			traceback.print_exception(exc_type, exc_value, exc_traceback,
+		# 				                          limit=10, file=sys.stdout)
+		# else:
+		# 	try:
+		# 		print "select lock"
+		# 		self.connection_lock.acquire()
+		# 		if not hasattr(self,"connection"):
+		# 			print "create new connection"
+					
+		# 			self.connection	= cx_Oracle.connect(self.connection_string)
+					
+		# 			print "create new connection end"
+		# 		else:
+		# 			try:
+		# 				self.connection.ping()
+		# 			except Exception:
+
+		# 				self.connection	= cx_Oracle.connect(self.connection_string)
+
+
+		# 		if not hasattr(self,"cursor"):
+		# 			print "create new cursor"
+		# 			print "1"
+		# 		self.cursor	= self.connection.cursor()
+		# 		self.connection_lock.release()
+		# 		print "2"
+		# 		value = self.select_cursor(self.cursor,sql,*args)				
+		# 		print "end"
+		# 	finally:
+		# 		print "unlock"
+		# 		self.select_lock.release()
 		try:			
+			conn = self.pool.acquire()
+			cursor = conn.cursor()
+			cursor.arraysize = 50
+			#t = timer()
+			value = self.select_cursor(cursor, sql, *args)
+			#t.print_time("Select")
+			self.pool.release(conn)
+		except Exception,e:
+			print "*** Ошибка выполнения select:",e
+			if sys != None:
+				exc_type, exc_value, exc_traceback = sys.exc_info()
+				traceback.print_exception(exc_type, exc_value, exc_traceback,
+					                          limit=10, file=sys.stdout)
+
+		return value
+
+	def select_cursor(self,cursor,sql,*args):
+		try:
+			#print "3",re.sub("\s+"," ",sql)
 			cursor.execute(sql,args)			
 			desc  = [d[0].lower() for d in cursor.description]						
 			table = [[(lambda: unicode(t,'1251') if t.__class__ == str else t)() for t in row] for row in cursor]#Конвертнем все строковые значения в юникод				
 			table = [[(lambda: "" if not t else t)() for t in row] for row in table] #Заменяем все значение None на пустую строку
-			
+
 			#print "desc_len=",len(desc),"table_len",len(table)
 			#value = None
 			if len(desc)==1 and len(table)==1:
 				if t.__class__.__name__ == 'LOB':
-					lob_str = table[0][0].read()
-					return lob_str
+					return table[0][0].read()
 				else:
 					return table[0][0]
 			else:
 				return [cftDB.db_row(self,zip(desc,row)) for row in table]
 			
-		except cx_Oracle.DatabaseError as e:
+		except Exception,e:
 			error, = e.args
 			if error.__class__.__name__ == 'str':
 				print "error",error
 			elif error.code == 28:#ошибка нет подключения
 				return []
 			else:
-				print "cx_Oracle.DatabaseError во время вызова метода select. ",error.code,error.message,error.context,e
+				print "db.select_cursor.EXCEPTION:",error.code,error.message,error.context,e,sql
+				if sys != None:
+					exc_type, exc_value, exc_traceback = sys.exc_info()
+					traceback.print_exception(exc_type, exc_value, exc_traceback,
+						                          limit=10, file=sys.stdout)
 			#return []
 
 	def get_sid(self):
@@ -943,9 +1079,12 @@ class dataView(object):
 				return self._data
 			else:
 				value = self.view.settings().get("cft_object")
-				db.classes[value["class"]].update()
+				#db.classes[value["class"]].update()
 				if value["type"] == "method_row":
-					value = db.classes[value["class"]].meths[value["id"]]
+					cl = db.classes[value["class"]]
+					if len(cl.meths)==0:
+						cl.update()
+					value = cl.meths[value["id"]]
 				self._data = value
 				return value
 		except Exception,e:
@@ -1031,7 +1170,8 @@ class dataView(object):
 						'cft-errors',
 						errors,
 						'keyword', 'dot', 4 | 32)
-
+	#def mark_errors_async(self):
+	#	call_async(lambda:sublime.set_timeout(self.mark_errors,0))
 
 class cft_openCommand(sublime_plugin.WindowCommand):
 	def run(self):
@@ -1054,21 +1194,24 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 	 	#self.open_methods(selected_class)
 
 	def open_methods(self, selected_class):
-		if selected_class >= 0:
+		try:
+			if selected_class >= 0:
 
-			self.current_class = self.classes[selected_class]
-			
-			#if db.get_classes() != self.classes and db.classes.has_key(self.current_class.id): #Если за время выбора класса, список классов обновился. 
-				#print "Загрузка была из кэша обновим из базы"
-				#self.current_class = db.classes[self.current_class.id]						   #Перезагрузим текущий класс
-			self.current_class.update()
+				self.current_class = self.classes[selected_class]
+				
+				#if db.get_classes() != self.classes and db.classes.has_key(self.current_class.id): #Если за время выбора класса, список классов обновился. 
+					#print "Загрузка была из кэша обновим из базы"
+					#self.current_class = db.classes[self.current_class.id]						   #Перезагрузим текущий класс
+				self.current_class.update()
 
-			#meths = [mv.text for mk,mv in self.current_class.meths.iteritems()]
-			#self.window.show_quick_panel(meths,self.method_on_done,sublime.MONOSPACE_FONT)
-			self.list_objs = self.current_class.get_objects()
-			self.window.show_quick_panel([obj.get_text() for obj in self.list_objs],self.method_on_done,sublime.MONOSPACE_FONT)
-			
-			cft_settings.update_used_class(self.current_class.id)
+				#meths = [mv.text for mk,mv in self.current_class.meths.iteritems()]
+				#self.window.show_quick_panel(meths,self.method_on_done,sublime.MONOSPACE_FONT)
+				self.list_objs = self.current_class.get_objects()
+				self.window.show_quick_panel([obj.get_text() for obj in self.list_objs],self.method_on_done,sublime.MONOSPACE_FONT)
+				
+				cft_settings.update_used_class(self.current_class.id)
+		except Exception,e:
+			print "Ошибка при вызове open_methods",e
 
 
 	def method_on_done(self,input):
@@ -1149,13 +1292,27 @@ class MarkErrors(sublime_plugin.TextCommand):
 
 class save_methodCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
+		
+		#import cProfile
+		#self.profiler = cProfile.Profile()
+
 		if not db.is_connected():
 			db.on_classes_cache_loaded += lambda:sublime.set_timeout(self.save,0)
+			#db.on_classes_cache_loaded += lambda:self.profiler.runcall(lambda:sublime.set_timeout(self.save,0))
 			sublime.active_window().run_command('connect',{})
 		else:
 			self.save()
+			#self.profiler.runcall(self.save)
+
+
 	def save(self):
 		try:
+			
+			#profiler.runcall(self.save)
+			#profiler.print_stats()
+			self.t = timer()
+
+
 			view = dataView(sublime.active_window().active_view())
 			obj = view.data
 			sublime_src_text = view.substr(sublime.Region(0,view.size()))
@@ -1173,8 +1330,17 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			view.mark_errors()
 
 
-		except Exception as e:
-			print e
+		except Exception,e:
+			print "*** Ошибка сохранения исходников:",e
+			if sys != None:
+				exc_type, exc_value, exc_traceback = sys.exc_info()
+				
+				traceback.print_exception(exc_type, exc_value, exc_traceback,
+					                          limit=10, file=sys.stdout)
+		finally:
+			self.t.print_time("Сохранение текста операции")
+
+		#self.profiler.print_stats()
 
 class close_methodCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
