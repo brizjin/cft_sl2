@@ -1128,17 +1128,25 @@ class dataView(object):
 
 	def get_view_line_by_section_line(self,section_line,section_name):
 		if section_name == 'EXECUTE':
-			print 'EXECUTE'
+			#print 'EXECUTE'
 			return section_line
 		elif section_name == 'VALIDATE':
-			return self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   + 3 + section_line
+			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   + 3 + section_line
+			#print value,section_line,section_name
+			return value
 		elif section_name == 'PUBLIC':
-			return self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   + 3 + \
-				   self.view.rowcol(len(self.get_method_section('VALIDATE')))[0]  + 3 + section_line
+			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   + 3 + \
+				    self.view.rowcol(len(self.get_method_section('VALIDATE')))[0]  + 3 + section_line
+			#print value,section_line,section_name
+			return value
 		elif section_name == 'PRIVATE':
-			return  self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]  + 3 + \
+			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]  + 3 + \
 					self.view.rowcol(len(self.get_method_section('VALIDATE')))[0] + 3 + \
-					self.view.rowcol(len(self.get_method_section('PUBLIC')))[0]   + 3 + section_line
+					self.view.rowcol(len(self.get_method_section('PUBLIC')))[0]   + 3 + 8 + section_line
+			#print value,section_line,section_name
+			return value
+		elif section_name == 'VALIDSYS':
+			return 0
 
 
 	def mark_errors(self):
@@ -1150,6 +1158,8 @@ class dataView(object):
 		warnings = []
 		errors = []
 		regions_dict = dict()
+
+		#print self.data.errors()
 
 		for row in self.data.errors():
 			lineno = self.get_view_line_by_section_line(row.line,row.type)
@@ -1330,6 +1340,8 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			view.mark_errors()
 
 
+
+
 		except Exception,e:
 			print "*** Ошибка сохранения исходников:",e
 			if sys != None:
@@ -1339,9 +1351,9 @@ class save_methodCommand(sublime_plugin.TextCommand):
 					                          limit=10, file=sys.stdout)
 		finally:
 			self.t.print_time("Сохранение текста операции")
+			sublime.status_message(u"Компиляция завершена за " + self.t.get_time())
 
 		#self.profiler.print_stats()
-
 class close_methodCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 
@@ -1360,9 +1372,6 @@ class close_methodCommand(sublime_plugin.TextCommand):
 			#print 
 			#views[self.view.id()].set_sources(src_text)
 			#m = sublime.active_window().active_view().settings().get("cft_method")
-			
-
-
 class get_settingCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		#print "run"
@@ -1373,7 +1382,6 @@ class get_settingCommand(sublime_plugin.TextCommand):
 		print "get setting = ", a
 		a = sublime.active_window().active_view().settings().get("a")
 		print "get setting = ", a
-
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		#print "run"
@@ -1393,49 +1401,87 @@ class el(sublime_plugin.EventListener):
 		pass
 	def on_pre_save(self,view):
 		print "on_pre_save_"
+	def on_modified(self,view):
+
+		cursor_position = view.sel()[0].a
+		row_num,col_num = view.rowcol(cursor_position)
+		start_row_position = view.text_point(row_num,0)
+		last_simbol = view.substr(sublime.Region(cursor_position-1,cursor_position))
+		print "modified",last_simbol
+		if last_simbol == '.':
+			print "DOT"
+			view.run_command('my_auto_complete',{})
+		
+		
 	def on_query_completions(self,view,prefix,locations):
-		return
-		#print "1:%s,2:%s,3:%s,4:%s" % (self,view,prefix,locations)
-		print "on_query_completions"
-		global a
-		import os,sys
-		SUBLIME_ROPE_PATH = os.path.dirname(os.path.normpath(os.path.abspath(__file__)))
-		#print SUBLIME_ROPE_PATH
-		sys.path.insert(0, SUBLIME_ROPE_PATH + "\\rope\\contrib\\")
-		import rope
-		from rope.contrib import codeassist
-		#from rope.contrib.codeassist import CompletionPropasal
+		
+		print "1:%s,2:%s,3:%s,4:%s" % (self,view,prefix,locations)
+		#return
+		# print "on_query_completions"
+		# global a
+		# import os,sys
+		# SUBLIME_ROPE_PATH = os.path.dirname(os.path.normpath(os.path.abspath(__file__)))
+		# #print SUBLIME_ROPE_PATH
+		# sys.path.insert(0, SUBLIME_ROPE_PATH + "\\rope\\contrib\\")
+		# import rope
+		# from rope.contrib import codeassist
+		# #from rope.contrib.codeassist import CompletionPropasal
 
-		if a == []:
-			print "select from db"
-			cnn_str = 'ibs/ibs@cfttest'
-			connection = cx_Oracle.connect(cnn_str)
-			cursor = connection.cursor()
+		# if a == []:
+		# 	print "select from db"
+		# 	cnn_str = 'ibs/ibs@cfttest'
+		# 	connection = cx_Oracle.connect(cnn_str)
+		# 	cursor = connection.cursor()
 
-			sql = """select c.id from classes c
-					 --where rownum<10
-						 order by nvl(c.modified,to_date('01.01.0001','dd.mm.yyyy')) desc"""
-			cursor.execute(sql)
+		# 	sql = """select c.id from classes c
+		# 			 --where rownum<10
+		# 				 order by nvl(c.modified,to_date('01.01.0001','dd.mm.yyyy')) desc"""
+		# 	cursor.execute(sql)
 
-			#a = [rope.contrib.codeassist.CompletionProposal(unicode(text[0],'1251'),"imported",unicode(text[0],'1251'))
-			a = [(u"{result}\t({scope},{type},{more})".format(
-				result=unicode(text[0],'1251'),scope="imported",type="param",more="more2"),u"::[%s].[${1:hello}]"%text)
-					for text in cursor.fetchall()]
-			#a = [()for p in a]
-		#print a
-		#completion_flags = 2
-		#if self.suppress_word_completions:
+		# 	#a = [rope.contrib.codeassist.CompletionProposal(unicode(text[0],'1251'),"imported",unicode(text[0],'1251'))
+		# 	a = [(u"{result}\t({scope},{type},{more})".format(
+		# 		result=unicode(text[0],'1251'),scope="imported",type="param",more="more2"),u"::[%s].[${1:hello}]"%text)
+		# 			for text in cursor.fetchall()]
+		# 	#a = [()for p in a]
+		# #print a
+		# #completion_flags = 2
+		# #if self.suppress_word_completions:
 		completion_flags = sublime.INHIBIT_WORD_COMPLETIONS
 		#if self.suppress_explicit_completions:
-		#completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS
-		#print len(a)
-		#for l in locations:			
-		#	print l
 		
+		#completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS #| sublime.INHIBIT_WORD_COMPLETIONS
+
+		cursor_position = view.sel()[0].a
+		row_num,col_num = view.rowcol(cursor_position)
+		start_row_position = view.text_point(row_num,0)
+		row_text = view.substr(sublime.Region(start_row_position,cursor_position))
+		class_name = row_text[row_text.rfind("::[")+3:len(row_text)-2]
+		#class_name = 'EXT_DOCS_SVOD'
+		a = []
+		
+		print "class_name=",class_name
+		if not hasattr(db,"classes"):
+			print "DEFAULT A"
+			a = [(u"one",u"text_to_paste"),(u"two",u"second")]
+		elif not class_name:
+			a = [v for v in db.classes.values()]
+			a = sorted(a, key=lambda p: p.id)
+			#a = [("%s"%m.short_name,"%s(${1:hello})"%m.short_name) for m in db.classes[class_name].meths.values()]
+			a = [("%s\t%s"%(c.id,c.name[:20]),"::[%s].${1:METHOD}"%c.id) for c in a]
+
+		elif db.classes.has_key(class_name):
+			db.classes[class_name].update()
+			#print db.classes[class_name].meths
+			a = [v for v in db.classes[class_name].meths.values()]
+			a = sorted(a, key=lambda p: p.short_name)
+			#a = [("%s"%m.short_name,"%s(${1:hello})"%m.short_name) for m in db.classes[class_name].meths.values()]
+			a = [("%s\t%s"%(m.short_name,m.name[:20]),"[%s](${1:hello})"%m.short_name) for m in a]
 
 
+		#b = [(u"one",u"text_to_paste"),(u"two",u"second")]
+		#a.extend(b)
 		return (a,completion_flags)
-		#return a
+
 	def on_selection_modified(self, view):
 		row, col = view.rowcol(view.sel()[0].a)
 		row = row + 1 
@@ -1446,4 +1492,21 @@ class el(sublime_plugin.EventListener):
 				view.set_status('cft-errors',cft_errors[str(row)])
 			else:
 				view.set_status('cft-errors',"")
-		
+
+class my_auto_completeCommand(sublime_plugin.TextCommand):
+    '''Used to request a full autocompletion when
+    complete_as_you_type is turned off'''
+    def run(self, edit, block=False):
+    	print "hello" 
+        self.view.run_command('hide_auto_complete')
+        sublime.set_timeout(self.show_auto_complete, 50)
+
+    def show_auto_complete(self):
+    	print "second"
+        self.view.run_command(
+            'auto_complete', {
+                'disable_auto_insert': True,
+                'api_completions_only': True,
+                'next_completion_if_showing': False
+            }
+        )

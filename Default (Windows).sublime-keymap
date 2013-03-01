@@ -1,6 +1,6 @@
 [
 	
-	{"keys":["f6"], "command":"print_cmd"},
+	{"keys":["f6"], "command":"my_auto_complete"},
 	{"keys":["f8"], "command":"runsql"},
 	{"keys":["f4"], "command":"get_setting"},
 	{"keys":["f9"], "command":"save_method"},
