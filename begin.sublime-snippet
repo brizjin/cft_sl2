@@ -1,0 +1,9 @@
+<snippet>
+	<description>others</description>
+    <content><![CDATA[begin
+	${1:null};
+exception when others then ${2:null};
+end;]]></content>
+    <tabTrigger>begin</tabTrigger>
+    <!-- <scope>source.c, source.objc, source.c++, source.objc++</scope> -->
+</snippet>

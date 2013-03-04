@@ -1,0 +1,6 @@
+<snippet>
+	<description>pipe</description>
+    <content><![CDATA[stdio.put_line_pipe('${1:TEXT}','DEBUG_PIPE');]]></content>
+    <tabTrigger>pipe</tabTrigger>
+    <!-- <scope>source.c, source.objc, source.c++, source.objc++</scope> -->
+</snippet>

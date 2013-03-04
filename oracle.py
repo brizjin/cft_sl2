@@ -436,31 +436,35 @@ def call_async(call_func,on_complete=None,msg=None,async_callback=False):
 				
 				
 	RunInThread(on_complete).start()
+def sub(p_str,from_str,to_str,p_start=0):
+	"""
+	Функция возвращает подстроку между двумя строками
+	Включая эти строки
+	Например sub(text,"declare","end;")
+	"""
+	begin = p_str.find(from_str,p_start)#-len(from_str)
+	end = p_str.rfind(to_str,p_start)+len(to_str)
+	return p_str[begin:end].strip()
+
+
 class FileReader(object):
 	def __init__(self):
 		self.dir_path = os.path.join(sublime.packages_path(),plugin_name,"sql")
 		self.load()
 		#call_async(self.load)
-
-
-	
 	@staticmethod
 	def read(file_path):
 		if not os.path.exists(file_path):
 			return ''
-
 		f = open(file_path,"r")
 		text = f.read()
 		f.close()
-
 		fileName, fileExtension = os.path.splitext(file_path)
-		
 		if fileExtension == '.tst':
 			def sub(p_str,from_str,to_str,p_start=0):
 				begin = p_str.find(from_str,p_start)#-len(from_str)
 				end = p_str.rfind(to_str,p_start)+len(to_str)
 				return p_str[begin:end].strip()
-
 			text = sub(text,"declare","end;")
 		return text
 
@@ -476,15 +480,14 @@ class FileReader(object):
 		end = p_str.find(to_str,p_start)
 		return p_str[begin:end].strip()
 
-
-
 	def load(self):
-		
 		self.cft_schema_sql 	 = self.read(os.path.join(plugin_path,"sql","cft_schema.sql"))
 		self.method_sources 	 = self.read(os.path.join(plugin_path,"sql","method_sources.tst"))
 		self.save_method_sources = self.read(os.path.join(plugin_path,"sql","save_method_sources.tst"))
 		self.method_sources_json = self.read(os.path.join(plugin_path,"sql","method_sources_json.tst"))
 		self.save_criteria_text  = self.read(os.path.join(plugin_path,"sql","save_criteria_text.tst"))
+		self.classes_update		 = self.read(os.path.join(plugin_path,"sql","classes_update.sql"))
+		
 
 		
 class cft_settings_class(dict):
@@ -507,14 +510,11 @@ class cft_settings_class(dict):
 			used_classes.remove(class_id)				
 		used_classes.insert(0,class_id)		
 		cft_settings.save()
-
 cft_settings = cft_settings_class()
-
-
 class timer(object):
 	def __init__(self):
 		self.begin = datetime.datetime.now()
-		self.last = datetime.datetime.now()
+		self.last  = datetime.datetime.now()
 	def get_time_delta_str(self,begin,end):
 		delta 		= end - begin
 		delta_str 	= (datetime.datetime.min + delta).time().strftime("%H:%M:%S.%f").strip("0:") 
@@ -556,12 +556,6 @@ class EventHook(object):
             if theHandler.im_self == inObject:
                 self -= theHandler
 
-
-		
-
-
-
-
 class cftDB(object):
 	class db_row(object):
 		def __init__(self,db,p_list):			
@@ -577,36 +571,49 @@ class cftDB(object):
 					setattr(self,d[0],d[1])
 		def __getitem__(self,index):
 			return self.dir()[index]
-		def __str__(self):
-			return "__str__"# [r for r in self.dir()]
+		
 		def __repr__(self):
 			try:
 				#print self.list
 				s = '('
-				for r in self.list:
-					if r[1].__class__== int:
-						s += "%s : %-3i|" % (r[0],r[1])
-					else:
-						s += "%s : %s|" % (r[0],r[1].encode('utf-8')) #ljust
+				if self.list.__class__ == tuple:
+					for r in self.list:
+						if r[1].__class__== int:
+							s += "%s : %-3i|" % (r[0],r[1])
+						else:						
+							s += "%s : %s|" % (r[0],r[1].encode('utf-8')) #ljust
+				else:
+					for r in self.list:
+						s += "%10s:%-10s|" % (r,self.list[r][:20]) #ljust
 
-				return s + ")\n"
+				#r = re.compile(r' +') #Удаляем повторяющиеся пробелы
+				#s = r.sub(' ',s.rstrip("|")) + ")"
+				return s.encode('utf-8')
 				#return self.list[5][1].encode('utf-8')
 				
 			except Exception,e:
-				print "*** Ошибка repr:",e				
+				print "*** Ошибка repr:",e
+		def __str__(self):
+			return self.__repr__()# [r for r in self.dir()]				
 
 	class class_row(db_row):
 		def __init__(self, db, p_list):
 			super(cftDB.class_row, self).__init__(db,p_list)
 			self.meths = dict()
 			self.views = dict()
+			self.attrs = dict()
 		def add_method(self,attrs):
 			m = cftDB.method_row(self.db,self,attrs)
-			#print m.id
 			self.meths[m.id] = m
+			return m
 		def add_view(self,attrs):
 			v = cftDB.view_row(self.db,self,attrs)
 			self.views[v.id] = v
+			return v
+		def add_attr(self,attrs):
+			v = cftDB.attr_row(self.db,self,attrs)
+			self.attrs[v.short_name] = v
+			return v
 		def get_objects(self):
 			objs = []
 			objs.extend([mv for mk,mv in self.meths.iteritems()])
@@ -614,27 +621,28 @@ class cftDB(object):
 			return sorted(objs,key = lambda obj: obj.name)
 		def update(self):
 			t = timer()
-			sql = """select xmlelement("classes",xmlagg(xmlelement("class",XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)
-                                              ,xmlelement("meths",(select xmlagg(xmlelement("method",xmlattributes(m.id  as id,m.short_name  as short_name,m.name  as name,rpad(m.name ,40,' ') || lpad(m.short_name ,30,' ')as text)) order by m.name)  from methods m where m.class_id = cl.id))
-                                              ,xmlelement("views",(select xmlagg(xmlelement("view"  ,xmlattributes(cr.id as id,cr.short_name as short_name,cr.name as name,rpad(cr.name,40,' ') || lpad(cr.short_name,30,' ')as text)) order by cr.name) from criteria cr where cr.class_id = cl.id))
-                                              )
-                                  )
-					                 ).getclobval() classes  
-					from classes cl
-					where cl.id = :class_id"""
+			sql = self.db.fr.classes_update
 			xml_class = self.db.select(sql,self.id)
 			
 			self.meths = dict()
 			self.views = dict()
+
+			self.cur_method = None
 
 			def start_element(name, attrs):
 				#if name.lower() == 'class':
 				#	self.cur_class = cftDB.class_row(db,attrs)
 				#	self[self.cur_class.id] = self.cur_class
 				if name == 'method':
-					self.add_method(attrs)
-				if name == 'view':
+					self.cur_method = self.add_method(attrs)
+				elif name == 'view':
 					self.add_view(attrs)
+				elif name == 'param':
+					self.cur_method.add_param(attrs)
+				elif name == 'attr':
+					a = self.add_attr(attrs)
+					#print a
+
 			def end_element(name):
 				pass
 			def char_data(data):
@@ -655,6 +663,11 @@ class cftDB(object):
 		def __init__(self, db, p_class, p_list):
 			super(cftDB.method_row, self).__init__(db,p_list)
 			self.class_ref = p_class
+			self.params = dict()
+		def add_param(self,attrs):
+			p = cftDB.param_row(self.db,attrs)
+			self.params[p.position] = p
+			return p
 		def get_sources(self):
 			conn = self.db.pool.acquire()
 			cursor = conn.cursor()
@@ -756,6 +769,7 @@ class cftDB(object):
 			self.class_ref = p_class
 		def get_text(self):
 			#return [self.text,u"Представление"]
+			print self
 			return u"Представление: " + self.text
 		def get_sources(self):
 			return self.db.select("select cr.condition from criteria cr where short_name = :view_short_name",self.short_name)
@@ -783,6 +797,15 @@ class cftDB(object):
 				print "ошибка"
 				error, = e
 				print error.code,error.message,error.context,error
+	class param_row(db_row):	
+		def __init__(self, db, p_list):
+			super(cftDB.param_row, self).__init__(db,p_list)
+	class attr_row(db_row):
+		def __init__(self, db,p_class, p_list):
+			super(cftDB.attr_row, self).__init__(db,p_list)
+			self.class_ref = p_class
+
+			
 	class class_collection(dict):
 		def __init__(self, db):
 			super(cftDB.class_collection, self).__init__()
@@ -864,6 +887,7 @@ class cftDB(object):
 
 	def read_sql(self):
 		self.fr = FileReader()
+		
 	def load(self):
 		self.connection 				= cx_Oracle.connect(self.connection_string)		
 		self.cursor 					= self.connection.cursor()
@@ -1063,126 +1087,6 @@ class connectCommand(sublime_plugin.WindowCommand):
 		pass		
 	def on_cancel(self):
 		pass
-
-class dataView(object):
-	def __init__(self,view=None):
-		if view:
-			#print view
-			self.view = view
-		else:
-			self.view = sublime.active_window().new_file()
-	@property
-	def data(self):
-		try:
-			#if self.view.settings().has("cft_object"):
-			if hasattr(self,"_data"):
-				return self._data
-			else:
-				value = self.view.settings().get("cft_object")
-				#db.classes[value["class"]].update()
-				if value["type"] == "method_row":
-					cl = db.classes[value["class"]]
-					if len(cl.meths)==0:
-						cl.update()
-					value = cl.meths[value["id"]]
-				self._data = value
-				return value
-		except Exception,e:
-			print "*** Ошибка настроек представления:",e
-			if sys != None:
-				exc_type, exc_value, exc_traceback = sys.exc_info()
-				traceback.print_exception(exc_type, exc_value, exc_traceback,
-													limit=10, file=sys.stdout)
-	@data.setter
-	def data(self,value):
-		if value.__class__.__name__ == "method_row":
-			self.view.settings().set("cft_object",{"id": value.id,"class" : value.class_ref.id, "type": value.__class__.__name__})
-			self._data = value
-	def focus(self):
-
-		sublime.active_window().focus_view(self.view)
-	def __getattr__(self, name):
-
-		return getattr(self.view,name)
-	def get_method_section(self,name):
-		src_text = sublime.Region(0,self.view.size())
-		src_text = self.view.substr(src_text)
-		
-		regexp = r'-+\n-+(.)*-+\n-+'
-		p = re.compile(regexp)
-		arr = p.split(src_text)
-
-		# B = arr[2].strip('\n')
-		# V = arr[4].strip('\n')
-		# G = arr[6].strip('\n')
-		# L = arr[8].strip('\n')
-		# S = arr[10].strip('\n')
-
-		t = {'EXECUTE'   : 0,
-			 'VALIDATE'  : 2,
-			 'PUBLIC'    : 4,
-			 'PRIVATE'   : 6,
-			 'VBSCRIPT'  : 8}
-
-		return arr[t[name]]#.strip('\n')
-
-	def get_view_line_by_section_line(self,section_line,section_name):
-		if section_name == 'EXECUTE':
-			#print 'EXECUTE'
-			return section_line
-		elif section_name == 'VALIDATE':
-			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   + 3 + section_line
-			#print value,section_line,section_name
-			return value
-		elif section_name == 'PUBLIC':
-			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   + 3 + \
-				    self.view.rowcol(len(self.get_method_section('VALIDATE')))[0]  + 3 + section_line
-			#print value,section_line,section_name
-			return value
-		elif section_name == 'PRIVATE':
-			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]  + 3 + \
-					self.view.rowcol(len(self.get_method_section('VALIDATE')))[0] + 3 + \
-					self.view.rowcol(len(self.get_method_section('PUBLIC')))[0]   + 3 + 8 + section_line
-			#print value,section_line,section_name
-			return value
-		elif section_name == 'VALIDSYS':
-			return 0
-
-
-	def mark_errors(self):
-		#print "errors:",self.data.errors()
-		#print "line 7 is ",self.get_view_line_by_section_line(3,"PRIVATE")
-		self.view.erase_regions('cft-errors')
-		self.view.settings().set("cft-errors",dict())
-
-		warnings = []
-		errors = []
-		regions_dict = dict()
-
-		#print self.data.errors()
-
-		for row in self.data.errors():
-			lineno = self.get_view_line_by_section_line(row.line,row.type)
-			text_point = self.view.text_point(lineno - 1, 0)
-			l = self.view.text_point(lineno, 0) - text_point - 1
-			if row.list[6][1] == 'W': #6,1 это поле class
-				warnings.append(sublime.Region(text_point, text_point + l))
-			elif row.list[6][1] == 'E':
-				errors.append(sublime.Region(text_point, text_point + l))
-			regions_dict[str(self.get_view_line_by_section_line(row.line,row.type))] = row.text
-
-		self.view.settings().set("cft-errors",regions_dict)
-		self.view.add_regions(
-						'cft-warnings',
-						warnings,
-						'comment', 'dot', 4 | 32)
-		self.view.add_regions(
-						'cft-errors',
-						errors,
-						'keyword', 'dot', 4 | 32)
-	#def mark_errors_async(self):
-	#	call_async(lambda:sublime.set_timeout(self.mark_errors,0))
-
 class cft_openCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		print "OPEN MEHTODS"
@@ -1222,6 +1126,10 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 				cft_settings.update_used_class(self.current_class.id)
 		except Exception,e:
 			print "Ошибка при вызове open_methods",e
+			if sys != None:
+				exc_type, exc_value, exc_traceback = sys.exc_info()
+				traceback.print_exception(exc_type, exc_value, exc_traceback,
+					                          limit=10, file=sys.stdout)
 
 
 	def method_on_done(self,input):
@@ -1261,7 +1169,6 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 
 	def on_cancel(self):
 		pass
-
 class MarkErrors(sublime_plugin.TextCommand):
 	def run(self,edit):
 
@@ -1299,7 +1206,6 @@ class MarkErrors(sublime_plugin.TextCommand):
 
 			#view.fold(sublime.Region(10,15))
 			#view.sel().add(cur_sel)
-
 class save_methodCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		
@@ -1392,6 +1298,137 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 
 		self.view.settings().set("a","hello_world")
 		print "setting is set"
+class dataView(object):
+	def __init__(self,view=None):
+		if view:
+			#print view
+			self.view = view
+		else:
+			self.view = sublime.active_window().new_file()
+	@property
+	def data(self):
+		try:
+			#if self.view.settings().has("cft_object"):
+			if hasattr(self,"_data"):
+				return self._data
+			else:
+				value = self.view.settings().get("cft_object")
+				#db.classes[value["class"]].update()
+				if value["type"] == "method_row":
+					cl = db.classes[value["class"]]
+					if len(cl.meths)==0:
+						cl.update()
+					value = cl.meths[value["id"]]
+				self._data = value
+				return value
+		except Exception,e:
+			print "*** Ошибка настроек представления:",e
+			if sys != None:
+				exc_type, exc_value, exc_traceback = sys.exc_info()
+				traceback.print_exception(exc_type, exc_value, exc_traceback,
+													limit=10, file=sys.stdout)
+	@data.setter
+	def data(self,value):
+		if value.__class__.__name__ == "method_row":
+			self.view.settings().set("cft_object",{"id": value.id,"class" : value.class_ref.id, "type": value.__class__.__name__})
+			self._data = value
+	def focus(self):
+
+		sublime.active_window().focus_view(self.view)
+	def __getattr__(self, name):
+
+		return getattr(self.view,name)
+	def get_method_section(self,name):
+		src_text = sublime.Region(0,self.view.size())
+		src_text = self.view.substr(src_text)
+		
+		regexp = r'-+\n-+(.)*-+\n-+'
+		p = re.compile(regexp)
+		arr = p.split(src_text)
+
+		# B = arr[2].strip('\n')
+		# V = arr[4].strip('\n')
+		# G = arr[6].strip('\n')
+		# L = arr[8].strip('\n')
+		# S = arr[10].strip('\n')
+
+		t = {'EXECUTE'   : 0,
+			 'VALIDATE'  : 2,
+			 'PUBLIC'    : 4,
+			 'PRIVATE'   : 6,
+			 'VBSCRIPT'  : 8}
+
+		return arr[t[name]]#.strip('\n')
+	def get_view_line_by_section_line(self,section_line,section_name):
+		if section_name == 'EXECUTE':
+			#print 'EXECUTE'
+			return section_line
+		elif section_name == 'VALIDATE':
+			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   + 3 + section_line
+			#print value,section_line,section_name
+			return value
+		elif section_name == 'PUBLIC':
+			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   + 3 + \
+				    self.view.rowcol(len(self.get_method_section('VALIDATE')))[0]  + 3 + section_line
+			#print value,section_line,section_name
+			return value
+		elif section_name == 'PRIVATE':
+			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]  + 3 + \
+					self.view.rowcol(len(self.get_method_section('VALIDATE')))[0] + 3 + \
+					self.view.rowcol(len(self.get_method_section('PUBLIC')))[0]   + 3 + 8 + section_line
+			#print value,section_line,section_name
+			return value
+		elif section_name == 'VALIDSYS':
+			return 0
+	def mark_errors(self):
+		#print "errors:",self.data.errors()
+		#print "line 7 is ",self.get_view_line_by_section_line(3,"PRIVATE")
+		self.view.erase_regions('cft-errors')
+		self.view.settings().set("cft-errors",dict())
+
+		warnings = []
+		errors = []
+		regions_dict = dict()
+
+		#print self.data.errors()
+
+		for row in self.data.errors():
+			lineno = self.get_view_line_by_section_line(row.line,row.type)
+			text_point = self.view.text_point(lineno - 1, 0)
+			l = self.view.text_point(lineno, 0) - text_point - 1
+			if row.list[6][1] == 'W': #6,1 это поле class
+				warnings.append(sublime.Region(text_point, text_point + l))
+			elif row.list[6][1] == 'E':
+				errors.append(sublime.Region(text_point, text_point + l))
+			regions_dict[str(self.get_view_line_by_section_line(row.line,row.type))] = row.text
+
+		self.view.settings().set("cft-errors",regions_dict)
+		self.view.add_regions(
+						'cft-warnings',
+						warnings,
+						'comment', 'dot', 4 | 32)
+		self.view.add_regions(
+						'cft-errors',
+						errors,
+						'keyword', 'dot', 4 | 32)
+	#def mark_errors_async(self):
+	#	call_async(lambda:sublime.set_timeout(self.mark_errors,0))
+
+	@property
+	def until_caret_row_text(self):
+		cursor_position = self.view.sel()[0].a
+		row_num,col_num = self.view.rowcol(cursor_position)
+		start_row_position = self.view.text_point(row_num,0)
+		row_text = self.view.substr(sublime.Region(start_row_position,cursor_position))
+		return row_text
+
+	def selection_row_sub(self,begin_str,end_str):
+		from_str = self.until_caret_row_text
+		begin 	 = from_str.rfind(begin_str)+len(begin_str)
+		end 	 = from_str.rfind(end_str)#-len(end_str)
+		return from_str[begin:end].strip()
+		#class_name = row_text[row_text.rfind("::[")+3:len(row_text)-2]
+
 
 #Класс для обработки событий
 #например события открытия выпадающего списка
@@ -1402,84 +1439,73 @@ class el(sublime_plugin.EventListener):
 	def on_pre_save(self,view):
 		print "on_pre_save_"
 	def on_modified(self,view):
+		view = dataView(view)
+		# cursor_position = view.sel()[0].a
+		# row_num,col_num = view.rowcol(cursor_position)
+		# start_row_position = view.text_point(row_num,0)
+		# last_simbol = view.substr(sublime.Region(cursor_position-1,cursor_position))
 
-		cursor_position = view.sel()[0].a
-		row_num,col_num = view.rowcol(cursor_position)
-		start_row_position = view.text_point(row_num,0)
-		last_simbol = view.substr(sublime.Region(cursor_position-1,cursor_position))
-		print "modified",last_simbol
-		if last_simbol == '.':
-			print "DOT"
+		#print "modified",last_simbol
+		last_text = view.until_caret_row_text
+		if last_text[-2:] == '::' or last_text[-2:] == "]("	or last_text[-1:] == '.':
+			print "autocompletion"
 			view.run_command('my_auto_complete',{})
-		
+
 		
 	def on_query_completions(self,view,prefix,locations):
+		#print "1:%s,2:%s,3:%s,4:%s" % (self,view,prefix,locations)
+		view = dataView(view)
+		#completion_flags = sublime.INHIBIT_WORD_COMPLETIONS #Только то что в списке
+		completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS #| sublime.INHIBIT_WORD_COMPLETIONS #Список и автоподсказки
 		
-		print "1:%s,2:%s,3:%s,4:%s" % (self,view,prefix,locations)
-		#return
-		# print "on_query_completions"
-		# global a
-		# import os,sys
-		# SUBLIME_ROPE_PATH = os.path.dirname(os.path.normpath(os.path.abspath(__file__)))
-		# #print SUBLIME_ROPE_PATH
-		# sys.path.insert(0, SUBLIME_ROPE_PATH + "\\rope\\contrib\\")
-		# import rope
-		# from rope.contrib import codeassist
-		# #from rope.contrib.codeassist import CompletionPropasal
-
-		# if a == []:
-		# 	print "select from db"
-		# 	cnn_str = 'ibs/ibs@cfttest'
-		# 	connection = cx_Oracle.connect(cnn_str)
-		# 	cursor = connection.cursor()
-
-		# 	sql = """select c.id from classes c
-		# 			 --where rownum<10
-		# 				 order by nvl(c.modified,to_date('01.01.0001','dd.mm.yyyy')) desc"""
-		# 	cursor.execute(sql)
-
-		# 	#a = [rope.contrib.codeassist.CompletionProposal(unicode(text[0],'1251'),"imported",unicode(text[0],'1251'))
-		# 	a = [(u"{result}\t({scope},{type},{more})".format(
-		# 		result=unicode(text[0],'1251'),scope="imported",type="param",more="more2"),u"::[%s].[${1:hello}]"%text)
-		# 			for text in cursor.fetchall()]
-		# 	#a = [()for p in a]
-		# #print a
-		# #completion_flags = 2
-		# #if self.suppress_word_completions:
-		completion_flags = sublime.INHIBIT_WORD_COMPLETIONS
-		#if self.suppress_explicit_completions:
-		
-		#completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS #| sublime.INHIBIT_WORD_COMPLETIONS
-
-		cursor_position = view.sel()[0].a
-		row_num,col_num = view.rowcol(cursor_position)
-		start_row_position = view.text_point(row_num,0)
-		row_text = view.substr(sublime.Region(start_row_position,cursor_position))
-		class_name = row_text[row_text.rfind("::[")+3:len(row_text)-2]
-		#class_name = 'EXT_DOCS_SVOD'
 		a = []
-		
-		print "class_name=",class_name
+		#::[EXT_DOCS_SVOD]()
+		last_text = view.until_caret_row_text
 		if not hasattr(db,"classes"):
-			print "DEFAULT A"
-			a = [(u"one",u"text_to_paste"),(u"two",u"second")]
-		elif not class_name:
+			a = [(u"нет подключения к базе",u"text_to_paste")]
+		elif last_text[-2:] == "](": #Конструкция поиска
+			class_name = view.selection_row_sub("::[","](")
+			db.classes[class_name].update()			
+			a = [attr for attr in db.classes[class_name].attrs.values()]		#аттрибуты класса
+			a = sorted(a, key=lambda p: p.short_name)
+			arr = []
+			for attr in a:
+				arr.append((u"A %s\t%s"%(attr.short_name,attr.name[:20]),"[%s] = ${1:}"%attr.short_name))
+			a = arr
+		elif last_text[-1:] == '.':
+			 #Точка после класса
+			class_name = view.selection_row_sub("::[","].")
+			if not db.classes.has_key(class_name):
+				a = []
+			else:
+				db.classes[class_name].update()
+
+				a = [v for v in db.classes[class_name].meths.values()] 				#методы
+				#print "attrs=",db.classes[class_name].attrs
+				a += [attr for attr in db.classes[class_name].attrs.values()]		#аттрибуты класса
+				a = sorted(a, key=lambda p: p.short_name)
+				arr = []
+				for m in a:
+					if m.__class__ == cftDB.method_row:
+						params_str = "\n"
+						for param in sorted(m.params.values(),key=lambda p: int(p.position)):
+							params_str += "\t%-15s \t=> ${%s:%-15s} \t--%-2s %-7s %-20s %s\n"%(param.short_name
+																					,param.position
+																					,param.short_name
+																					,param.position
+																					,param.direction
+																					,param.class_id
+																					,param.name)
+
+						arr.append((u"M %s\t%s"%(m.short_name,m.name[:20]),"[%s](%s);\n"%(m.short_name,params_str)))
+					elif m.__class__ == cftDB.attr_row:
+						arr.append((u"A %s\t%s"%(m.short_name,m.name[:20]),"[%s]"%m.short_name))
+				a = arr
+		elif last_text[-2:] == "::": #Вводим класс
 			a = [v for v in db.classes.values()]
 			a = sorted(a, key=lambda p: p.id)
-			#a = [("%s"%m.short_name,"%s(${1:hello})"%m.short_name) for m in db.classes[class_name].meths.values()]
-			a = [("%s\t%s"%(c.id,c.name[:20]),"::[%s].${1:METHOD}"%c.id) for c in a]
+			a = [("%s\t%s"%(c.id,c.name[:20]),"[%s]"%c.id) for c in a]
 
-		elif db.classes.has_key(class_name):
-			db.classes[class_name].update()
-			#print db.classes[class_name].meths
-			a = [v for v in db.classes[class_name].meths.values()]
-			a = sorted(a, key=lambda p: p.short_name)
-			#a = [("%s"%m.short_name,"%s(${1:hello})"%m.short_name) for m in db.classes[class_name].meths.values()]
-			a = [("%s\t%s"%(m.short_name,m.name[:20]),"[%s](${1:hello})"%m.short_name) for m in a]
-
-
-		#b = [(u"one",u"text_to_paste"),(u"two",u"second")]
-		#a.extend(b)
 		return (a,completion_flags)
 
 	def on_selection_modified(self, view):
@@ -1497,12 +1523,12 @@ class my_auto_completeCommand(sublime_plugin.TextCommand):
     '''Used to request a full autocompletion when
     complete_as_you_type is turned off'''
     def run(self, edit, block=False):
-    	print "hello" 
+    	#print "hello" 
         self.view.run_command('hide_auto_complete')
         sublime.set_timeout(self.show_auto_complete, 50)
 
     def show_auto_complete(self):
-    	print "second"
+    	#print "second"
         self.view.run_command(
             'auto_complete', {
                 'disable_auto_insert': True,

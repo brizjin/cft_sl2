@@ -1,0 +1,11 @@
+<snippet>
+	<description>no_data+too_many</description>
+    <content><![CDATA[begin
+	${1:null};
+exception
+	when no_data_found then ${2:null};
+	when too_many_rows then ${3:null};
+end;]]></content>
+    <tabTrigger>begin</tabTrigger>
+    <!-- <scope>source.c, source.objc, source.c++, source.objc++</scope> -->
+</snippet>
