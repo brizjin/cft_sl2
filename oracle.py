@@ -600,7 +600,7 @@ class cftDB(object):
 			super(cftDB.class_row, self).__init__(db,p_list)
 			self.meths = dict()
 			self.views = dict()
-			self.attrs = dict()
+			self.attrs = cftDB.class_attr_collection(self)
 			self.is_updated = False
 		def add_method(self,attrs):
 			m = cftDB.method_row(self.db,self,attrs)
@@ -859,13 +859,11 @@ class cftDB(object):
 				return s_class.target_class
 			else:
 				return s_class
-			
 	class class_collection(dict):
 		def __init__(self, db):
 			super(cftDB.class_collection, self).__init__()
 			self.db = db
 			self.cur_class = None
-
 		def parse(self,xml_text):
 			
 			def start_element(name, attrs):
@@ -888,7 +886,6 @@ class cftDB(object):
 			
 			xml_text = '<?xml version="1.0" encoding="windows-1251"?>' + xml_text
 			parser.Parse(xml_text, 1)
-
 		@property
 		def as_list(self):
 			#t = timer()
@@ -897,7 +894,6 @@ class cftDB(object):
 			used_classes.extend(not_used_classes)		
 			#t.print_time("get_classes")
 			return used_classes
-
 		@property
 		def used(self):
 			#if not hasattr(self,"used_settings"):				
@@ -908,13 +904,24 @@ class cftDB(object):
 				if len(text)>0:
 					self.json.loads(text)
 				self.used_classes = self.used_settings.get("classes")
-
 		@property
 		def autocomplete(self):
 			a = [v for v in self.values()]
 			a = sorted(a, key=lambda p: p.id)
 			a = [("%s\t%s"%(c.id,c.name[:20]),"[%s]"%c.id) for c in a]
 			return a
+	class class_attr_collection(dict):
+		def __init__(self, db):
+			super(cftDB.class_attr_collection, self).__init__()
+			self.db = db
+		@property
+		def autocomplete(self):			
+			a = [attr for attr in self.values()]		#аттрибуты класса
+			a = sorted(a, key=lambda p: p.short_name)
+			a = [(u"A %s\t%s"%(attr.short_name,attr.name[:20]),"[%s] = ${1:}"%attr.short_name) for attr in a]
+			return a
+	
+
 
 	def __init__(self):
 		self.on_classes_cache_loaded 	= EventHook()
@@ -1496,7 +1503,7 @@ class el(sublime_plugin.EventListener):
 
 		#print "modified",last_simbol
 		last_text = view.until_caret_row_text
-		if last_text[-2:] == '::' or last_text[-2:] == "]("	or last_text[-1:] == '.':
+		if last_text[-2:] == '::' or last_text[-2:] == "]("	or last_text[-1:] == '.' or last_text[-4:] == "and ":
 			view.run_command('my_auto_complete',{})
 	def on_query_completions(self,view,prefix,locations):
 		#print "1:%s,2:%s,3:%s,4:%s" % (self,view,prefix,locations)
@@ -1507,15 +1514,24 @@ class el(sublime_plugin.EventListener):
 		last_text = view.until_caret_row_text
 		if not hasattr(db,"classes"):
 			a = [(u"нет подключения к базе",u"text_to_paste")]
-		elif last_text[-2:] == "](": #Конструкция поиска
-			class_name = view.selection_row_sub("::[","](")
-			db.classes[class_name].update()			
-			a = [attr for attr in db.classes[class_name].attrs.values()]		#аттрибуты класса
-			a = sorted(a, key=lambda p: p.short_name)
-			arr = []
-			for attr in a:
-				arr.append((u"A %s\t%s"%(attr.short_name,attr.name[:20]),"[%s] = ${1:}"%attr.short_name))
-			a = arr
+			completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS | sublime.INHIBIT_WORD_COMPLETIONS #Список и автоподсказки
+		elif last_text[-2:] == "](" or last_text[-4:] == "and ": #Конструкция поиска
+			#class_name = view.selection_row_sub("::[","](")
+			for m in re.finditer(r"((::)*\[[a-zA-Z_#0-9]+\])(?!\(\[)",view.until_caret_row_text):
+				name = m.group(1)
+				print name
+				if name[0:2] == "::":
+					current_class = db[name[3:-1]]
+				elif current_class.attrs.has_key(name[1:-1]):
+					current_class = current_class.attrs[name[1:-1]].self_class					
+					if current_class.base_class_id == 'COLLECTION':
+						current_class = current_class.target_class
+					if current_class.base_class_id == 'REFERENCE':
+						current_class = current_class.target_class
+				#::[EXT_DOCS_SVOD]()
+			#a = db[class_name].attrs.autocomplete
+			#print current_class.id
+			a = current_class.attrs.autocomplete
 		elif last_text[-1:] == '.':
 			#for m in reversed(list(re.finditer(r"(::)*\[[a-zA-Z_#]+\]",text))):
 			current_class = None
@@ -1526,9 +1542,8 @@ class el(sublime_plugin.EventListener):
 					current_class = db[name[3:-1]]
 					a = current_class.autocomplete
 				elif current_class.attrs.has_key(name[1:-1]):
-					attr = current_class.attrs[name[1:-1]]					
-					a = attr.self_class.autocomplete
-					current_class = attr.self_class					
+					current_class = current_class.attrs[name[1:-1]].self_class					
+					a = current_class.autocomplete			
 				else:
 					print "else_name=",name
 		elif last_text[-2:] == "::": #Вводим класс
