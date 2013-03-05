@@ -5,5 +5,5 @@ select xmlelement("classes",xmlagg(xmlelement("class",XMLAttributes(cl.id as id,
                                   )
                  ).getclobval() classes  
 from classes cl
-where (select count(1) from methods m where m.class_id = cl.id) > 0
-  or (select count(1) from criteria cr where cr.class_id = cl.id) > 0
+--where (select count(1) from methods m where m.class_id = cl.id) > 0
+--  or (select count(1) from criteria cr where cr.class_id = cl.id) > 0

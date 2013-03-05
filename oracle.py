@@ -595,13 +595,13 @@ class cftDB(object):
 				print "*** Ошибка repr:",e
 		def __str__(self):
 			return self.__repr__()# [r for r in self.dir()]				
-
 	class class_row(db_row):
 		def __init__(self, db, p_list):
 			super(cftDB.class_row, self).__init__(db,p_list)
 			self.meths = dict()
 			self.views = dict()
 			self.attrs = dict()
+			self.is_updated = False
 		def add_method(self,attrs):
 			m = cftDB.method_row(self.db,self,attrs)
 			self.meths[m.id] = m
@@ -620,6 +620,11 @@ class cftDB(object):
 			objs.extend([vv for vk,vv in self.views.iteritems()])
 			return sorted(objs,key = lambda obj: obj.name)
 		def update(self):
+			if self.is_updated:
+				return
+			else:
+				self.is_updated = True
+
 			t = timer()
 			sql = self.db.fr.classes_update
 			xml_class = self.db.select(sql,self.id)
@@ -656,9 +661,51 @@ class cftDB(object):
 			xml_class = '<?xml version="1.0" encoding="windows-1251"?>' + xml_class
 			parser.Parse(xml_class, 1)
 
-			t.print_time("select class update")
+			t.print_time("%s update"%self.id)
+		@property
+		def target_class(self):
+			if hasattr(self,"target_class_id"):
+				cl = self.db.classes[self.target_class_id]
+				cl.update()
+				return cl
+			else:
+				return None;
+		
+		def autocomplete_list(self):
+			self.update()
 
+			a = [v for v in self.meths.values()] 				#методы
+			#print "attrs=",db.classes[class_name].attrs
+			a += [attr for attr in self.attrs.values()]		#аттрибуты класса
+			a = sorted(a, key=lambda p: p.short_name)
+			arr = []
+			for m in a:
+				if m.__class__ == cftDB.method_row:
+					params_str = "\n"
+					for param in sorted(m.params.values(),key=lambda p: int(p.position)):
+						params_str += "\t%-15s \t=> ${%s:%-15s} \t--%-2s %-7s %-20s %s\n"%(param.short_name
+																				,param.position
+																				,param.short_name
+																				,param.position
+																				,param.direction
+																				,param.class_id
+																				,param.name)
 
+					arr.append((u"M %s\t%s"%(m.short_name,m.name[:20]),"[%s](%s);\n"%(m.short_name,params_str)))
+				elif m.__class__ == cftDB.attr_row:
+					arr.append((u"A %s\t%s"%(m.short_name,m.name[:20]),"[%s]"%m.short_name))
+			return arr
+		
+		@property
+		def autocomplete(self):
+			#print "autocomplete"
+			arr = self.autocomplete_list()
+			#print "self=",self.id
+			if self.base_class_id == "COLLECTION" or self.base_class_id == "REFERENCE":			
+				arr += self.target_class.autocomplete_list()
+				#print "target=", self.target_class
+			
+			return arr
 	class method_row(db_row):
 		def __init__(self, db, p_class, p_list):
 			super(cftDB.method_row, self).__init__(db,p_list)
@@ -805,6 +852,13 @@ class cftDB(object):
 			super(cftDB.attr_row, self).__init__(db,p_list)
 			self.class_ref = p_class
 
+		@property
+		def self_class(self):
+			s_class = self.db[self.self_class_id]
+			if s_class.base_class_id == "REFERENCE":
+				return s_class.target_class
+			else:
+				return s_class
 			
 	class class_collection(dict):
 		def __init__(self, db):
@@ -855,8 +909,12 @@ class cftDB(object):
 					self.json.loads(text)
 				self.used_classes = self.used_settings.get("classes")
 
-
-
+		@property
+		def autocomplete(self):
+			a = [v for v in self.values()]
+			a = sorted(a, key=lambda p: p.id)
+			a = [("%s\t%s"%(c.id,c.name[:20]),"[%s]"%c.id) for c in a]
+			return a
 
 	def __init__(self):
 		self.on_classes_cache_loaded 	= EventHook()
@@ -865,8 +923,6 @@ class cftDB(object):
 		self.classes_lock 				= thread.allocate_lock()
 		self.select_lock 				= thread.allocate_lock()
 		self.connection_lock 			= thread.allocate_lock()
-		
-
 	def connect(self,connection_string):
 		self.connection_string 	= connection_string
 
@@ -884,10 +940,9 @@ class cftDB(object):
 		call_async(self.load_classes)
 		call_async(self.load)
 		call_async(self.read_sql)
-
 	def read_sql(self):
+
 		self.fr = FileReader()
-		
 	def load(self):
 		self.connection 				= cx_Oracle.connect(self.connection_string)		
 		self.cursor 					= self.connection.cursor()
@@ -895,14 +950,16 @@ class cftDB(object):
 		#self.cursor 		= self.connection.cursor()
 		return 1
 	def select_classes(self):
-		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id,cl.name as name,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
-				 where (select count(1) from methods m where m.class_id = cl.id) > 0
-  				 	or (select count(1) from criteria cr where cr.class_id = cl.id) > 0"""
+		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id
+																				,cl.name as name
+																				,cl.target_class_id as target_class_id
+																				,cl.base_class_id as base_class_id
+																				,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
+				 """
 
 		#value = self.select_in_tmp_connection(sql)
 		value = self.select(sql)
 		return value
-		
 	def load_classes(self):
 		call_async(lambda:(FileReader.read(os.path.join(cache_path,"classes.xml")),"class_cache"),self.parse,async_callback=True)
 		call_async(self.select_classes,lambda txt:self.save_and_parse(os.path.join(cache_path,"classes.xml"),txt,"class_select"),"Загрузка списка классов",async_callback=True)
@@ -923,9 +980,6 @@ class cftDB(object):
 			return False
 		except Exception:
 			return False
-
-
-
 	def select(self,sql,*args):
 		value = None
 		# if not self.select_lock.acquire(False):
@@ -991,7 +1045,6 @@ class cftDB(object):
 					                          limit=10, file=sys.stdout)
 
 		return value
-
 	def select_cursor(self,cursor,sql,*args):
 		try:
 			#print "3",re.sub("\s+"," ",sql)
@@ -1023,7 +1076,6 @@ class cftDB(object):
 					traceback.print_exception(exc_type, exc_value, exc_traceback,
 						                          limit=10, file=sys.stdout)
 			#return []
-
 	def get_sid(self):
 
 		return self.select("select sys_context('userenv','sid') sid, sid from v$mystat where rownum=1")[0]["sid"]
@@ -1054,15 +1106,12 @@ class cftDB(object):
 				exc_type, exc_value, exc_traceback = sys.exc_info()
 				traceback.print_exception(exc_type, exc_value, exc_traceback,
 					                          limit=10, file=sys.stdout)
-
-
 	def parse_json(self):
 		out_clob = self.cursor.var(cx_Oracle.CLOB)
 		self.cursor.execute(self.fr.method_sources_json,out_clob=out_clob)				
 		out_clob = unicode(out_clob.getvalue().read(),'1251')
 		self.classes = json.loads(out_clob)["classes"]
 		self.classes = json.loads(out_clob)["classes"]
-
 	def get_classes(self):
 		#t = timer()
 		used_classes 	 = [db.classes[clk] for clk in cft_settings["used_classes"] if db.classes.has_key(clk)]
@@ -1070,9 +1119,10 @@ class cftDB(object):
 		used_classes.extend(not_used_classes)		
 		#t.print_time("get_classes")
 		return used_classes
-
-	#def get_classes_text(self):
-	#	return [clv.text for clv in self.get_classes()]
+	def __getitem__(self, key):
+		cl = self.classes[key]
+		cl.update()
+		return cl
 
 db = cftDB()
 
@@ -1421,7 +1471,6 @@ class dataView(object):
 		start_row_position = self.view.text_point(row_num,0)
 		row_text = self.view.substr(sublime.Region(start_row_position,cursor_position))
 		return row_text
-
 	def selection_row_sub(self,begin_str,end_str):
 		from_str = self.until_caret_row_text
 		begin 	 = from_str.rfind(begin_str)+len(begin_str)
@@ -1448,18 +1497,13 @@ class el(sublime_plugin.EventListener):
 		#print "modified",last_simbol
 		last_text = view.until_caret_row_text
 		if last_text[-2:] == '::' or last_text[-2:] == "]("	or last_text[-1:] == '.':
-			print "autocompletion"
 			view.run_command('my_auto_complete',{})
-
-		
 	def on_query_completions(self,view,prefix,locations):
 		#print "1:%s,2:%s,3:%s,4:%s" % (self,view,prefix,locations)
 		view = dataView(view)
 		#completion_flags = sublime.INHIBIT_WORD_COMPLETIONS #Только то что в списке
 		completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS #| sublime.INHIBIT_WORD_COMPLETIONS #Список и автоподсказки
-		
 		a = []
-		#::[EXT_DOCS_SVOD]()
 		last_text = view.until_caret_row_text
 		if not hasattr(db,"classes"):
 			a = [(u"нет подключения к базе",u"text_to_paste")]
@@ -1473,41 +1517,24 @@ class el(sublime_plugin.EventListener):
 				arr.append((u"A %s\t%s"%(attr.short_name,attr.name[:20]),"[%s] = ${1:}"%attr.short_name))
 			a = arr
 		elif last_text[-1:] == '.':
-			 #Точка после класса
-			class_name = view.selection_row_sub("::[","].")
-			if not db.classes.has_key(class_name):
-				a = []
-			else:
-				db.classes[class_name].update()
-
-				a = [v for v in db.classes[class_name].meths.values()] 				#методы
-				#print "attrs=",db.classes[class_name].attrs
-				a += [attr for attr in db.classes[class_name].attrs.values()]		#аттрибуты класса
-				a = sorted(a, key=lambda p: p.short_name)
-				arr = []
-				for m in a:
-					if m.__class__ == cftDB.method_row:
-						params_str = "\n"
-						for param in sorted(m.params.values(),key=lambda p: int(p.position)):
-							params_str += "\t%-15s \t=> ${%s:%-15s} \t--%-2s %-7s %-20s %s\n"%(param.short_name
-																					,param.position
-																					,param.short_name
-																					,param.position
-																					,param.direction
-																					,param.class_id
-																					,param.name)
-
-						arr.append((u"M %s\t%s"%(m.short_name,m.name[:20]),"[%s](%s);\n"%(m.short_name,params_str)))
-					elif m.__class__ == cftDB.attr_row:
-						arr.append((u"A %s\t%s"%(m.short_name,m.name[:20]),"[%s]"%m.short_name))
-				a = arr
+			#for m in reversed(list(re.finditer(r"(::)*\[[a-zA-Z_#]+\]",text))):
+			current_class = None
+			for m in re.finditer(r"((::)*\[[a-zA-Z_#0-9]+\])",view.until_caret_row_text):
+				#name = text[m.start():m.end()]
+				name = m.group(1)
+				if name[0:2] == "::":
+					current_class = db[name[3:-1]]
+					a = current_class.autocomplete
+				elif current_class.attrs.has_key(name[1:-1]):
+					attr = current_class.attrs[name[1:-1]]					
+					a = attr.self_class.autocomplete
+					current_class = attr.self_class					
+				else:
+					print "else_name=",name
 		elif last_text[-2:] == "::": #Вводим класс
-			a = [v for v in db.classes.values()]
-			a = sorted(a, key=lambda p: p.id)
-			a = [("%s\t%s"%(c.id,c.name[:20]),"[%s]"%c.id) for c in a]
+			a = db.classes.autocomplete
 
 		return (a,completion_flags)
-
 	def on_selection_modified(self, view):
 		row, col = view.rowcol(view.sel()[0].a)
 		row = row + 1 
@@ -1518,7 +1545,6 @@ class el(sublime_plugin.EventListener):
 				view.set_status('cft-errors',cft_errors[str(row)])
 			else:
 				view.set_status('cft-errors',"")
-
 class my_auto_completeCommand(sublime_plugin.TextCommand):
     '''Used to request a full autocompletion when
     complete_as_you_type is turned off'''

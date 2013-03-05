@@ -1,5 +1,6 @@
 select xmlelement("classes",xmlagg(xmlelement("class",XMLAttributes(cl.id   as id
                                                                    ,cl.name as name
+                                                                   ,(select target_class_id from class_rec_fields where class_id = cl.id and target_class_id is not null and position = 1) as target_class_id
                                                                    ,rpad(cl.name,40,' ') || lpad(cl.id,30,' ') as text)
                                               ,xmlelement("meths",(select xmlagg(xmlelement("method",xmlattributes(m.id          as id
                                                                                                                   ,m.short_name  as short_name
@@ -34,7 +35,7 @@ select xmlelement("classes",xmlagg(xmlelement("class",XMLAttributes(cl.id   as i
                                                                    )
                                                          )
                                               ,xmlelement("attrs",(select xmlagg(xmlelement("attr"  ,xmlattributes(ca.attr_id       as short_name
-                                                                                                                  ,ca.self_class_id as self_class
+                                                                                                                  ,ca.self_class_id as self_class_id
                                                                                                                   ,ca.name          as name
                                                                                                                   ,ca.position      as position)
                                                                                            ) order by ca.position
