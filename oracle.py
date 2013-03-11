@@ -989,53 +989,6 @@ class cftDB(object):
 			return False
 	def select(self,sql,*args):
 		value = None
-		# if not self.select_lock.acquire(False):
-		# 	try:
-		# 		print "select in new connection"
-		# 		self.connection_lock.acquire()
-		# 		connection 	= cx_Oracle.connect(self.connection_string)
-		# 		cursor 		= connection.cursor()
-		# 		self.connection_lock.release()
-		# 		value 		= self.select_cursor(cursor,sql,*args)
-		# 		print "finished",value
-		# 		#cursor.close()
-		# 		#connection.close()
-		# 	except Exception, e:
-		# 		error, = e.args
-		# 		print "db.select_cursor.EXCEPTION:",error.code,error.message,error.context,e
-		# 		if sys != None:
-		# 			exc_type, exc_value, exc_traceback = sys.exc_info()
-		# 			traceback.print_exception(exc_type, exc_value, exc_traceback,
-		# 				                          limit=10, file=sys.stdout)
-		# else:
-		# 	try:
-		# 		print "select lock"
-		# 		self.connection_lock.acquire()
-		# 		if not hasattr(self,"connection"):
-		# 			print "create new connection"
-					
-		# 			self.connection	= cx_Oracle.connect(self.connection_string)
-					
-		# 			print "create new connection end"
-		# 		else:
-		# 			try:
-		# 				self.connection.ping()
-		# 			except Exception:
-
-		# 				self.connection	= cx_Oracle.connect(self.connection_string)
-
-
-		# 		if not hasattr(self,"cursor"):
-		# 			print "create new cursor"
-		# 			print "1"
-		# 		self.cursor	= self.connection.cursor()
-		# 		self.connection_lock.release()
-		# 		print "2"
-		# 		value = self.select_cursor(self.cursor,sql,*args)				
-		# 		print "end"
-		# 	finally:
-		# 		print "unlock"
-		# 		self.select_lock.release()
 		try:			
 			conn = self.pool.acquire()
 			cursor = conn.cursor()
