@@ -977,11 +977,6 @@ class cftDB(object):
 	def is_connected(self):
 		#return hasattr(self,"cursor") and hasattr(self,"connection") and self.select("select * from dual")[0][0] == 'X'
 		try:
-			# if hasattr(self,"connection"):
-			# 	self.connection.ping()
-			# 	return True
-			# else:
-			# 	return False
 			if hasattr(self,"pool"):
 				return True
 			return False
