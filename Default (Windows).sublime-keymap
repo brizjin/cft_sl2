@@ -2,7 +2,7 @@
 	
 	{"keys":["f6"], "command":"my_auto_complete"},
 	{"keys":["f8"], "command":"runsql"},
-	{"keys":["f4"], "command":"get_setting"},
+	{"keys":["f4"], "command":"print_cmd"},
 	{"keys":["f9"], "command":"save_method"},
 	{"keys":["f10"], "command":"quick"},
 	{"keys":["ctrl+home"], "command":"connect"},

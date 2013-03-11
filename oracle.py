@@ -1295,14 +1295,153 @@ class get_settingCommand(sublime_plugin.TextCommand):
 		print "get setting = ", a
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
-		#print "run"
-		#sublime.run_command("insert_snippet", {"contents": "hello ($0)"})
-		
-		#sublime.active_window().run_command('insert_snippet', {"contents": "hello text ${1:ttext} second ${2:second}"})
-		#print "try set"
+		import re, fileinput
+		import pyPEG
+		from pyPEG import parse,parseLine
+		from pyPEG import keyword, _and, _not, ignore
 
-		self.view.settings().set("a","hello_world")
-		print "setting is set"
+		# pyPEG:
+		#
+		#   basestring:     terminal symbol (characters)
+		#   keyword:        terminal symbol (keyword)
+		#   matchobj:       terminal symbols (regex, use for scanning symbols)
+		#   function:       named non-terminal symbol, recursive definition
+		#                   if you don't want naming in output, precede name with an underscore
+		#   tuple:          production sequence
+		#   integer:        count in production sequence:
+		#                    0: following element is optional
+		#                   -1: following element can be omitted or repeated endless
+		#                   -2: following element is required and can be repeated endless
+		#   list:           options, choose one of them
+		#   _not:           next element in production sequence is matched only if this would not
+		#   _and:           next element in production sequence is matched only if this would, too
+
+		# comment <- r"//.*" | r"/\*.**?\*/";
+		# def comment():          return [re.compile(r"//.*"), re.compile("/\*.*?\*/", re.S)]
+		# # literal <- r'\d*\.\d*|\d+|".*?"';
+		# def literal():          return re.compile(r'\d*\.\d*|\d+|".*?"')
+		# # symbol <- r"\w+"
+		# def symbol():           return re.compile(r"\w+")
+		# # operator <- r"\+|\-|\*|\/|\=\=";
+		# def operator():         return re.compile(r"\+|\-|\*|\/|\=\=")
+		# # operation <- symbol operator (literal | functioncall);
+		# def operation():        return symbol, operator, [literal, functioncall]
+		# # expression <- literal | operation | functioncall;
+		# def expression():       return [literal, operation, functioncall]
+		# # expressionlist <- expression ("," expression)*;
+		# def expressionlist():   return expression, -1, (",", expression)
+		# # returnstatement <- k"return" expression;
+		# def returnstatement():  return keyword("return"), expression
+		# # ifstatement <- k"if" "(" expression ")" block k"else" block;
+		# def ifstatement():      return keyword("if"), "(", expression, ")", block, keyword("else"), block
+		# # statement <- (ifstatement | returnstatement) ";";
+		# def statement():        return [ifstatement, returnstatement], ";"
+		# # block <- "{" statement+ "}";
+		# def block():            return "{", -2, statement, "}"
+		# # parameterlist <- "(" symbol ("," symbol)* ")";
+		# def parameterlist():    return "(", symbol, -1, (",", symbol), ")"
+		# # functioncall <- symbol "(" expressionlist ")";
+		# def functioncall():     return symbol, "(", expressionlist, ")"
+		# # function <- k"function" symbol parameterlist block;
+		# def function():         return keyword("function"), symbol, parameterlist, block
+		# # simpleLanguage <- function;
+		# def simpleLanguage():   return function
+
+		pyPEG.print_trace = True
+
+		from xml.sax.saxutils import escape
+		from pyPEG import Symbol
+
+		def pyAST2XML(pyAST):
+		    if isinstance(pyAST, unicode) or isinstance(pyAST, str):
+		        return escape(pyAST)
+		    if type(pyAST) is Symbol:
+		        result = u"<" + pyAST[0].replace("_", "-") + u">"
+		        for e in pyAST[1:]:
+		            result += pyAST2XML(e)
+		        result += u"</" + pyAST[0].replace("_", "-") + u">"
+		    else:
+		        result = u""
+		        for e in pyAST:
+		            result += pyAST2XML(e)
+		    return result
+
+		#files = fileinput.input(os.path.join(plugin_path,"pypeg_input.txt"))
+		#result = parse(simpleLanguage(), files, True, comment)
+		text = """function fak(n) { // ignore
+    if (n==0) { // 0! is 1 by definition
+        return 1;
+    } else {
+        return n * fak(n - 1);
+    };
+}"""
+		#result = parseLine(text,simpleLanguage(), [], True, comment)
+		#print result
+		#print pyAST2XML(result)
+
+
+		plplus_text = """
+			a integer;
+			b varchar2(2000);
+			c varchar2;
+			acc_ref ref [AC_FIN];
+			n number;
+		begin
+			null;
+			acc_ref := 'hello';
+			n := 10.1;
+			acc_ref := ::[AC_FIN]([CODE] = '001'
+								or [FILIAL] > '002'
+								and [BRANCH] is null
+								or [BRANCH] = ::[BRANCHES]([CODE] = '001'));
+		end;
+		"""
+		def comment():			return [re.compile(r"--.*"), re.compile("/\*.*?\*/", re.S)]
+		def symbol():           return re.compile(r"\w+")
+		
+		def null():				return "null"#re.compile(r"null")
+		def string():			return "'",re.compile(r"(.+?)(?=')"),"'"
+		def number():			return re.compile(r"\d+(\.\d+)?")
+		#def string():			return re.compile(r"\'.*\'")
+		def basetype():			return [re.compile(r"integer"),
+										re.compile(r"varchar2(\(\d+\))?"),
+										re.compile(r"boolean"),
+										re.compile(r"number(\(\d+\))?"),
+									   ]
+		def cfttype():			return -1,"ref","[",symbol,"]"
+		def datatype():			return [basetype,cfttype]
+		#def null():				return "null"
+		#def variable():			return [null,symbol]
+		def var_define():		return symbol,datatype,";"				
+		def null_statement():	return null
+		#def undefined_statement(): return re.compile(r".*"),";"
+		def cft_attr():			return "[",symbol,"]"
+		def condition():		return [(expression,re.compile(r"=|!=|>|>=|<|<="),expression),
+										 (expression,re.compile(r"is null|is not null"))]
+		def where():			return condition,-1,(["and","or"],condition)
+		def short_locate():		return "::",cfttype,"(",where,")"
+		
+		def expression():		return [null,string,number,cft_attr,short_locate]
+		def asign_statement():	return symbol,":=", expression
+		def statement():		return [asign_statement,null_statement],";"
+		def define_block():		return -2,var_define
+		def exec_block():		return keyword("begin"),-2,statement,keyword("end"),";"
+		def block():			return define_block,exec_block		
+		def plplus_language():  return block
+
+		plplus_result = parseLine(plplus_text,plplus_language,[],True,comment)
+		print pyAST2XML(plplus_result)
+
+
+
+
+
+
+
+
+
+
+
 class dataView(object):
 	def __init__(self,view=None):
 		if view:
@@ -1454,10 +1593,12 @@ class el(sublime_plugin.EventListener):
 		if last_text[-2:] == '::' or last_text[-2:] == "]("	or last_text[-1:] == '.' or last_text[-4:] == "and ":
 			view.run_command('my_auto_complete',{})
 	def on_query_completions(self,view,prefix,locations):
+		return
 		#print "1:%s,2:%s,3:%s,4:%s" % (self,view,prefix,locations)
 		view = dataView(view)
 		#completion_flags = sublime.INHIBIT_WORD_COMPLETIONS #Только то что в списке
-		completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS #| sublime.INHIBIT_WORD_COMPLETIONS #Список и автоподсказки
+		completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS | sublime.INHIBIT_WORD_COMPLETIONS #Список и автоподсказки
+		
 		a = []
 		last_text = view.until_caret_row_text
 		if not hasattr(db,"classes"):
@@ -1497,6 +1638,7 @@ class el(sublime_plugin.EventListener):
 		elif last_text[-2:] == "::": #Вводим класс
 			a = db.classes.autocomplete
 
+		completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS | sublime.INHIBIT_WORD_COMPLETIONS
 		return (a,completion_flags)
 	def on_selection_modified(self, view):
 		row, col = view.rowcol(view.sel()[0].a)
