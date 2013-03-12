@@ -681,15 +681,20 @@ class cftDB(object):
 			arr = []
 			for m in a:
 				if m.__class__ == cftDB.method_row:
-					params_str = "\n"
-					for param in sorted(m.params.values(),key=lambda p: int(p.position)):
-						params_str += "\t%-15s \t=> ${%s:%-15s} \t--%-2s %-7s %-20s %s\n"%(param.short_name
-																				,param.position
-																				,param.short_name
-																				,param.position
-																				,param.direction
-																				,param.class_id
-																				,param.name)
+					#params_str = "\n"
+					params_str = ""
+
+					for param in sorted(m.params.values(),key=lambda p: int(p.position)):											
+						#params_str += "\t,%-15s \t== ${%s:%-15s} \t--%-2s %-7s %-20s %s\n"%(param.short_name.replace('$','\$')
+						params_str += "\t, %-15s \t== ${%s:null} \t--%-2s %-7s %-20s %s\n"%(param.short_name.replace('$','\$')
+																				,param.position.replace('$','\$')
+																				#,param.short_name.replace('$','\$')
+																				,param.position.replace('$','\$')
+																				,param.direction.replace('$','\$')
+																				,param.class_id.replace('$','\$')
+																				,param.name.replace('$','\$'))
+					params_str = params_str.lstrip('\t,')
+					params_str = "\n\t " + params_str
 
 					arr.append((u"M %s\t%s"%(m.short_name,m.name[:20]),"[%s](%s);\n"%(m.short_name,params_str)))
 				elif m.__class__ == cftDB.attr_row:
@@ -1519,7 +1524,7 @@ class dataView(object):
 		elif section_name == 'PRIVATE':
 			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]  + 3 + \
 					self.view.rowcol(len(self.get_method_section('VALIDATE')))[0] + 3 + \
-					self.view.rowcol(len(self.get_method_section('PUBLIC')))[0]   + 3 + 8 + section_line
+					self.view.rowcol(len(self.get_method_section('PUBLIC')))[0]   + 3 + section_line
 			#print value,section_line,section_name
 			return value
 		elif section_name == 'VALIDSYS':
@@ -1593,7 +1598,7 @@ class el(sublime_plugin.EventListener):
 		if last_text[-2:] == '::' or last_text[-2:] == "]("	or last_text[-1:] == '.' or last_text[-4:] == "and ":
 			view.run_command('my_auto_complete',{})
 	def on_query_completions(self,view,prefix,locations):
-		return
+		#return
 		#print "1:%s,2:%s,3:%s,4:%s" % (self,view,prefix,locations)
 		view = dataView(view)
 		#completion_flags = sublime.INHIBIT_WORD_COMPLETIONS #Только то что в списке
