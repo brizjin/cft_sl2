@@ -1,0 +1,11 @@
+<snippet>
+	<description>function</description>
+    <content><![CDATA[function ${1:FunctionName}(${2:params}) return ${3:DataType} is
+begin
+	return ${4:null};
+exception when others then
+	return null;
+end;]]></content>
+    <tabTrigger>function</tabTrigger>
+    <!-- <scope>source.c, source.objc, source.c++, source.objc++</scope> -->
+</snippet>

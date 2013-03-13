@@ -1,0 +1,10 @@
+<snippet>
+	<description>procedure</description>
+    <content><![CDATA[procedure ${1:ProcName}(${2:params}) is
+begin
+	${4:null};
+exception when others then null;
+end;]]></content>
+    <tabTrigger>procedure</tabTrigger>
+    <!-- <scope>source.c, source.objc, source.c++, source.objc++</scope> -->
+</snippet>

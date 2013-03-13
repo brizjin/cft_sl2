@@ -1313,17 +1313,6 @@ class get_settingCommand(sublime_plugin.TextCommand):
 		a = sublime.active_window().active_view().settings().get("a")
 		print "get setting = ", a
 
-
-
-
-
-
-
-
-
-
-
-
 class dataView(object):
 	def __init__(self,view=None):
 		if view:
@@ -1364,6 +1353,55 @@ class dataView(object):
 	def __getattr__(self, name):
 
 		return getattr(self.view,name)
+	
+	
+	@property
+	def sections(self):
+		class section(object):
+			def __init__(self,view,begin,end):
+				self.view  = view
+				self.begin = begin
+				if begin > end:
+					self.end = begin
+				else:
+					self.end = end
+			@property
+			def rows(self):
+				if self.begin == self.end:
+					return 0
+				else:
+					return len(self.view.lines(sublime.Region(self.begin,self.end)))
+			@property
+			def text(self):
+				return self.view.substr(sublime.Region(self.begin,self.end))
+			def view_line_num(self,line_num):
+				return self.view.rowcol(self.begin)[0] + line_num
+			@property
+			def lines(self):
+				return self.view.lines(sublime.Region(self.begin,self.end))
+
+		sections_dict = dict()
+
+		src_text = self.view.substr(sublime.Region(0,self.view.size()))
+		#arr = re.compile(r'-+\n-+(.)*-+\n-+').split(src_text)
+		
+		regex = re.compile(r'-+\n-+(.)*-+\n-+')
+		match1 = regex.search(src_text)
+		match2 = regex.search(src_text,match1.end())
+		match3 = regex.search(src_text,match2.end())
+		match4 = regex.search(src_text,match3.end())
+
+		sections_dict["EXECUTE"]  = section(self.view,0 		    ,match1.start())
+		sections_dict["VALIDATE"] = section(self.view,match1.end()+1,match2.start())
+		sections_dict["PUBLIC"]   = section(self.view,match2.end()+1,match3.start())
+		sections_dict["PRIVATE"]  = section(self.view,match3.end()+1,match4.start())
+		sections_dict["VBSCRIPT"] = section(self.view,match4.end()+1,self.view.size())
+
+		s = sections_dict["PUBLIC"]
+		#print s.text,s.begin,s.end
+		#print "lines",s.lines
+		return sections_dict
+
 	def get_method_section(self,name):
 		src_text = sublime.Region(0,self.view.size())
 		src_text = self.view.substr(src_text)
@@ -1385,58 +1423,65 @@ class dataView(object):
 			 'VBSCRIPT'  : 8}
 
 		return arr[t[name]]#.strip('\n')
-	def get_view_line_by_section_line(self,section_line,section_name):
+	def get_section_row_count(self,section_name):
 		if section_name == 'EXECUTE':
-			#print 'EXECUTE'
-			return section_line
+			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]
+			return value
 		elif section_name == 'VALIDATE':
-			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   + 3 + section_line
-			#print value,section_line,section_name
+			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   	+ 3 + section_line
 			return value
 		elif section_name == 'PUBLIC':
-			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   + 3 + \
-				    self.view.rowcol(len(self.get_method_section('VALIDATE')))[0]  + 3 + section_line
-			#print value,section_line,section_name
+			value = len(self.get_method_section('EXECUTE'))  + 152 + \
+			len(self.get_method_section('VALIDATE')) + 152 + \
+			len(self.get_method_section('PUBLIC')) 
+			value = self.view.rowcol(len(self.get_method_section('PUBLIC')))[0]
 			return value
 		elif section_name == 'PRIVATE':
-			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]  + 3 + \
-					self.view.rowcol(len(self.get_method_section('VALIDATE')))[0] + 3 + \
-					self.view.rowcol(len(self.get_method_section('PUBLIC')))[0]   + 3 + section_line
-			#print value,section_line,section_name
+			value = self.view.rowcol(len(self.get_method_section('EXECUTE'))  		+ \
+									 len(self.get_method_section('VALIDATE'))  		+ \
+									 len(self.get_method_section('PUBLIC'))  )[0] 	+ 9 + section_line
+			print len(self.get_method_section('PUBLIC'))
+			return value
+		elif section_name == 'VALIDSYS':
+			return 0
+	def get_view_line_by_section_line(self,section_line,section_name):
+		if section_name == 'EXECUTE':
+			return section_line
+		elif section_name == 'VALIDATE':
+			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   	+ 3 + section_line
+			return value
+		elif section_name == 'PUBLIC':
+			value = self.view.rowcol(len(self.get_method_section('EXECUTE'))	   	+ \
+				    				 len(self.get_method_section('VALIDATE')))[0]  	+ 6 + section_line
+			return value
+		elif section_name == 'PRIVATE':
+			value = self.view.rowcol(len(self.get_method_section('EXECUTE'))  		+ \
+									 len(self.get_method_section('VALIDATE'))  		+ \
+									 len(self.get_method_section('PUBLIC'))  )[0] 	+ 9 + section_line
+			#print self.get_section_row_count('EXECUTE')
+			#print "sections",len(self.sections)
 			return value
 		elif section_name == 'VALIDSYS':
 			return 0
 	def mark_errors(self):
-		#print "errors:",self.data.errors()
-		#print "line 7 is ",self.get_view_line_by_section_line(3,"PRIVATE")
-		self.view.erase_regions('cft-errors')
+		self.view.erase_regions('cft-errorsj')
 		self.view.settings().set("cft-errors",dict())
 
 		warnings = []
 		errors = []
 		regions_dict = dict()
-
-		#print self.data.errors()
-
+		
 		for row in self.data.errors():
-			lineno = self.get_view_line_by_section_line(row.line,row.type)
-			text_point = self.view.text_point(lineno - 1, 0)
-			l = self.view.text_point(lineno, 0) - text_point - 1
+			section = self.sections[row.type]
 			if row.list[6][1] == 'W': #6,1 это поле class
-				warnings.append(sublime.Region(text_point, text_point + l))
+				warnings.append(section.lines[row.line-1])
 			elif row.list[6][1] == 'E':
-				errors.append(sublime.Region(text_point, text_point + l))
-			regions_dict[str(self.get_view_line_by_section_line(row.line,row.type))] = row.text
+				errors.append(section.lines[row.line-1])
+			regions_dict[str(section.view_line_num(row.line))] = row.text
 
 		self.view.settings().set("cft-errors",regions_dict)
-		self.view.add_regions(
-						'cft-warnings',
-						warnings,
-						'comment', 'dot', 4 | 32)
-		self.view.add_regions(
-						'cft-errors',
-						errors,
-						'keyword', 'dot', 4 | 32)
+		self.view.add_regions('cft-warnings',warnings,'comment', 'dot', 4 | 32)
+		self.view.add_regions('cft-errors'  ,errors  ,'keyword', 'dot', 4 | 32)
 	#def mark_errors_async(self):
 	#	call_async(lambda:sublime.set_timeout(self.mark_errors,0))
 
@@ -1660,29 +1705,58 @@ class el(sublime_plugin.EventListener):
 		elif last_text[-1:] == '.':
 			#for m in reversed(list(re.finditer(r"(::)*\[[a-zA-Z_#]+\]",text))):
 			t = timer()
-			# current_class = None
-				# for m in re.finditer(r"((::)*\[[a-zA-Z_#0-9]+\])",view.until_caret_row_text):
-				# 	#name = text[m.start():m.end()]
-				# 	name = m.group(1)
-				# 	if name[0:2] == "::":
-				# 		current_class = db[name[3:-1]]
-				# 		a = current_class.autocomplete
-				# 	elif current_class.attrs.has_key(name[1:-1]):
-				# 		current_class = current_class.attrs[name[1:-1]].self_class					
-				# 		a = current_class.autocomplete			
-				# 	else:
-				# 		print "else_name=",name
+			current_class = None
 
-			plplus_text = view.until_caret_text[:-1]
-			plplus = plplus_class(plplus_text)
-			plplus.parse()
-			print plplus.result#_xml
-			#print plplus.result
-			if plplus.block.vars.has_key(plplus.last):
-				v = plplus.block.vars[plplus.last]
-				if v.type == "cfttype":
-					a = db[v.type_name].attrs.autocomplete
-					##print a
+			
+			is_class = None
+
+			#for m in re.finditer(r"((::)*\[[a-zA-Z_#0-9]+\])",view.until_caret_row_text):
+			for m in re.finditer(r"((::)*\[*[a-zA-Z_#0-9]+\]*)",view.until_caret_row_text):
+				name = m.group(1)
+				if name[0:2] == "::":
+					current_class = db[name[3:-1]]
+					#a = current_class.autocomplete
+					is_class = True
+						#a = current_class.attrs.autocomplete
+				elif current_class:
+					if current_class.attrs.has_key(name[1:-1]):
+						current_class = current_class.attrs[name[1:-1]].self_class
+						if current_class.base_class_id == 'COLLECTION':
+							current_class = current_class.target_class
+						if current_class.base_class_id == 'REFERENCE':
+							current_class = current_class.target_class
+
+						#a = current_class.autocomplete
+						is_class = True
+						#print current_class			
+				else:
+					plplus_text = view.until_caret_text[:-1]
+					plplus = plplus_class(plplus_text)
+					plplus.parse()
+
+					if plplus.block.vars.has_key(name):
+						v = plplus.block.vars[name]
+						if v.type == "cfttype":
+							current_class = db[v.type_name]
+							is_class = False
+
+			if is_class:
+				a = current_class.autocomplete
+			else:
+				a = current_class.attrs.autocomplete
+
+			# if not a:#Если автокомплит еще не заполнен
+			# 		 #попытаемся заполнить его парсером plplus
+			# 	plplus_text = view.until_caret_text[:-1]
+			# 	plplus = plplus_class(plplus_text)
+			# 	plplus.parse()
+			# 	#print plplus.result#_xml
+			# 	#print plplus.result
+			# 	if plplus.block.vars.has_key(plplus.last):
+			# 		v = plplus.block.vars[plplus.last]
+			# 		if v.type == "cfttype":
+			# 			a = db[v.type_name].attrs.autocomplete
+						##print a
 
 
 			t.print_time("DOT")
@@ -1709,7 +1783,7 @@ class my_auto_completeCommand(sublime_plugin.TextCommand):
     def run(self, edit, block=False):
     	#print "hello" 
         self.view.run_command('hide_auto_complete')
-        sublime.set_timeout(self.show_auto_complete, 50)
+        sublime.set_timeout(self.show_auto_complete, 1)
 
     def show_auto_complete(self):
     	#print "second"
