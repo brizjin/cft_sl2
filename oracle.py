@@ -735,7 +735,9 @@ class cftDB(object):
 			cursor = conn.cursor()
 			text_out = cursor.var(cx_Oracle.CLOB)
 			cursor.execute(self.db.fr.method_sources,(self.class_ref.id, self.short_name.upper(),text_out))
-			value = unicode(text_out.getvalue().read(),'1251')
+			#value = unicode(text_out.getvalue().read(),'1251')
+			value = text_out.getvalue().read().decode('utf-8')
+			
 			self.db.pool.release(conn)
 
 			return value
@@ -1006,7 +1008,9 @@ class cftDB(object):
 			return False
 	def select(self,sql,*args):
 		value = None
-		try:			
+		try:
+					
+
 			conn = self.pool.acquire()
 			cursor = conn.cursor()
 			cursor.arraysize = 50
@@ -1164,6 +1168,8 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 
 		def write(string):			
 			edit = view.begin_edit()
+			#print view.encoding()
+			#print "string=",string
 			view.insert(edit, view.size(), string)
 			view.end_edit(edit)
 		if input >= 0:
@@ -1176,12 +1182,14 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 				view.set_name(obj.name)
 				view.set_scratch(True)
 				view.set_syntax_file("Packages/CFT/PL_SQL (Oracle).tmLanguage")
+				view.set_encoding("utf-8")
 
 				#view.settings().set("cft_object",{"id": obj.id,"class" : obj.class_ref.id, "type": obj.__class__.__name__})
 				view.data = obj
 				
 				
 				text = obj.get_sources()
+				#print "text",text
 
 				write(text)
 
@@ -1657,8 +1665,10 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		plplus_text = view.text
 		#print view.text
 		plplus = plplus_class(plplus_text)
+		#print view.encoding()
 		plplus.parse()
 		print plplus.result_xml
+
 		#print plplus_text
 		#plplus = plplus_class(plplus_text)
 		#plplus.parse()
