@@ -733,12 +733,46 @@ class cftDB(object):
 		def get_sources(self):
 			conn = self.db.pool.acquire()
 			cursor = conn.cursor()
-			text_out = cursor.var(cx_Oracle.CLOB)
+			
+			text_out = cursor.var(cx_Oracle.LONG_STRING)
 			cursor.execute(self.db.fr.method_sources,(self.class_ref.id, self.short_name.upper(),text_out))
 			#value = unicode(text_out.getvalue().read(),'1251')
-			value = text_out.getvalue().read().decode('utf-8')
+			value = text_out.getvalue().decode('utf-8') + '└┘┌┐'.decode('utf-8')
 			
 			self.db.pool.release(conn)
+
+			return value
+		def get_section(self,section_name):
+			conn = self.db.pool.acquire()
+			cursor = conn.cursor()
+			
+			text_out = cursor.var(cx_Oracle.LONG_STRING)
+			sql = "begin :c :=  method.get_source(:method_id,:section); end;"
+			cursor.execute(sql,(text_out,self.id,section_name))
+			#value = unicode(text_out.getvalue().read(),'1251')
+			value = text_out.getvalue()
+			if value:
+				value = value.decode('1251')
+			else:
+				value = ''
+		
+			self.db.pool.release(conn)
+			return value
+		def get_section_with_header(self,section_name):
+			#value = '┌────────────────────────────────────────────────┐\n'.decode('utf-8')
+			value  ='╒════════════════════════════════════════════════╕\n'.decode('utf-8')
+			value +='│                    '.decode('utf-8') + ' %-10s' % section_name + '                 │\n'.decode('utf-8')
+			value += self.get_section(section_name)
+			value +='└────────────────────────────────────────────────┘\n'.decode('utf-8')
+			return value
+		def get_sources2(self):
+			
+
+			value  = self.get_section_with_header("EXECUTE")
+			value += self.get_section_with_header("VALIDATE")
+			value += self.get_section_with_header("PUBLIC")
+			value += self.get_section_with_header("PRIVATE")
+			value += self.get_section_with_header("VBSCRIPT")
 
 			return value
 
@@ -1188,7 +1222,8 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 				view.data = obj
 				
 				
-				text = obj.get_sources()
+				#text = obj.get_sources()
+				text = obj.get_sources2()
 				#print "text",text
 
 				write(text)

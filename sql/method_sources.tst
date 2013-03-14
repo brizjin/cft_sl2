@@ -1,4 +1,4 @@
-﻿п»їPL/SQL Developer Test script 3.0
+﻿PL/SQL Developer Test script 3.0
 59
 declare 
   c clob;
@@ -39,7 +39,7 @@ declare
     --d := d || chr(10) || cpad('-',50,'-');
     --d := d || chr(10) || '--' || cpad(oper_type,46,' ') || '--';
     --d := d || chr(10) || cpad('-',50,'-') || chr(10);
-    d := d || chr(10) || 'в”Њ';
+    d := d || chr(10) || '';
     d := d || chr(10) || '' || cpad(oper_type,48,' ') || '';
     d := d || chr(10) || '';
     d := d || chr(10) ||  rtrim(get_part(class_name,method_name,oper_type),chr(10));
