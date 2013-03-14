@@ -25,6 +25,10 @@ cache_path  			= os.path.join(plugin_path,"cache")
 used_classes_file_path 	= os.path.join(plugin_path,"cache","cft_settings.json")
 
 TIMER_DEBUG = True
+
+beg_whites_regex = re.compile(r'^\s*') #ищем начало строки без пробелов
+end_whites_regex = re.compile(r'\s*$') #ищем конец строки без пробелов
+
 #import cftdb
 #from cftdb import call_async
 
@@ -1353,7 +1357,14 @@ class dataView(object):
 	def __getattr__(self, name):
 
 		return getattr(self.view,name)
-	
+
+
+
+	def RegionTrim(self,region):
+		region_str = self.view.substr(region)
+		match1 = beg_whites_regex.search(region_str)				
+		match2 = end_whites_regex.search(region_str)
+		return sublime.Region(region.begin()+match1.end(),region.end() - (match2.end() - match2.start()))
 	
 	@property
 	def sections(self):
@@ -1402,81 +1413,78 @@ class dataView(object):
 		#print "lines",s.lines
 		return sections_dict
 
-	def get_method_section(self,name):
-		src_text = sublime.Region(0,self.view.size())
-		src_text = self.view.substr(src_text)
+	# def get_method_section(self,name):
+	# 	src_text = sublime.Region(0,self.view.size())
+	# 	src_text = self.view.substr(src_text)
 		
-		regexp = r'-+\n-+(.)*-+\n-+'
-		p = re.compile(regexp)
-		arr = p.split(src_text)
+	# 	regexp = r'-+\n-+(.)*-+\n-+'
+	# 	p = re.compile(regexp)
+	# 	arr = p.split(src_text)
 
-		# B = arr[2].strip('\n')
-		# V = arr[4].strip('\n')
-		# G = arr[6].strip('\n')
-		# L = arr[8].strip('\n')
-		# S = arr[10].strip('\n')
+	# 	# B = arr[2].strip('\n')
+	# 	# V = arr[4].strip('\n')
+	# 	# G = arr[6].strip('\n')
+	# 	# L = arr[8].strip('\n')
+	# 	# S = arr[10].strip('\n')
 
-		t = {'EXECUTE'   : 0,
-			 'VALIDATE'  : 2,
-			 'PUBLIC'    : 4,
-			 'PRIVATE'   : 6,
-			 'VBSCRIPT'  : 8}
+	# 	t = {'EXECUTE'   : 0,
+	# 		 'VALIDATE'  : 2,
+	# 		 'PUBLIC'    : 4,
+	# 		 'PRIVATE'   : 6,
+	# 		 'VBSCRIPT'  : 8}
 
-		return arr[t[name]]#.strip('\n')
-	def get_section_row_count(self,section_name):
-		if section_name == 'EXECUTE':
-			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]
-			return value
-		elif section_name == 'VALIDATE':
-			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   	+ 3 + section_line
-			return value
-		elif section_name == 'PUBLIC':
-			value = len(self.get_method_section('EXECUTE'))  + 152 + \
-			len(self.get_method_section('VALIDATE')) + 152 + \
-			len(self.get_method_section('PUBLIC')) 
-			value = self.view.rowcol(len(self.get_method_section('PUBLIC')))[0]
-			return value
-		elif section_name == 'PRIVATE':
-			value = self.view.rowcol(len(self.get_method_section('EXECUTE'))  		+ \
-									 len(self.get_method_section('VALIDATE'))  		+ \
-									 len(self.get_method_section('PUBLIC'))  )[0] 	+ 9 + section_line
-			print len(self.get_method_section('PUBLIC'))
-			return value
-		elif section_name == 'VALIDSYS':
-			return 0
-	def get_view_line_by_section_line(self,section_line,section_name):
-		if section_name == 'EXECUTE':
-			return section_line
-		elif section_name == 'VALIDATE':
-			value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   	+ 3 + section_line
-			return value
-		elif section_name == 'PUBLIC':
-			value = self.view.rowcol(len(self.get_method_section('EXECUTE'))	   	+ \
-				    				 len(self.get_method_section('VALIDATE')))[0]  	+ 6 + section_line
-			return value
-		elif section_name == 'PRIVATE':
-			value = self.view.rowcol(len(self.get_method_section('EXECUTE'))  		+ \
-									 len(self.get_method_section('VALIDATE'))  		+ \
-									 len(self.get_method_section('PUBLIC'))  )[0] 	+ 9 + section_line
-			#print self.get_section_row_count('EXECUTE')
-			#print "sections",len(self.sections)
-			return value
-		elif section_name == 'VALIDSYS':
-			return 0
+		# return arr[t[name]]#.strip('\n')
+	# def get_section_row_count(self,section_name):
+	# 	if section_name == 'EXECUTE':
+	# 		value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]
+	# 		return value
+	# 	elif section_name == 'VALIDATE':
+	# 		value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   	+ 3 + section_line
+	# 		return value
+	# 	elif section_name == 'PUBLIC':
+	# 		value = len(self.get_method_section('EXECUTE'))  + 152 + \
+	# 		len(self.get_method_section('VALIDATE')) + 152 + \
+	# 		len(self.get_method_section('PUBLIC')) 
+	# 		value = self.view.rowcol(len(self.get_method_section('PUBLIC')))[0]
+	# 		return value
+	# 	elif section_name == 'PRIVATE':
+	# 		value = self.view.rowcol(len(self.get_method_section('EXECUTE'))  		+ \
+	# 								 len(self.get_method_section('VALIDATE'))  		+ \
+	# 								 len(self.get_method_section('PUBLIC'))  )[0] 	+ 9 + section_line
+	# 		print len(self.get_method_section('PUBLIC'))
+	# 		return value
+	# 	elif section_name == 'VALIDSYS':
+	# 		return 0
+	# def get_view_line_by_section_line(self,section_line,section_name):
+	# 	if section_name == 'EXECUTE':
+	# 		return section_line
+	# 	elif section_name == 'VALIDATE':
+	# 		value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   	+ 3 + section_line
+	# 		return value
+	# 	elif section_name == 'PUBLIC':
+	# 		value = self.view.rowcol(len(self.get_method_section('EXECUTE'))	   	+ \
+	# 			    				 len(self.get_method_section('VALIDATE')))[0]  	+ 6 + section_line
+	# 		return value
+	# 	elif section_name == 'PRIVATE':
+	# 		value = self.view.rowcol(len(self.get_method_section('EXECUTE'))  		+ \
+	# 								 len(self.get_method_section('VALIDATE'))  		+ \
+	# 								 len(self.get_method_section('PUBLIC'))  )[0] 	+ 9 + section_line
+	# 		#print self.get_section_row_count('EXECUTE')
+	# 		#print "sections",len(self.sections)
+	# 		return value
+	# 	elif section_name == 'VALIDSYS':
+	# 		return 0
 	def mark_errors(self):
-		self.view.erase_regions('cft-errorsj')
-		self.view.settings().set("cft-errors",dict())
-
-		warnings = []
-		errors = []
-		regions_dict = dict()
-		
+		#self.view.erase_regions('cft-errors')
+		#self.view.settings().set("cft-errors",dict())
+		warnings,errors,regions_dict = [],[],dict()		
 		for row in self.data.errors():
 			section = self.sections[row.type]
+			line = self.RegionTrim(section.lines[row.line-1])
 			if row.list[6][1] == 'W': #6,1 это поле class
-				warnings.append(section.lines[row.line-1])
+				warnings.append(line)
 			elif row.list[6][1] == 'E':
-				errors.append(section.lines[row.line-1])
+				errors.append(line)
 			regions_dict[str(section.view_line_num(row.line))] = row.text
 
 		self.view.settings().set("cft-errors",regions_dict)
