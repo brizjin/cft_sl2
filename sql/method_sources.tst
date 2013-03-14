@@ -46,7 +46,7 @@ declare
 begin
   class_name := :class_name;
   method_name := :method_name;
-  c :=      get_part(class_name,method_name,'EXECUTE');
+  c :=      ltrim(get_with_header(class_name,method_name,'EXECUTE'),chr(10));
   c := c || get_with_header(class_name,method_name,'VALIDATE');
   c := c || get_with_header(class_name,method_name,'PUBLIC');
   c := c || get_with_header(class_name,method_name,'PRIVATE');

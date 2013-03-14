@@ -1172,7 +1172,7 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 				#obj = self.current_class.get_objects()[input]
 				obj = self.list_objs[input]
 				#view = sublime.active_window().new_file()
-				view = dataView()
+				view = dataView.new()
 				view.set_name(obj.name)
 				view.set_scratch(True)
 				view.set_syntax_file("Packages/CFT/PL_SQL (Oracle).tmLanguage")
@@ -1257,7 +1257,7 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			self.t = timer()
 
 
-			view = dataView(sublime.active_window().active_view())
+			view = dataView.active()#(sublime.active_window().active_view())
 			obj = view.data
 			sublime_src_text = view.substr(sublime.Region(0,view.size()))
 			db_src_text = obj.get_sources()
@@ -1318,12 +1318,20 @@ class get_settingCommand(sublime_plugin.TextCommand):
 		print "get setting = ", a
 
 class dataView(object):
-	def __init__(self,view=None):
-		if view:
-			#print view
-			self.view = view
-		else:
-			self.view = sublime.active_window().new_file()
+	def __init__(self,view):
+		self.view = view
+		#self.view = sublime.active_window().new_file()
+		#self.view = sublime.active_window().active_view()
+
+	@staticmethod
+	def new():
+
+		return dataView(sublime.active_window().new_file())
+	@staticmethod
+	def active():
+
+		return dataView(sublime.active_window().active_view())
+
 	@property
 	def data(self):
 		try:
@@ -1357,15 +1365,11 @@ class dataView(object):
 	def __getattr__(self, name):
 
 		return getattr(self.view,name)
-
-
-
 	def RegionTrim(self,region):
 		region_str = self.view.substr(region)
 		match1 = beg_whites_regex.search(region_str)				
 		match2 = end_whites_regex.search(region_str)
 		return sublime.Region(region.begin()+match1.end(),region.end() - (match2.end() - match2.start()))
-	
 	@property
 	def sections(self):
 		class section(object):
@@ -1412,7 +1416,6 @@ class dataView(object):
 		#print s.text,s.begin,s.end
 		#print "lines",s.lines
 		return sections_dict
-
 	# def get_method_section(self,name):
 	# 	src_text = sublime.Region(0,self.view.size())
 	# 	src_text = self.view.substr(src_text)
@@ -1505,6 +1508,10 @@ class dataView(object):
 		cursor_position = self.view.sel()[0].a
 		return self.view.substr(sublime.Region(0,cursor_position))
 
+	@property
+	def text(self):
+		return self.view.substr(sublime.Region(0,self.view.size()))
+
 	def selection_row_sub(self,begin_str,end_str):
 		from_str = self.until_caret_row_text
 		begin 	 = from_str.rfind(begin_str)+len(begin_str)
@@ -1536,7 +1543,7 @@ class plplus_class(object):
 
 		pyPEG.print_trace = True
 
-		def comment():			return [re.compile(r"--.*"), re.compile("/\*.*?\*/", re.S)]
+		def comment():			return [(ignore(r"--"),re.compile(r".*")), re.compile("/\*.*?\*/", re.S)]
 		def symbol():           return re.compile(r"\w+")
 		
 		def null():				return "null"#re.compile(r"null")
@@ -1564,13 +1571,14 @@ class plplus_class(object):
 		def expression():		return [null,string,number,cft_attr,short_locate,symbol]
 		def asign_statement():	return [symbol,cft_attr],":=", expression
 		def statement():		return [asign_statement,null_statement],";"
-		def define_block():		return -1,var_define
-		def exec_block():		return keyword("begin"),-2,statement,-1,keyword("end"),-1,";"
-		def block():			return define_block,exec_block		
-		def plplus_language():  return block
+		def header():			return ignore(r'-+\n'),ignore(r'-- +'),re.compile(r'[A-Z]+'),ignore(r' *--\n'),ignore(r'-+')
+		def define_block():		return -2,[var_define,comment]
+		def exec_block():		return -1,(keyword("begin"),-2,[statement,comment],-1,keyword("end"),-1,";")
+		def block():			return header,-1,define_block,exec_block
+		def plplus_language():  return -2,block
 
-		self.result = parseLine(self.plplus_text,plplus_language,[],True,comment)
-		self.load()
+		self.result = parseLine(self.plplus_text,plplus_language,[],True)
+		#self.load()
 		return self.result
 	def pyAST2XML(self,text):
 		pyAST = text
@@ -1644,11 +1652,14 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		end;
 		"""
 
-		view = dataView(sublime.active_window().active_view())
-		plplus_text = view.get_method_section("EXECUTE")
+		view = dataView.active()
+		#plplus_text = view.sections["EXECUTE"].text
+		plplus_text = view.text
+		#print view.text
 		plplus = plplus_class(plplus_text)
 		plplus.parse()
-		print plplus.result#_xml
+		print plplus.result_xml
+		#print plplus_text
 		#plplus = plplus_class(plplus_text)
 		#plplus.parse()
 		#print pyAST2XML(plplus.result)
