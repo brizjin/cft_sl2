@@ -760,10 +760,12 @@ class cftDB(object):
 			return value
 		def get_section_with_header(self,section_name):
 			#value = '┌────────────────────────────────────────────────┐\n'.decode('utf-8')
-			value  ='╒════════════════════════════════════════════════╕\n'.decode('utf-8')
-			value +='│                    '.decode('utf-8') + ' %-10s' % section_name + '                 │\n'.decode('utf-8')
-			value += self.get_section(section_name)
-			value +='└────────────────────────────────────────────────┘\n'.decode('utf-8')
+			value  ='╒══════════════════════════════════════════════════════════════════════════════╕\n'.decode('utf-8')
+			value +='│ '.decode('utf-8') + '%-10s' % section_name + '                                                                   │\n'.decode('utf-8')
+			#value +='├──────────────────────────────────────────────────────────────────────────────┤\n'.decode('utf-8')
+
+			value += re.sub(r'\n',r'\n\t','\t' + self.get_section(section_name)).rstrip('\t')
+			value +='└──────────────────────────────────────────────────────────────────────────────┘\n'.decode('utf-8')
 			return value
 		def get_sources2(self):
 			
@@ -1593,34 +1595,50 @@ class plplus_class(object):
 		def string():			return "'",re.compile(r"(.+?)(?=')"),"'"
 		def number():			return re.compile(r"\d+(\.\d+)?")
 		#def string():			return re.compile(r"\'.*\'")
-		def basetype():			return [re.compile(r"integer"),
-										re.compile(r"varchar2(\(\d+\))?"),
-										re.compile(r"boolean"),
-										re.compile(r"number(\(\d+\))?"),
-									   ]
+		def basetype():			return re.compile(r"integer|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
 		def cfttype():			return -1,"ref","[",re.compile(r"\w+"),"]"
-		#def datatype():			return [basetype,cfttype]
+		def datatype():			return [basetype,cfttype]
 		#def null():				return "null"
 		#def variable():			return symbol
-		def var_define():		return symbol,[basetype,cfttype],";"				
-		def null_statement():	return null
+		def var_define():		return symbol,datatype,";"				
+		#def null_statement():	return null
+		def return_statement():	return keyword("return"),expression
+		def pragma_statement():	return keyword("pragma"),symbol,";"
 		#def undefined_statement(): return re.compile(r".*"),";"
 		def cft_attr():			return "[",symbol,"]",-1,(".",cft_attr)
 		def condition():		return [(expression,re.compile(r"=|!=|>|>=|<|<="),expression),
 										 (expression,re.compile(r"is null|is not null"))]
 		def where():			return condition,-1,(["and","or"],condition)
+		def condition_list():	return condition,-1,(["and","or"],condition)
 		def short_locate():		return "::",cfttype,"(",where,-1,")"
-		
-		def expression():		return [null,string,number,cft_attr,short_locate,symbol]
+		def cft_method_param():	return 0,(symbol,"=="),expression
+		def cft_method_params():return cft_method_param,-1,(",",cft_method_param)
+		def cft_method_call():	return "::",cfttype,-2,(".",cft_attr),"(",-1,cft_method_params,")"
+		def expression():		return [cft_attr,short_locate,symbol,string,number,null]
 		def asign_statement():	return [symbol,cft_attr],":=", expression
-		def statement():		return [asign_statement,null_statement],";"
-		def header():			return ignore(r'-+\n'),ignore(r'-- +'),re.compile(r'[A-Z]+'),ignore(r' *--\n'),ignore(r'-+')
-		def define_block():		return -2,[var_define,comment]
-		def exec_block():		return -1,(keyword("begin"),-2,[statement,comment],-1,keyword("end"),-1,";")
-		def block():			return header,-1,define_block,exec_block
-		def plplus_language():  return -2,block
+		def if_statement():		return keyword("if"),condition_list,keyword("then"),-2,statement,ignore("end if")
+		def statement():		return [if_statement,
+										asign_statement,
+										null,
+										return_statement,
+										pragma_statement,
+										cft_method_call],";"
+		def func_param():		return symbol,datatype
+		def func_params():		return func_param,-1,(',',func_param)
+		def func_init():		return keyword('function'),symbol,"(",func_params,")",keyword('return'),datatype,keyword('is'),define_block,body_block
+		def func_def():			return keyword('function'),symbol,"(",func_params,")",keyword('return'),datatype,";"
+		def define_block():		return -2,[var_define,func_def,func_init,pragma_statement]
+		def exception_when():	return keyword("when"),re.compile(r"others|no_data_found|too_many_rows"),keyword("then")#
+		def exception_block():	return exception_when,-2,statement
+		def exceptions_block():	return keyword("exception"),-2,exception_block
+		def body_block():		return keyword("begin"),-2,statement,0,exceptions_block,keyword("end"),";"
+		def block():			return 0,define_block,0,body_block
+		def header():			return ignore(r'╒═+╕\n│ +'.decode('utf-8')),re.compile(r'[A-Z]+'),ignore(r' *│\n'.decode('utf-8'))
+		def section():			return header,block,ignore(r'└─+┘\n'.decode('utf-8'))
+		#def plplus_language():  return -2,block
+		def plplus_language():  return -2,section
 
-		self.result = parseLine(self.plplus_text,plplus_language,[],True)
+		self.result = parseLine(self.plplus_text,plplus_language,[],True,comment)
 		#self.load()
 		return self.result
 	def pyAST2XML(self,text):
@@ -1699,10 +1717,13 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		#plplus_text = view.sections["EXECUTE"].text
 		plplus_text = view.text
 		#print view.text
+		#t = timer()
 		plplus = plplus_class(plplus_text)
 		#print view.encoding()
 		plplus.parse()
+
 		print plplus.result_xml
+		#t.print_time("parsing")
 
 		#print plplus_text
 		#plplus = plplus_class(plplus_text)
