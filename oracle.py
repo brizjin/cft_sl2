@@ -1596,7 +1596,7 @@ class plplus_class(object):
 		def number():			return re.compile(r"\d+(\.\d+)?")
 		#def string():			return re.compile(r"\'.*\'")
 		def basetype():			return re.compile(r"integer|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
-		def cfttype():			return -1,"ref","[",re.compile(r"\w+"),"]"
+		def cfttype():			return 0,"ref",0,"::","[",re.compile(r"\w+"),"]"
 		def datatype():			return [basetype,cfttype]
 		#def null():				return "null"
 		#def variable():			return symbol
@@ -1605,7 +1605,11 @@ class plplus_class(object):
 		def return_statement():	return keyword("return"),expression
 		def pragma_statement():	return keyword("pragma"),symbol,";"
 		#def undefined_statement(): return re.compile(r".*"),";"
-		def cft_attr():			return "[",symbol,"]",-1,(".",cft_attr)
+		def attr_name():		return [("[",re.compile(r"\w+"),"]"),(re.compile(r"\w+"))]
+		def meth_name():		return [("[",re.compile(r"\w+"),"]"),(re.compile(r"\w+"))]
+		def cft_attr():			return [(cfttype,".",attr_name),attr_name],-1,(".",attr_name)
+		#def cft_attr():			return 0,(cfttype,".",attr_name),-1,(".",attr_name)
+		def cft_method():		return cfttype,-2,(".",attr_name)
 		def condition():		return [(expression,re.compile(r"=|!=|>|>=|<|<="),expression),
 										 (expression,re.compile(r"is null|is not null"))]
 		def where():			return condition,-1,(["and","or"],condition)
@@ -1613,7 +1617,7 @@ class plplus_class(object):
 		def short_locate():		return "::",cfttype,"(",where,-1,")"
 		def cft_method_param():	return 0,(symbol,"=="),expression
 		def cft_method_params():return cft_method_param,-1,(",",cft_method_param)
-		def cft_method_call():	return "::",cfttype,-2,(".",cft_attr),"(",-1,cft_method_params,")"
+		def cft_method_call():	return cft_method,"(",-1,cft_method_params,")"
 		def expression():		return [cft_attr,short_locate,symbol,string,number,null]
 		def asign_statement():	return [symbol,cft_attr],":=", expression
 		def if_statement():		return keyword("if"),condition_list,keyword("then"),-2,statement,ignore("end if")
