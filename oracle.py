@@ -1584,7 +1584,7 @@ class plplus_class(object):
 
 	def parse(self,start = None):
 
-		pyPEG.print_trace = False
+		pyPEG.print_trace = True
 
 		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
 		def symbol():           return re.compile(r"\w+")
@@ -1646,8 +1646,16 @@ class plplus_class(object):
 									  ,ignore(r' *│'.decode('utf-8')) ,blocks_text,0,ignore(r'└─+┘\n'.decode('utf-8'))
 		def blocks(): 			return -2,blocks_section
 		########################
-		#3 для сексии exec поиск только переменных
-		def exec_block():   return -1,var_define,0,(keyword("begin"),-1,ignore(r".*?;",re.S),0,keyword("end"))
+		#3 для секции exec поиск только переменных
+		def exec_block():   	return -1,var_define,0,(keyword("begin"),-1,ignore(r".*?;",re.S),0,keyword("end"))
+		########################
+		#4 для private
+		def undefined_statement(): 	return ignore(r".*?(?!end;);",re.S)
+		def plsql_block():			return 0,keyword('declare'),keyword('begin'),-1,undefined_statement,ignore(r"end;")		
+		def func_init_vars_only():	return keyword('function'),symbol,"(",func_params,")" 	\
+				,keyword('return'),datatype,keyword('is')									\
+				,0,define_block,-1,[plsql_block,undefined_statement],ignore(r"end;")
+		def private_block(): 		return -1,([func_def,func_init_vars_only,var_define])
 		
 		start_lambda = plplus_language
 		if start:
@@ -1661,6 +1669,8 @@ class plplus_class(object):
 
 				k,self.last_section = self.sections.items()[len(self.sections.items())-1]
 				#print "last",self.last_section
+			if start == "private":
+				self.result = parseLine(self.plplus_text,private_block,[],True,comment)
 			elif start == "exec_block":
 				self.result = parseLine(self.plplus_text,exec_block,[],True,comment)
 				lang = self.result[0][0].what 	#plplus-language
@@ -1678,6 +1688,9 @@ class plplus_class(object):
 
 	def exec_block_parser(self):
 		return self.parse("exec_block")
+
+	def private_parser(self):
+		return self.parse("private")
 
 	def load(self):
 		lang = self.result[0][0][1] 	#plplus-language
@@ -1709,12 +1722,14 @@ class plplus_class(object):
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		view = dataView.active()
-		plplus_text = view.text[:view.caret_position]
+		#plplus_text = view.text[:view.caret_position]
+		plplus_text = view.text
 		blocks_parser = plplus_class(plplus_text).blocks_parser()
 		#print "EXECUTE.TEXT=",blocks_parser.sections["EXECUTE"].text
-		exec_block = plplus_class(blocks_parser.sections["EXECUTE"].text).exec_block_parser()
+		#exec_block = plplus_class(blocks_parser.sections["EXECUTE"].text).exec_block_parser()
+		private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
 
-		print exec_block.variables
+		print private_parser.result_xml
 
 
 
