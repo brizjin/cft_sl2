@@ -1461,67 +1461,7 @@ class dataView(object):
 		#print s.text,s.begin,s.end
 		#print "lines",s.lines
 		return sections_dict
-	# def get_method_section(self,name):
-	# 	src_text = sublime.Region(0,self.view.size())
-	# 	src_text = self.view.substr(src_text)
-		
-	# 	regexp = r'-+\n-+(.)*-+\n-+'
-	# 	p = re.compile(regexp)
-	# 	arr = p.split(src_text)
 
-	# 	# B = arr[2].strip('\n')
-	# 	# V = arr[4].strip('\n')
-	# 	# G = arr[6].strip('\n')
-	# 	# L = arr[8].strip('\n')
-	# 	# S = arr[10].strip('\n')
-
-	# 	t = {'EXECUTE'   : 0,
-	# 		 'VALIDATE'  : 2,
-	# 		 'PUBLIC'    : 4,
-	# 		 'PRIVATE'   : 6,
-	# 		 'VBSCRIPT'  : 8}
-
-		# return arr[t[name]]#.strip('\n')
-	# def get_section_row_count(self,section_name):
-	# 	if section_name == 'EXECUTE':
-	# 		value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]
-	# 		return value
-	# 	elif section_name == 'VALIDATE':
-	# 		value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   	+ 3 + section_line
-	# 		return value
-	# 	elif section_name == 'PUBLIC':
-	# 		value = len(self.get_method_section('EXECUTE'))  + 152 + \
-	# 		len(self.get_method_section('VALIDATE')) + 152 + \
-	# 		len(self.get_method_section('PUBLIC')) 
-	# 		value = self.view.rowcol(len(self.get_method_section('PUBLIC')))[0]
-	# 		return value
-	# 	elif section_name == 'PRIVATE':
-	# 		value = self.view.rowcol(len(self.get_method_section('EXECUTE'))  		+ \
-	# 								 len(self.get_method_section('VALIDATE'))  		+ \
-	# 								 len(self.get_method_section('PUBLIC'))  )[0] 	+ 9 + section_line
-	# 		print len(self.get_method_section('PUBLIC'))
-	# 		return value
-	# 	elif section_name == 'VALIDSYS':
-	# 		return 0
-	# def get_view_line_by_section_line(self,section_line,section_name):
-	# 	if section_name == 'EXECUTE':
-	# 		return section_line
-	# 	elif section_name == 'VALIDATE':
-	# 		value = self.view.rowcol(len(self.get_method_section('EXECUTE')))[0]   	+ 3 + section_line
-	# 		return value
-	# 	elif section_name == 'PUBLIC':
-	# 		value = self.view.rowcol(len(self.get_method_section('EXECUTE'))	   	+ \
-	# 			    				 len(self.get_method_section('VALIDATE')))[0]  	+ 6 + section_line
-	# 		return value
-	# 	elif section_name == 'PRIVATE':
-	# 		value = self.view.rowcol(len(self.get_method_section('EXECUTE'))  		+ \
-	# 								 len(self.get_method_section('VALIDATE'))  		+ \
-	# 								 len(self.get_method_section('PUBLIC'))  )[0] 	+ 9 + section_line
-	# 		#print self.get_section_row_count('EXECUTE')
-	# 		#print "sections",len(self.sections)
-	# 		return value
-	# 	elif section_name == 'VALIDSYS':
-	# 		return 0
 	def mark_errors(self):
 		#self.view.erase_regions('cft-errors')
 		#self.view.settings().set("cft-errors",dict())
@@ -1542,6 +1482,10 @@ class dataView(object):
 	#	call_async(lambda:sublime.set_timeout(self.mark_errors,0))
 
 	@property
+	def caret_position(self):
+		return self.view.sel()[0].a
+
+	@property
 	def until_caret_row_text(self):
 		cursor_position = self.view.sel()[0].a
 		row_num,col_num = self.view.rowcol(cursor_position)
@@ -1552,6 +1496,7 @@ class dataView(object):
 	def until_caret_text(self):
 		cursor_position = self.view.sel()[0].a
 		return self.view.substr(sublime.Region(0,cursor_position))
+
 
 	@property
 	def text(self):
@@ -1564,8 +1509,30 @@ class dataView(object):
 		return from_str[begin:end].strip()
 		#class_name = row_text[row_text.rfind("::[")+3:len(row_text)-2]
 
-		
-class plplus_class(object):
+class pypeg_parser(object):
+	def __init__(self, plplus_text):
+		super(pypeg_parser, self).__init__()
+		self.plplus_text = plplus_text
+	def pyAST2XML(self,text):
+		pyAST = text
+		if isinstance(pyAST, unicode) or isinstance(pyAST, str):
+			return escape(pyAST)
+		if type(pyAST) is Symbol:
+			result = u"<" + pyAST[0].replace("_", "-") + u">"
+			for e in pyAST[1:]:
+				result += self.pyAST2XML(e)
+			result += u"</" + pyAST[0].replace("_", "-") + u">"
+		else:
+			result = u""
+			for e in pyAST:
+				result += self.pyAST2XML(e)
+		return result
+	@property
+	def result_xml(self):
+
+		return self.pyAST2XML(self.result)
+
+class plplus_class(pypeg_parser):
 	class variable_class(object):
 		def __init__(self,var_define):
 			var_def 		= var_define[1]
@@ -1582,13 +1549,13 @@ class plplus_class(object):
 
 
 	def __init__(self, plplus_text):
-		super(plplus_class, self).__init__()
-		self.plplus_text = plplus_text
+		super(plplus_class, self).__init__(plplus_text)
+		#self.plplus_text = plplus_text
 	def parse(self):
 
 		pyPEG.print_trace = True
 
-		def comment():			return [(ignore(r"--"),re.compile(r".*")), re.compile("/\*.*?\*/", re.S)]
+		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
 		def symbol():           return re.compile(r"\w+")
 		
 		def null():				return "null"#re.compile(r"null")
@@ -1645,24 +1612,7 @@ class plplus_class(object):
 		self.result = parseLine(self.plplus_text,plplus_language,[],True,comment)
 		#self.load()
 		return self.result
-	def pyAST2XML(self,text):
-		pyAST = text
-		if isinstance(pyAST, unicode) or isinstance(pyAST, str):
-			return escape(pyAST)
-		if type(pyAST) is Symbol:
-			result = u"<" + pyAST[0].replace("_", "-") + u">"
-			for e in pyAST[1:]:
-				result += self.pyAST2XML(e)
-			result += u"</" + pyAST[0].replace("_", "-") + u">"
-		else:
-			result = u""
-			for e in pyAST:
-				result += self.pyAST2XML(e)
-		return result
-	@property
-	def result_xml(self):
 
-		return self.pyAST2XML(self.result)
 	def load(self):
 		lang = self.result[0][0][1] 	#plplus-language
 		self.last 	= self.result[1]
@@ -1670,69 +1620,45 @@ class plplus_class(object):
 		for vk,vv in self.block.vars.iteritems():
 			print vk,vv.type,vv.type_name
 
+class block_parser_class(pypeg_parser):
+	def __init__(self, plplus_text):
+		super(block_parser_class, self).__init__(plplus_text)
+		self.parse()
+		self.load()
+
+	def parse(self):
+		pyPEG.print_trace = False
+		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
+		def section():			return ignore(r'╒═+╕\n│ +'.decode('utf-8')) 		\
+									  ,re.compile(r'[A-Z]+') 						\
+									  ,ignore(r' *│'.decode('utf-8')) 			\
+									  ,ignore(r""".*?    	#любое кол-во символов и не жадный символ
+									  			  ((?=└─) 	#либо лукахед окончания секции 
+									  			  |	
+									  			  $			#либо конец строки, для незавершенной секции
+									  			  )""".decode('utf-8'),re.S | re.X) 	\
+									  ,0,ignore(r'└─+┘\n'.decode('utf-8'))
+		def plplus_language():  return -2,section
+		self.result = parseLine(self.plplus_text,plplus_language,[],True,comment)
+		return self.result
+
+	def load(self):
+		lang = self.result[0][0].what 	#plplus-language
+		self.sections = [s.what[0] for s in lang]
+	@property
+	def last_section(self):
+		return self.sections[len(self.sections)-1]
+
 
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
-		
-		plplus_text = """
-			a integer;
-			b varchar2(2000);
-			c varchar2;
-			acc_ref ref [AC_FIN];
-			n number;
-		begin
-			null;
-			acc_ref := 'hello';
-			n := 10.1;
-			acc_ref := ::[AC_FIN]([CODE] = '001'
-								or [FILIAL] > '002'
-								and [BRANCH] is null
-								or [BRANCH] = ::[BRANCHES]([CODE] = '001'));
-		end;
-		"""
-		plplus_text = """
-		begin
-			-- Установка значения реквизита "Код"
-			[CODE] := P_CODE;
-			
-			acc_ref := ::[RKO]([CODE] = 1 and [FILIAL].[CODE] = '001');
-
-			[DATE_CREATE] := sysdate;
-			-- Установка значения реквизита "Дата"
-			[DATE_REESTR] := P_DATE_REESTR;
-			-- Установка значения реквизита "Платежная система"
-			[EXT_SYS] := P_EXT_SYS;
-			-- Установка значения реквизита "Сводный документ"
-			[SVOD_DOC] := P_SVOD_DOC;
-			-- Установка значения реквизита "Валюта"
-			[VAL] := P_VAL;
-			-- Установка значения реквизита "Сумма в валюте"
-			[SUMMA] := P_SUMMA;
-			-- Установка значения реквизита "Сумма в нац. покрытии"
-			[SUMMA_NT] := P_SUMMA_NT;
-			-- Установка значения реквизита "Кол-во документов"
-			[DOCS_COUNT] := P_DOCS_COUNT;
-			-- Установка значения реквизита "Интегратор. Входящее сообщение"
-			[MSG_IN] := P_MSG_IN;
-		end;
-		"""
-
 		view = dataView.active()
-		#plplus_text = view.sections["EXECUTE"].text
-		plplus_text = view.text
-		#print view.text
-		#t = timer()
-		plplus = plplus_class(plplus_text)
-		#print view.encoding()
-		plplus.parse()
-
-		print plplus.result_xml
-		#t.print_time("parsing")
-
-		#print plplus_text
+		plplus_text = view.text[:view.caret_position]
+		#print "caret",plplus_text
 		#plplus = plplus_class(plplus_text)
-		#plplus.parse()
-		#print pyAST2XML(plplus.result)
+		plplus = block_parser_class(plplus_text).last_section
+		print plplus
+		#print plplus.result_xml
 
 #Класс для обработки событий
 #например события открытия выпадающего списка
