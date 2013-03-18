@@ -1509,36 +1509,63 @@ class dataView(object):
 		return from_str[begin:end].strip()
 		#class_name = row_text[row_text.rfind("::[")+3:len(row_text)-2]
 
-class pypeg_parser(object):
-	def __init__(self, plplus_text):
-		super(pypeg_parser, self).__init__()
-		self.plplus_text = plplus_text
-	def pyAST2XML(self,text):
-		pyAST = text
-		if isinstance(pyAST, unicode) or isinstance(pyAST, str):
-			return escape(pyAST)
-		if type(pyAST) is Symbol:
-			result = u"<" + pyAST[0].replace("_", "-") + u">"
-			for e in pyAST[1:]:
-				result += self.pyAST2XML(e)
-			result += u"</" + pyAST[0].replace("_", "-") + u">"
-		else:
-			result = u""
-			for e in pyAST:
-				result += self.pyAST2XML(e)
-		return result
-	@property
-	def result_xml(self):
+# class pypeg_parser(object):
+# 	def __init__(self, plplus_text):
+# 		super(pypeg_parser, self).__init__()
+# 		self.plplus_text = plplus_text
+# 	def pyAST2XML(self,text):
+# 		pyAST = text
+# 		if isinstance(pyAST, unicode) or isinstance(pyAST, str):
+# 			return escape(pyAST)
+# 		if type(pyAST) is Symbol:
+# 			result = u"<" + pyAST[0].replace("_", "-") + u">"
+# 			for e in pyAST[1:]:
+# 				result += self.pyAST2XML(e)
+# 			result += u"</" + pyAST[0].replace("_", "-") + u">"
+# 		else:
+# 			result = u""
+# 			for e in pyAST:
+# 				result += self.pyAST2XML(e)
+# 		return result
+# 	@property
+# 	def result_xml(self):
 
-		return self.pyAST2XML(self.result)
+# 		return self.pyAST2XML(self.result)
 
-class plplus_class(pypeg_parser):
+class plplus_class(object):
+	# class variable_class(object):
+	# 	def __init__(self,var_define):
+	# 		var_def 		= var_define[1]
+	# 		self.name 		= var_def[0][1]		#name of var
+	# 		self.type 		= var_def[1][0]		#базовый либо цфт тип
+	# 		self.type_name 	= var_def[1][1][0]	#имя типа
 	class variable_class(object):
-		def __init__(self,var_define):
-			var_def 		= var_define[1]
-			self.name 		= var_def[0][1]		#name of var
-			self.type 		= var_def[1][0]		#базовый либо цфт тип
-			self.type_name 	= var_def[1][1][0]	#имя типа
+		def __init__(self,var_define_symbol):
+			s = var_define_symbol
+			if s.__name__ != 'var_define':
+				raise Exception ("Переменная должна быть символом var_define")
+
+			self.name = s()[0]() # [1] или what или () синонимы
+			self.kind = s.what[1].what[0].__name__
+			if self.kind == 'cft':
+				self.type = s.what[1].what[0].what[0]
+			else:
+				self.type = s.what[1].what[0].what
+		def __unicode__(self):
+
+			return u'Variable(%s,%s,%s)'%(self.name,self.kind,self.type)
+		def __repr__(self):
+
+			return unicode(self)
+	class section(object):
+		def __init__(self,section_defenation):
+			s = section_defenation
+			#s[0] == "uncomplite_block_section"
+			self.name = s.what[0]
+			if s.what[1].what.__class__ == list:
+				self.text = ""
+			else:
+				self.text = s.what[1].what
 	class block_class(object):
 		def __init__(self,block_define):			
 			self.vars = dict()
@@ -1549,11 +1576,15 @@ class plplus_class(pypeg_parser):
 
 
 	def __init__(self, plplus_text):
-		super(plplus_class, self).__init__(plplus_text)
+		#super(plplus_class, self).__init__(plplus_text)
+		self.plplus_text = plplus_text
 		#self.plplus_text = plplus_text
-	def parse(self):
+		# self.parse()
+		# self.load()
 
-		pyPEG.print_trace = True
+	def parse(self,start = None):
+
+		pyPEG.print_trace = False
 
 		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
 		def symbol():           return re.compile(r"\w+")
@@ -1608,10 +1639,45 @@ class plplus_class(pypeg_parser):
 		def section():			return header,block,ignore(r'└─+┘\n'.decode('utf-8'))
 		#def plplus_language():  return -2,block
 		def plplus_language():  return -2,section
+		########################
+		#2 поиск текущего редактируемого блока
+		def blocks_text():		return re.compile(r".*?((?=└─)|$)".decode('utf-8'),re.S)
+		def blocks_section():	return ignore(r'╒═+╕\n│ +'.decode('utf-8')),re.compile(r'[A-Z]+') 	\
+									  ,ignore(r' *│'.decode('utf-8')) ,blocks_text,0,ignore(r'└─+┘\n'.decode('utf-8'))
+		def blocks(): 			return -2,blocks_section
+		########################
+		#3 для сексии exec поиск только переменных
+		def exec_block():   return -1,var_define,0,(keyword("begin"),-1,ignore(r".*?;",re.S),0,keyword("end"))
+		
+		start_lambda = plplus_language
+		if start:
+			if start == "blocks":
+				#print "blocks"
+				self.result = parseLine(self.plplus_text,blocks,[],True,comment)
+				#load
+				lang = self.result[0][0].what 	#plplus-language
+				self.sections = dict([(s.what[0],plplus_class.section(s)) for s in lang])
+				#print len(self.sections)
 
-		self.result = parseLine(self.plplus_text,plplus_language,[],True,comment)
-		#self.load()
-		return self.result
+				k,self.last_section = self.sections.items()[len(self.sections.items())-1]
+				#print "last",self.last_section
+			elif start == "exec_block":
+				self.result = parseLine(self.plplus_text,exec_block,[],True,comment)
+				lang = self.result[0][0].what 	#plplus-language
+				self.variables = dict()
+				for s in lang:
+					v = exec_parser_class.variable(s) 
+					self.variables[v.name] = v
+		else:
+			self.result = parseLine(self.plplus_text,plplus_language,[],True,comment)
+		
+		return self
+
+	def blocks_parser(self):
+		return self.parse("blocks")
+
+	def exec_block_parser(self):
+		return self.parse("exec_block")
 
 	def load(self):
 		lang = self.result[0][0][1] 	#plplus-language
@@ -1619,101 +1685,38 @@ class plplus_class(pypeg_parser):
 		self.block 	= plplus_class.block_class(lang[0][1])
 		for vk,vv in self.block.vars.iteritems():
 			print vk,vv.type,vv.type_name
-
-class exec_parser_class(pypeg_parser):
-	class variable(object):
-		#def __init__(self,name,kind,type):
-		def __init__(self,var_define_symbol):
-			s = var_define_symbol
-			if s.__name__ != 'var_define':
-				raise Exception ("Переменная должна быть символом var_define")
-
-			self.name = s()[0]()
-			self.kind = s.what[1].what[0].__name__
-			if self.kind == 'cft':
-				self.type = s.what[1].what[0].what[0]
-			else:
-				self.type = s.what[1].what[0].what
-		def __unicode__(self):
-			return u'Variable(%s,%s,%s)'%(self.name,self.kind,self.type)
-		def __repr__(self):
-			return unicode(self)
-
-
-	def __init__(self, plplus_text):
-		super(exec_parser_class, self).__init__(plplus_text)
-		self.parse()
-		self.load()
-
-	def parse(self):
-		pyPEG.print_trace = False
-		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
-		def symbol():           return re.compile(r"\w+")
-		#def statement():		return ignore(r".*?;",re.S)
-		
-		def base():				return re.compile(r"integer|date|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
-		def cft():				return 0,"ref","[",re.compile(r"\w+"),"]"
-		def datatype():			return [base,cft]
-		def var_define():		return symbol,datatype,";"
-
-		def plplus_language():  return -1,var_define,0,(keyword("begin"),-1,ignore(r".*?;",re.S),0,keyword("end"))
-		self.result = parseLine(self.plplus_text,plplus_language,[],True,comment)
-		return self.result
-
-	def load(self):
-		lang = self.result[0][0].what 	#plplus-language
-		self.variables = dict()
-		for s in lang:
-			v = exec_parser_class.variable(s) 
-			self.variables[v.name] = v
-
-class block_parser_class(pypeg_parser):
-	class section(object):
-		def __init__(self,name,text):
-			self.name = name
-			self.text = text
-
-	def __init__(self, plplus_text):
-		super(block_parser_class, self).__init__(plplus_text)
-		self.parse()
-		self.load()
-
-	def parse(self):
-		pyPEG.print_trace = False
-		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
-		def text():				return re.compile(r".*?((?=└─)|$)".decode('utf-8'),re.S)
-		def section():			return ignore(r'╒═+╕\n│ +'.decode('utf-8')) 				\
-									  ,re.compile(r'[A-Z]+') 								\
-									  ,ignore(r' *│'.decode('utf-8')) 						\
-									  ,text 												\
-									  ,0,ignore(r'└─+┘\n'.decode('utf-8'))
-		def plplus_language():  return -2,section
-		self.result = parseLine(self.plplus_text,plplus_language,[],True,comment)
-		return self.result
-
-	def load(self):
-		lang = self.result[0][0].what 	#plplus-language
-		#print self.result_xml
-		self.sections = [block_parser_class.section(s.what[0],s.what[1].what) for s in lang]
-
+	def pyAST2XML(self,text):
+		pyAST = text
+		if isinstance(pyAST, unicode) or isinstance(pyAST, str):
+			return escape(pyAST)
+		if type(pyAST) is Symbol:
+			result = u"<" + pyAST[0].replace("_", "-") + u">"
+			for e in pyAST[1:]:
+				result += self.pyAST2XML(e)
+			result += u"</" + pyAST[0].replace("_", "-") + u">"
+		else:
+			result = u""
+			for e in pyAST:
+				result += self.pyAST2XML(e)
+		return result
 	@property
-	def last_section(self):
-		return self.sections[len(self.sections)-1]
+	def result_xml(self):
+
+		return self.pyAST2XML(self.result)
+
 
 
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		view = dataView.active()
 		plplus_text = view.text[:view.caret_position]
-		#print "caret",plplus_text
-		#plplus = plplus_class(plplus_text)
-		plplus = block_parser_class(plplus_text).last_section
-		plplus = exec_parser_class(plplus.text)
-		print plplus.result_xml
-		plplus = plplus.variables
-		print plplus
-		#print plplus.text
-		#print plplus.result_xml
+		blocks_parser = plplus_class(plplus_text).blocks_parser()
+		#print "EXECUTE.TEXT=",blocks_parser.sections["EXECUTE"].text
+		exec_block = plplus_class(blocks_parser.sections["EXECUTE"].text).exec_block_parser()
+
+		print exec_block.variables
+
+
 
 #Класс для обработки событий
 #например события открытия выпадающего списка
@@ -1753,7 +1756,8 @@ class el(sublime_plugin.EventListener):
 		
 		a = []
 		last_text = view.until_caret_row_text
-		last_section = block_parser_class(view.text[:locations[0]]).last_section
+		last_section = plplus_class(view.text[:locations[0]]).blocks_parser().last_section
+		#print last_section
 		#print last_text
 		if not hasattr(db,"classes"):
 			a = [(u"нет подключения к базе",u"text_to_paste")]
