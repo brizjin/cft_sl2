@@ -1562,7 +1562,7 @@ class plplus_class(pypeg_parser):
 		def string():			return "'",re.compile(r"(.+?)(?=')"),"'"
 		def number():			return re.compile(r"\d+(\.\d+)?")
 		#def string():			return re.compile(r"\'.*\'")
-		def basetype():			return re.compile(r"integer|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
+		def basetype():			return re.compile(r"integer|date|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
 		def cfttype():			return 0,"ref",0,"::","[",re.compile(r"\w+"),"]"
 		def datatype():			return [basetype,cfttype]
 		#def null():				return "null"
@@ -1620,7 +1620,59 @@ class plplus_class(pypeg_parser):
 		for vk,vv in self.block.vars.iteritems():
 			print vk,vv.type,vv.type_name
 
+class exec_parser_class(pypeg_parser):
+	class variable(object):
+		#def __init__(self,name,kind,type):
+		def __init__(self,var_define_symbol):
+			s = var_define_symbol
+			if s.__name__ != 'var_define':
+				raise Exception ("Переменная должна быть символом var_define")
+
+			self.name = s()[0]()
+			self.kind = s.what[1].what[0].__name__
+			if self.kind == 'cft':
+				self.type = s.what[1].what[0].what[0]
+			else:
+				self.type = s.what[1].what[0].what
+		def __unicode__(self):
+			return u'Variable(%s,%s,%s)'%(self.name,self.kind,self.type)
+		def __repr__(self):
+			return unicode(self)
+
+
+	def __init__(self, plplus_text):
+		super(exec_parser_class, self).__init__(plplus_text)
+		self.parse()
+		self.load()
+
+	def parse(self):
+		pyPEG.print_trace = False
+		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
+		def symbol():           return re.compile(r"\w+")
+		#def statement():		return ignore(r".*?;",re.S)
+		
+		def base():				return re.compile(r"integer|date|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
+		def cft():				return 0,"ref","[",re.compile(r"\w+"),"]"
+		def datatype():			return [base,cft]
+		def var_define():		return symbol,datatype,";"
+
+		def plplus_language():  return -1,var_define,0,(keyword("begin"),-1,ignore(r".*?;",re.S),0,keyword("end"))
+		self.result = parseLine(self.plplus_text,plplus_language,[],True,comment)
+		return self.result
+
+	def load(self):
+		lang = self.result[0][0].what 	#plplus-language
+		self.variables = dict()
+		for s in lang:
+			v = exec_parser_class.variable(s) 
+			self.variables[v.name] = v
+
 class block_parser_class(pypeg_parser):
+	class section(object):
+		def __init__(self,name,text):
+			self.name = name
+			self.text = text
+
 	def __init__(self, plplus_text):
 		super(block_parser_class, self).__init__(plplus_text)
 		self.parse()
@@ -1629,14 +1681,11 @@ class block_parser_class(pypeg_parser):
 	def parse(self):
 		pyPEG.print_trace = False
 		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
-		def section():			return ignore(r'╒═+╕\n│ +'.decode('utf-8')) 		\
-									  ,re.compile(r'[A-Z]+') 						\
-									  ,ignore(r' *│'.decode('utf-8')) 			\
-									  ,ignore(r""".*?    	#любое кол-во символов и не жадный символ
-									  			  ((?=└─) 	#либо лукахед окончания секции 
-									  			  |	
-									  			  $			#либо конец строки, для незавершенной секции
-									  			  )""".decode('utf-8'),re.S | re.X) 	\
+		def text():				return re.compile(r".*?((?=└─)|$)".decode('utf-8'),re.S)
+		def section():			return ignore(r'╒═+╕\n│ +'.decode('utf-8')) 				\
+									  ,re.compile(r'[A-Z]+') 								\
+									  ,ignore(r' *│'.decode('utf-8')) 						\
+									  ,text 												\
 									  ,0,ignore(r'└─+┘\n'.decode('utf-8'))
 		def plplus_language():  return -2,section
 		self.result = parseLine(self.plplus_text,plplus_language,[],True,comment)
@@ -1644,7 +1693,9 @@ class block_parser_class(pypeg_parser):
 
 	def load(self):
 		lang = self.result[0][0].what 	#plplus-language
-		self.sections = [s.what[0] for s in lang]
+		#print self.result_xml
+		self.sections = [block_parser_class.section(s.what[0],s.what[1].what) for s in lang]
+
 	@property
 	def last_section(self):
 		return self.sections[len(self.sections)-1]
@@ -1657,7 +1708,11 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		#print "caret",plplus_text
 		#plplus = plplus_class(plplus_text)
 		plplus = block_parser_class(plplus_text).last_section
+		plplus = exec_parser_class(plplus.text)
+		print plplus.result_xml
+		plplus = plplus.variables
 		print plplus
+		#print plplus.text
 		#print plplus.result_xml
 
 #Класс для обработки событий
@@ -1689,14 +1744,17 @@ class el(sublime_plugin.EventListener):
 			if last_text[-2:] == '::' or last_text[-2:] == "]("	or last_text[-1:] == '.' or last_text[-4:] == "and ":
 				view.run_command('my_auto_complete',{})
 	def on_query_completions(self,view,prefix,locations):
-		#return
+		print "ON_QUERY_COMPLETIONS"
 		#print "1:%s,2:%s,3:%s,4:%s" % (self,view,prefix,locations)
+
 		view = dataView(view)
 		#completion_flags = sublime.INHIBIT_WORD_COMPLETIONS #Только то что в списке
 		completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS | sublime.INHIBIT_WORD_COMPLETIONS #Список и автоподсказки
 		
 		a = []
 		last_text = view.until_caret_row_text
+		last_section = block_parser_class(view.text[:locations[0]]).last_section
+		#print last_text
 		if not hasattr(db,"classes"):
 			a = [(u"нет подключения к базе",u"text_to_paste")]
 			completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS | sublime.INHIBIT_WORD_COMPLETIONS #Список и автоподсказки
@@ -1745,20 +1803,31 @@ class el(sublime_plugin.EventListener):
 						is_class = True
 						#print current_class			
 				else:
-					plplus_text = view.until_caret_text[:-1]
-					plplus = plplus_class(plplus_text)
-					plplus.parse()
+					# plplus_text = view.until_caret_text[:-1]
+					# plplus = plplus_class(plplus_text)
+					# plplus.parse()
 
-					if plplus.block.vars.has_key(name):
-						v = plplus.block.vars[name]
-						if v.type == "cfttype":
-							current_class = db[v.type_name]
-							is_class = False
+					variables = exec_parser_class(last_section.text).variables
 
-			if is_class:
-				a = current_class.autocomplete
-			else:
-				a = current_class.attrs.autocomplete
+					# if plplus.block.vars.has_key(name):
+					# 	v = plplus.block.vars[name]
+					# 	if v.type == "cfttype":
+					# 		current_class = db[v.type_name]
+					# 		is_class = False
+
+					if name in variables:
+						v = variables[name]
+						if v.kind == "cft":
+							current_class = db[v.type]
+					if name == "this":
+						current_class = view.data.class_ref
+
+					is_class = True
+			if current_class:
+				if is_class:				
+					a = current_class.autocomplete
+				else:
+					a = current_class.attrs.autocomplete
 
 			# if not a:#Если автокомплит еще не заполнен
 			# 		 #попытаемся заполнить его парсером plplus
@@ -1777,6 +1846,12 @@ class el(sublime_plugin.EventListener):
 			t.print_time("DOT")
 		elif last_text[-2:] == "::": #Вводим класс
 			a = db.classes.autocomplete
+		elif last_section.name == 'EXECUTE':
+			#print "EXECUTE"
+			#for v in exec_parser_class(last_section.text).variables:
+			#	print v
+			a = [("E %s\t%s"%(v.name,v.type),""+v.name) for vk,v in exec_parser_class(last_section.text).variables.iteritems()]
+			a.append(("E this\t%s"%view.data.class_ref.id,"this"))
 
 		#completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS | sublime.INHIBIT_WORD_COMPLETIONS
 		#completion_flags = sublime.INHIBIT_WORD_COMPLETIONS
@@ -1809,3 +1884,4 @@ class my_auto_completeCommand(sublime_plugin.TextCommand):
                 'next_completion_if_showing': False
             }
         )
+
