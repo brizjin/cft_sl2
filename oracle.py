@@ -1549,6 +1549,63 @@ class plplus_class(object):
 			for var in def_block:
 				v = plplus_class.variable_class(var)
 				self.vars[v.name] = v
+	class function_param_class(object):
+		def __init__(self,param_def):
+			#print "param_def",param_def
+			self.in_out_type = "in"
+			for attr in param_def():
+				if attr.__name__ == "param_name":
+					self.name = attr()
+				elif attr.__name__ == "param_type":
+					self.in_out_type = attr()
+				elif attr.__name__ == "datatype":
+					# self.kind = attr()[0].__name__
+					# if self.kind == "cfttype":
+					# 	self.type = attr()[0]()[0]
+					# else:
+					# 	self.type = attr()[0]()
+					self.datatype = plplus_class.datatype_class(attr)
+		def __unicode__(self):
+
+			return u'Param(%s,%s,%s)'%(self.name,self.in_out_type,self.datatype)
+		def __repr__(self):
+
+			return unicode(self)
+
+					#print "attr=",attr,"kind=",self.kind
+			#print "self=",self.name,self.in_out_type,self.kind,self.type
+	class datatype_class(object):
+		def __init__(self,datatype_def):
+			#print "data_type_def=",datatype_def
+			#attr = datatype_def()[0]
+			self.kind = datatype_def()[0].__name__
+			if self.kind == "cfttype":
+				self.type = datatype_def()[0]()[0]
+			else:
+				self.type = datatype_def()[0]()
+		def __unicode__(self):
+
+			return u'DataType(%s,%s)'%(self.kind,self.type)
+		def __repr__(self):
+
+			return unicode(self)
+
+	class function_class(object):
+		
+		def __init__(self,func_def):
+			#print "func=",func_def.what			
+			self.name = func_def.what[0].what
+			self.return_type = plplus_class.datatype_class(func_def.what[2]()[0]) #2 Это return_type
+			self.params = dict()
+			for p in func_def.what[1].what:
+				param = plplus_class.function_param_class(p)
+				self.params[param.name] = param
+		def __unicode__(self):
+
+			return u'Function(%s,%s)'%(self.name,self.params)
+		def __repr__(self):
+
+			return unicode(self)
 
 
 	def __init__(self, plplus_text):
@@ -1560,7 +1617,7 @@ class plplus_class(object):
 
 	def parse(self,start = None):
 
-		pyPEG.print_trace = True
+		pyPEG.print_trace = False
 
 		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
 		def symbol():           return re.compile(r"\w+")
@@ -1601,7 +1658,9 @@ class plplus_class(object):
 										return_statement,
 										pragma_statement,
 										cft_method_call],";"
-		def func_param():		return symbol,0,re.compile(r"in out|in|out"),datatype
+		def param_type():		return re.compile(r"in out|in|out")
+		def param_name():		return re.compile(r"\w+")
+		def func_param():		return param_name,0,param_type,datatype
 		def func_params():		return func_param,-1,(',',func_param)
 		def func_init():		return keyword('function'),symbol,"(",func_params,")",keyword('return'),datatype,keyword('is'),define_block,body_block
 		def func_def():			return keyword('function'),symbol,"(",func_params,")",keyword('return'),datatype,";"
@@ -1627,15 +1686,13 @@ class plplus_class(object):
 		########################
 		#4 для private
 		def private_pragma():				return keyword("pragma"),ignore(r".*?;")
-		def private_pass_st(): 				return re.compile(r"(?!declare)(?!begin)(?!function)(?!exception)(?!end;).*?;",re.S)
-		def private_plsql_block():			return 0,keyword('declare'),-1,private_pass_st,keyword("begin"),pass_content,0,private_exceptions_block,0,ignore(r"end;")
-		def private_exception_block():		return exception_when,pass_content
-		def private_exceptions_block():		return keyword("exception"),-2,private_exception_block
-		def pass_content():					return -2,[private_pass_st,private_plsql_block]
-		#def private_body_block():			return 
-		def private_func_init_vars_only():	return keyword('function'),symbol,"(",func_params,")",keyword('return'),datatype,keyword('is')	\
-												  ,-1,private_pass_st,keyword("begin"),pass_content,0,private_exceptions_block,0,keyword("end"),";"
+		#def any_text(): 					return re.compile(r"(?!begin)(?!end;).*?((?=begin)|(?=end;))",re.S)
+		def any_text(): 					return ignore(r"(?!begin)(?!end;).*?((?=begin)|(?=end;))",re.S)
+		def begin_block():					return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
+		def return_type():					return datatype
+		def private_func_init_vars_only():	return keyword('function'),symbol,"(",func_params,")",keyword('return'),return_type,keyword('is'),begin_block
 		def private_block(): 				return -1,[func_def,private_func_init_vars_only,var_define,private_pragma]
+		
 		
 		start_lambda = plplus_language
 		if start:
@@ -1651,6 +1708,18 @@ class plplus_class(object):
 				#print "last",self.last_section
 			if start == "private":
 				self.result = parseLine(self.plplus_text,private_block,[],True,comment)
+
+				lang = self.result[0][0].what
+				self.variables = dict()
+				self.funcs = dict()
+				for s in lang:
+					if s.__name__ == "var_define":
+						v = plplus_class.variable_class(s) 
+						self.variables[v.name] = v
+					elif s.__name__ == "private_func_init_vars_only":
+						v = plplus_class.function_class(s)
+						self.funcs[v.name] = v
+						#print "v=",v.__name__
 			elif start == "exec_block":
 				self.result = parseLine(self.plplus_text,exec_block,[],True,comment)
 				lang = self.result[0][0].what 	#plplus-language
@@ -1706,7 +1775,8 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		#exec_block = plplus_class(blocks_parser.sections["EXECUTE"].text).exec_block_parser()
 		private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
 
-		print private_parser.result_xml
+		#print private_parser.result_xml
+		#print "funcs=",private_parser.funcs
 
 
 
@@ -1799,17 +1869,8 @@ class el(sublime_plugin.EventListener):
 						is_class = True
 						#print current_class			
 				else:
-					# plplus_text = view.until_caret_text[:-1]
-					# plplus = plplus_class(plplus_text)
-					# plplus.parse()
-
-					variables = exec_parser_class(last_section.text).variables
-
-					# if plplus.block.vars.has_key(name):
-					# 	v = plplus.block.vars[name]
-					# 	if v.type == "cfttype":
-					# 		current_class = db[v.type_name]
-					# 		is_class = False
+					variables = plplus_class(last_section.text).exec_block_parser().variables
+					#variables = exec_parser_class(last_section.text).variables
 
 					if name in variables:
 						v = variables[name]
@@ -1846,8 +1907,23 @@ class el(sublime_plugin.EventListener):
 			#print "EXECUTE"
 			#for v in exec_parser_class(last_section.text).variables:
 			#	print v
-			a = [("E %s\t%s"%(v.name,v.type),""+v.name) for vk,v in exec_parser_class(last_section.text).variables.iteritems()]
+
+			#переменные из секции EXECUTE
+			a = [("E %s\t%s"%(v.name,v.type),""+v.name) for vk,v in plplus_class(last_section.text).exec_block_parser().variables.iteritems()]
+			#переменная THIS
 			a.append(("E this\t%s"%view.data.class_ref.id,"this"))
+			#Локальные объявления, функции и переменные
+			blocks_parser = plplus_class(view.text).blocks_parser()
+			private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
+			for fk,f in private_parser.funcs.iteritems():
+				params_snippet = "\n\t "
+				for i,(pk,p) in enumerate(f.params.iteritems()):
+					params_snippet += "%-15s --%-2s %s\n\t,"%(p.name,i,p.datatype.type)
+				params_snippet = params_snippet.rstrip("\t,")
+				a.append(("L %s()\t%s"%(f.name,f.return_type.type),"%s(%s);"%(f.name,params_snippet)))
+
+			for vk,v in private_parser.variables.iteritems():
+				a.append(("L %s\t%s"%(v.name,v.type),v.name))
 
 		#completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS | sublime.INHIBIT_WORD_COMPLETIONS
 		#completion_flags = sublime.INHIBIT_WORD_COMPLETIONS
