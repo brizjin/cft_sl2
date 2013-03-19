@@ -730,65 +730,49 @@ class cftDB(object):
 			p = cftDB.param_row(self.db,attrs)
 			self.params[p.position] = p
 			return p
-		def get_sources(self):
-			conn = self.db.pool.acquire()
-			cursor = conn.cursor()
-			
-			text_out = cursor.var(cx_Oracle.CLOB)
-			cursor.execute(self.db.fr.method_sources,(self.class_ref.id, self.short_name.upper(),text_out))
-			#value = unicode(text_out.getvalue().read(),'1251')
-			value = text_out.getvalue().read().decode('utf-8') + '└┘┌┐'.decode('utf-8')
-			
-			self.db.pool.release(conn)
-
-			return value
-		def get_section(self,section_name):
-			conn = self.db.pool.acquire()
-			cursor = conn.cursor()
-			
-			text_out = cursor.var(cx_Oracle.CLOB)
-			sql = "begin :c :=  method.get_source(:method_id,:section); end;"
-			cursor.execute(sql,(text_out,self.id,section_name))
-			#value = unicode(text_out.getvalue().read(),'1251')
-			value = text_out.getvalue()			
-			
-			#value = text_out.getvalue().read()
-			if value:
-				value = value.read().decode('1251')
-				print "len=",len(value)
-			else:
-				value = ''
 		
-			self.db.pool.release(conn)
-			return value
-		def get_section_with_header(self,section_name):
-			#value = '┌────────────────────────────────────────────────┐\n'.decode('utf-8')
-			value  ='╒══════════════════════════════════════════════════════════════════════════════╕\n'.decode('utf-8')
-			value +='│ '.decode('utf-8') + '%-10s' % section_name + '                                                                   │\n'.decode('utf-8')
-			#value +='├──────────────────────────────────────────────────────────────────────────────┤\n'.decode('utf-8')
+		def get_sources(self):
+			def get_section_with_header(section_name,text):
+				value  ='╒══════════════════════════════════════════════════════════════════════════════╕\n'.decode('utf-8')
+				value +='│ '.decode('utf-8') + '%-10s' % section_name + '                                                                   │\n'.decode('utf-8')
+				#value +='├──────────────────────────────────────────────────────────────────────────────┤\n'.decode('utf-8')
+				value += re.sub(r'\n',r'\n\t','\t' + text).rstrip('\t')
+				value +='└──────────────────────────────────────────────────────────────────────────────┘\n'.decode('utf-8')
+				return value
+			def read_clob(clob_val):
+				clob_val = clob_val.getvalue()
+				if clob_val:
+					clob_val = clob_val.read().decode('1251')
+				else:
+					clob_val = ""
+				return clob_val
 
-			value += re.sub(r'\n',r'\n\t','\t' + self.get_section(section_name)).rstrip('\t')
-			value +='└──────────────────────────────────────────────────────────────────────────────┘\n'.decode('utf-8')
-			return value
-		def get_sources2(self):
+			conn = self.db.pool.acquire()
+			cursor = conn.cursor()
 			
+			execute  = cursor.var(cx_Oracle.CLOB)
+			validate = cursor.var(cx_Oracle.CLOB)
+			public   = cursor.var(cx_Oracle.CLOB)
+			private  = cursor.var(cx_Oracle.CLOB)
+			vbscript = cursor.var(cx_Oracle.CLOB)
 
-			value  = self.get_section_with_header("EXECUTE")
-			value += self.get_section_with_header("VALIDATE")
-			value += self.get_section_with_header("PUBLIC")
-			value += self.get_section_with_header("PRIVATE")
-			value += self.get_section_with_header("VBSCRIPT")
+			cursor.execute(self.db.fr.method_sources,(self.class_ref.id, self.short_name.upper(),execute,validate,public,private,vbscript))
+
+			self.execute = read_clob(execute)
+			self.validate = read_clob(validate)
+			self.public = read_clob(public)
+			self.private = read_clob(private)
+			self.vbscript = read_clob(vbscript)
+
+			value = ""
+			value += get_section_with_header('EXECUTE'  ,self.execute)
+			value += get_section_with_header('VALIDATE' ,self.validate)
+			value += get_section_with_header('PUBLIC'   ,self.public)
+			value += get_section_with_header('PRIVATE'  ,self.private)
+			value += get_section_with_header('VBSCRIPT' ,self.vbscript)
+			self.db.pool.release(conn)
 
 			return value
-
-		def get_sources_with_no_pool(self):
-			t=timer()
-			text_out = self.db.cursor.var(cx_Oracle.CLOB)
-			self.db.cursor.execute(self.db.fr.method_sources,(self.class_ref.id, self.short_name.upper(),text_out))
-			value = unicode(text_out.getvalue().read(),'1251')
-			t.print_time("get_source")
-			return value
-
 
 		def set_sources(self,value):
 			#print "set_sources_method",value
@@ -1228,7 +1212,7 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 				
 				
 				#text = obj.get_sources()
-				text = obj.get_sources2()
+				text = obj.get_sources()
 				#print "text",text
 
 				write(text)
@@ -1806,12 +1790,14 @@ class el(sublime_plugin.EventListener):
 			# row_num,col_num = view.rowcol(cursor_position)
 			# start_row_position = view.text_point(row_num,0)
 			# last_simbol = view.substr(sublime.Region(cursor_position-1,cursor_position))
-
 			#print "modified",last_simbol
 			last_text = view.until_caret_row_text
 			if last_text[-2:] == '::' or last_text[-2:] == "]("	or last_text[-1:] == '.' or last_text[-4:] == "and ":
 				view.run_command('my_auto_complete',{})
 	def on_query_completions(self,view,prefix,locations):
+		
+		if view.match_selector(locations[0], 'source.python'):
+			return []
 		print "ON_QUERY_COMPLETIONS"
 		#print "1:%s,2:%s,3:%s,4:%s" % (self,view,prefix,locations)
 
