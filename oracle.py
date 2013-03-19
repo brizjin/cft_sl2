@@ -1508,30 +1508,6 @@ class dataView(object):
 		end 	 = from_str.rfind(end_str)#-len(end_str)
 		return from_str[begin:end].strip()
 		#class_name = row_text[row_text.rfind("::[")+3:len(row_text)-2]
-
-# class pypeg_parser(object):
-# 	def __init__(self, plplus_text):
-# 		super(pypeg_parser, self).__init__()
-# 		self.plplus_text = plplus_text
-# 	def pyAST2XML(self,text):
-# 		pyAST = text
-# 		if isinstance(pyAST, unicode) or isinstance(pyAST, str):
-# 			return escape(pyAST)
-# 		if type(pyAST) is Symbol:
-# 			result = u"<" + pyAST[0].replace("_", "-") + u">"
-# 			for e in pyAST[1:]:
-# 				result += self.pyAST2XML(e)
-# 			result += u"</" + pyAST[0].replace("_", "-") + u">"
-# 		else:
-# 			result = u""
-# 			for e in pyAST:
-# 				result += self.pyAST2XML(e)
-# 		return result
-# 	@property
-# 	def result_xml(self):
-
-# 		return self.pyAST2XML(self.result)
-
 class plplus_class(object):
 	# class variable_class(object):
 	# 	def __init__(self,var_define):
@@ -1650,12 +1626,13 @@ class plplus_class(object):
 		def exec_block():   	return -1,var_define,0,(keyword("begin"),-1,ignore(r".*?;",re.S),0,keyword("end"))
 		########################
 		#4 для private
-		def undefined_statement(): 	return ignore(r".*?(?!end;);",re.S)
-		def plsql_block():			return 0,keyword('declare'),keyword('begin'),-1,undefined_statement,ignore(r"end;")		
-		def func_init_vars_only():	return keyword('function'),symbol,"(",func_params,")" 	\
-				,keyword('return'),datatype,keyword('is')									\
-				,0,define_block,-1,[plsql_block,undefined_statement],ignore(r"end;")
-		def private_block(): 		return -1,([func_def,func_init_vars_only,var_define])
+		def private_pass_st(): 				return re.compile(r"(?!begin)(?!function).*?(?<!end);",re.S)
+		def private_plsql_block():			return 0,keyword('declare'),private_body_block	
+		def private_body_block():			return -1,private_pass_st,keyword("begin"),-1,[private_pass_st,private_plsql_block],ignore(r"end;")
+		def private_func_init_vars_only():	return keyword('function'),symbol,"(",func_params,")" 	\
+												  ,keyword('return'),datatype,keyword('is')			\
+												  ,private_body_block
+		def private_block(): 				return -1,([func_def,private_func_init_vars_only,var_define])
 		
 		start_lambda = plplus_language
 		if start:
@@ -1716,9 +1693,6 @@ class plplus_class(object):
 	def result_xml(self):
 
 		return self.pyAST2XML(self.result)
-
-
-
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		view = dataView.active()
