@@ -1601,12 +1601,12 @@ class plplus_class(object):
 										return_statement,
 										pragma_statement,
 										cft_method_call],";"
-		def func_param():		return symbol,datatype
+		def func_param():		return symbol,0,re.compile(r"in out|in|out"),datatype
 		def func_params():		return func_param,-1,(',',func_param)
 		def func_init():		return keyword('function'),symbol,"(",func_params,")",keyword('return'),datatype,keyword('is'),define_block,body_block
 		def func_def():			return keyword('function'),symbol,"(",func_params,")",keyword('return'),datatype,";"
 		def define_block():		return -2,[var_define,func_def,func_init,pragma_statement]
-		def exception_when():	return keyword("when"),re.compile(r"others|no_data_found|too_many_rows"),keyword("then")#
+		def exception_when():	return keyword("when"),re.compile(r"(?i)others|no_data_found|too_many_rows"),keyword("then")#
 		def exception_block():	return exception_when,-2,statement
 		def exceptions_block():	return keyword("exception"),-2,exception_block
 		def body_block():		return keyword("begin"),-2,statement,0,exceptions_block,keyword("end"),";"
@@ -1626,13 +1626,16 @@ class plplus_class(object):
 		def exec_block():   	return -1,var_define,0,(keyword("begin"),-1,ignore(r".*?;",re.S),0,keyword("end"))
 		########################
 		#4 для private
-		def private_pass_st(): 				return re.compile(r"(?!begin)(?!function).*?(?<!end);",re.S)
-		def private_plsql_block():			return 0,keyword('declare'),private_body_block	
-		def private_body_block():			return -1,private_pass_st,keyword("begin"),-1,[private_pass_st,private_plsql_block],ignore(r"end;")
-		def private_func_init_vars_only():	return keyword('function'),symbol,"(",func_params,")" 	\
-												  ,keyword('return'),datatype,keyword('is')			\
-												  ,private_body_block
-		def private_block(): 				return -1,([func_def,private_func_init_vars_only,var_define])
+		def private_pragma():				return keyword("pragma"),ignore(r".*?;")
+		def private_pass_st(): 				return re.compile(r"(?!declare)(?!begin)(?!function)(?!exception)(?!end;).*?;",re.S)
+		def private_plsql_block():			return 0,keyword('declare'),-1,private_pass_st,keyword("begin"),pass_content,0,private_exceptions_block,0,ignore(r"end;")
+		def private_exception_block():		return exception_when,pass_content
+		def private_exceptions_block():		return keyword("exception"),-2,private_exception_block
+		def pass_content():					return -2,[private_pass_st,private_plsql_block]
+		#def private_body_block():			return 
+		def private_func_init_vars_only():	return keyword('function'),symbol,"(",func_params,")",keyword('return'),datatype,keyword('is')	\
+												  ,-1,private_pass_st,keyword("begin"),pass_content,0,private_exceptions_block,0,keyword("end"),";"
+		def private_block(): 				return -1,[func_def,private_func_init_vars_only,var_define,private_pragma]
 		
 		start_lambda = plplus_language
 		if start:
