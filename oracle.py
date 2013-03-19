@@ -734,10 +734,10 @@ class cftDB(object):
 			conn = self.db.pool.acquire()
 			cursor = conn.cursor()
 			
-			text_out = cursor.var(cx_Oracle.LONG_STRING)
+			text_out = cursor.var(cx_Oracle.CLOB)
 			cursor.execute(self.db.fr.method_sources,(self.class_ref.id, self.short_name.upper(),text_out))
 			#value = unicode(text_out.getvalue().read(),'1251')
-			value = text_out.getvalue().decode('utf-8') + '└┘┌┐'.decode('utf-8')
+			value = text_out.getvalue().read().decode('utf-8') + '└┘┌┐'.decode('utf-8')
 			
 			self.db.pool.release(conn)
 
@@ -746,13 +746,16 @@ class cftDB(object):
 			conn = self.db.pool.acquire()
 			cursor = conn.cursor()
 			
-			text_out = cursor.var(cx_Oracle.LONG_STRING)
+			text_out = cursor.var(cx_Oracle.CLOB)
 			sql = "begin :c :=  method.get_source(:method_id,:section); end;"
 			cursor.execute(sql,(text_out,self.id,section_name))
 			#value = unicode(text_out.getvalue().read(),'1251')
-			value = text_out.getvalue()
+			value = text_out.getvalue()			
+			
+			#value = text_out.getvalue().read()
 			if value:
-				value = value.decode('1251')
+				value = value.read().decode('1251')
+				print "len=",len(value)
 			else:
 				value = ''
 		
