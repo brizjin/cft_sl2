@@ -1254,10 +1254,8 @@ class MarkErrors(sublime_plugin.TextCommand):
 			#view.sel().add(cur_sel)
 class save_methodCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
-		
 		#import cProfile
 		#self.profiler = cProfile.Profile()
-
 		if not db.is_connected():
 			db.on_classes_cache_loaded += lambda:sublime.set_timeout(self.save,0)
 			#db.on_classes_cache_loaded += lambda:self.profiler.runcall(lambda:sublime.set_timeout(self.save,0))
@@ -1265,34 +1263,21 @@ class save_methodCommand(sublime_plugin.TextCommand):
 		else:
 			self.save()
 			#self.profiler.runcall(self.save)
-
-
 	def save(self):
 		try:
-			
 			#profiler.runcall(self.save)
 			#profiler.print_stats()
 			self.t = timer()
-
-
 			view = dataView.active()#(sublime.active_window().active_view())
 			obj = view.data
 			sublime_src_text = view.text#view.substr(sublime.Region(0,view.size()))
 			db_src_text = obj.get_sources()
-
-			
-
 			#print sublime_src_text
 			if sublime_src_text != db_src_text:
 				obj.set_sources(view.text)
 			else:
 				print "Текст операции не изменился"
-
 			view.mark_errors()
-
-
-
-
 		except Exception,e:
 			print "*** Ошибка сохранения исходников:",e
 			if sys != None:
@@ -1577,7 +1562,7 @@ class plplus_class(object):
 
 	def parse(self,start = None):
 
-		pyPEG.print_trace = False
+		pyPEG.print_trace = True
 
 		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
 		def symbol():           return re.compile(r"\w+")
@@ -1588,7 +1573,8 @@ class plplus_class(object):
 		#def string():			return re.compile(r"\'.*\'")
 		def basetype():			return re.compile(r"integer|date|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
 		def cfttype():			return 0,"ref",0,"::","[",re.compile(r"\w+"),"]"
-		def datatype():			return [basetype,cfttype]
+		def macro_type():		return re.compile(r"[&a-zA-Z_.0-9]+")
+		def datatype():			return [basetype,cfttype,macro_type]
 		#def null():				return "null"
 		#def variable():			return symbol
 		def var_define():		return symbol,datatype,";"				
@@ -1685,7 +1671,7 @@ class plplus_class(object):
 				lang = self.result[0][0].what 	#plplus-language
 				self.variables = dict()
 				for s in lang:
-					v = exec_parser_class.variable(s) 
+					v = plplus_class.variable_class(s) 
 					self.variables[v.name] = v
 		else:
 			self.result = parseLine(self.plplus_text,plplus_language,[],True,comment)
@@ -1729,14 +1715,14 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		view = dataView.active()
 		#plplus_text = view.text[:view.caret_position]
-		#plplus_text = view.text
-		#blocks_parser = plplus_class(plplus_text).blocks_parser()
+		plplus_text = view.text
+		blocks_parser = plplus_class(plplus_text).blocks_parser()
 		#print "EXECUTE.TEXT=",blocks_parser.sections["EXECUTE"].text
 		#exec_block = plplus_class(blocks_parser.sections["EXECUTE"].text).exec_block_parser()
-		#private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
-		s = view.sections
-		print s["EXECUTE"].text
-		#print private_parser.result_xml
+		private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
+		#s = view.sections
+		#print s["EXECUTE"].text
+		print private_parser.result_xml
 		#print "funcs=",private_parser.funcs
 
 #Класс для обработки событий
