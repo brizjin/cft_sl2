@@ -16,7 +16,7 @@ declare
     loop
       out_clob := out_clob || r.text || chr(10);
     end loop;
-    return out_clob;
+    return ltrim(out_clob,chr(10));
   end;
   
   /*function cpad(text varchar2,n integer,c char)return varchar2
@@ -47,7 +47,7 @@ declare
 begin
   class_name := :class_name;
   method_name := :method_name;
-  :e := ltrim(get_part(class_name,method_name,'EXECUTE'),chr(10));
+  :e := get_part(class_name,method_name,'EXECUTE');
   :v := get_part(class_name,method_name,'VALIDATE');
   :g := get_part(class_name,method_name,'PUBLIC');
   :l := get_part(class_name,method_name,'PRIVATE');

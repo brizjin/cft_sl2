@@ -26,8 +26,9 @@ used_classes_file_path 	= os.path.join(plugin_path,"cache","cft_settings.json")
 
 TIMER_DEBUG = True
 
-beg_whites_regex = re.compile(r'^\s*') #ищем начало строки без пробелов
-end_whites_regex = re.compile(r'\s*$') #ищем конец строки без пробелов
+beg_whites_regex  = re.compile(r'^\s*') #ищем начало строки без пробелов
+end_whites_regex  = re.compile(r'\s*$') #ищем конец строки без пробелов
+sections_regex    = re.compile(r'╒═+╕\n│ ([A-Z]+) +│\n(.*?)\n?└─+┘\n'.decode('utf-8'),re.S) #поиск секций
 
 #import cftdb
 #from cftdb import call_async
@@ -730,13 +731,12 @@ class cftDB(object):
 			p = cftDB.param_row(self.db,attrs)
 			self.params[p.position] = p
 			return p
-		
 		def get_sources(self):
 			def get_section_with_header(section_name,text):
 				value  ='╒══════════════════════════════════════════════════════════════════════════════╕\n'.decode('utf-8')
 				value +='│ '.decode('utf-8') + '%-10s' % section_name + '                                                                   │\n'.decode('utf-8')
 				#value +='├──────────────────────────────────────────────────────────────────────────────┤\n'.decode('utf-8')
-				value += re.sub(r'\n',r'\n\t','\t' + text).rstrip('\t')
+				value += re.sub(r'\n',r'\n\t','\t' + text).rstrip('\t') #добавим служебный таб в начало каждой строки
 				value +='└──────────────────────────────────────────────────────────────────────────────┘\n'.decode('utf-8')
 				return value
 			def read_clob(clob_val):
@@ -758,10 +758,10 @@ class cftDB(object):
 
 			cursor.execute(self.db.fr.method_sources,(self.class_ref.id, self.short_name.upper(),execute,validate,public,private,vbscript))
 
-			self.execute = read_clob(execute)
+			self.execute  = read_clob(execute)
 			self.validate = read_clob(validate)
-			self.public = read_clob(public)
-			self.private = read_clob(private)
+			self.public   = read_clob(public)
+			self.private  = read_clob(private)
 			self.vbscript = read_clob(vbscript)
 
 			value = ""
@@ -773,17 +773,39 @@ class cftDB(object):
 			self.db.pool.release(conn)
 
 			return value
-
-		def set_sources(self,value):
-			#print "set_sources_method",value
+		def set_sources(self,text):
 			try:
+				sections_dict = dict()
+				for s in sections_regex.finditer(text):
+					text = re.sub(r'\n\t',r'\n',s.group(2)).lstrip('\t')	#Удалим служебный таб в начале каждой строки
+					text = re.sub(r' +$','',text,re.MULTILINE) 				#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
+					sections_dict[s.group(1)] = text
+
+				#print "VALIDATE='%s'"%sections_dict["VALIDATE"],len(sections_dict["VALIDATE"])
+
 				t = timer()
 				conn = self.db.pool.acquire()
 				cursor = conn.cursor()
-				cursor.setinputsizes(source_code=cx_Oracle.CLOB)
-				err_clob = cursor.var(cx_Oracle.CLOB)
-				err_num  = cursor.var(cx_Oracle.NUMBER)
-				cursor.execute(self.db.fr.save_method_sources,class_name=self.class_ref.id, method_name=self.short_name.upper(),source_code=value,out=err_clob,out_count=err_num)				
+				cursor.setinputsizes(
+					b=cx_Oracle.CLOB,
+					v=cx_Oracle.CLOB,
+					g=cx_Oracle.CLOB,
+					l=cx_Oracle.CLOB,
+					s=cx_Oracle.CLOB
+				)
+				err_clob,err_num = cursor.var(cx_Oracle.CLOB),cursor.var(cx_Oracle.NUMBER)
+				cursor.execute(
+					self.db.fr.save_method_sources,
+					class_name=self.class_ref.id,
+					method_name=self.short_name.upper(),
+					b=sections_dict["EXECUTE"],
+					v=sections_dict["VALIDATE"],
+					g=sections_dict["PUBLIC"],
+					l=sections_dict["PRIVATE"],
+					s=sections_dict["VBSCRIPT"],
+					out=err_clob,
+					out_count=err_num
+				)				
 				err_num = int(err_num.getvalue())
 		
 
@@ -802,51 +824,18 @@ class cftDB(object):
 				self.db.pool.release(conn)		
 			except Exception,e:
 				print "*** Ошибка выполнения method_row.set_sources:",e
+				error, = e
+				print error.code,error.message,error.context,error
 				if sys != None:
 					exc_type, exc_value, exc_traceback = sys.exc_info()
 					traceback.print_exception(exc_type, exc_value, exc_traceback,
-						                          limit=10, file=sys.stdout)
-		def set_sources_with_no_pool(self,value):
-			#print "set_sources_method",value
-			try:
-				t = timer()
-
-
-				self.db.cursor.setinputsizes(source_code=cx_Oracle.CLOB)
-				err_clob = self.db.cursor.var(cx_Oracle.CLOB)
-				err_num  = self.db.cursor.var(cx_Oracle.NUMBER)
-				self.db.cursor.execute(self.db.fr.save_method_sources,class_name=self.class_ref.id, method_name=self.short_name.upper(),source_code=value,out=err_clob,out_count=err_num)				
-				err_num = int(err_num.getvalue())
-		
-
-				if err_num == 0:					
-					print u"Успешно откомпилированно за %s сек" % t.get_time()
-				else:
-					err_msg = unicode(err_clob.getvalue().read(),'1251').strip()
-					#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
-					sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))
-					print "**********************************************"
-					print "** Ошибки компиляции %s за %s"% (self.short_name.encode('1251'),t.get_now())
-					print "**********************************************"
-					print err_msg
-
-				self.db.connection.commit()	
-			except Exception,e:
-				print "*** Ошибка выполнения method_row.set_sources:",e
-				if sys != None:
-					exc_type, exc_value, exc_traceback = sys.exc_info()
-					traceback.print_exception(exc_type, exc_value, exc_traceback,
-						                          limit=10, file=sys.stdout)
-			finally:
-				t.print_time("set_sources")
-
+						                          limit=10, file=sys.stdout)			
 		def errors(self):
 			errors = self.db.select("select * from ERRORS t where t.method_id = :method_id order by class,type,sequence,line,position,text",self.id)
 			if not errors:
 				errors = list()
 			return errors
 			#self.errors_num = err_num
-
 		def get_text(self):
 			#return [self.text,u"Метод"]
 			return u"Метод:         " + self.text
@@ -960,9 +949,6 @@ class cftDB(object):
 			a = sorted(a, key=lambda p: p.short_name)
 			a = [(u"A %s\t%s"%(attr.short_name,attr.name[:20]),"[%s]"%attr.short_name) for attr in a]
 			return a
-	
-
-
 	def __init__(self):
 		self.on_classes_cache_loaded 	= EventHook()
 		self.on_methods_cache_loaded 	= EventHook()
@@ -1291,15 +1277,14 @@ class save_methodCommand(sublime_plugin.TextCommand):
 
 			view = dataView.active()#(sublime.active_window().active_view())
 			obj = view.data
-			sublime_src_text = view.substr(sublime.Region(0,view.size()))
+			sublime_src_text = view.text#view.substr(sublime.Region(0,view.size()))
 			db_src_text = obj.get_sources()
 
-			r = re.compile(r' +$', re.MULTILINE) #Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
-			sublime_src_text = r.sub('',sublime_src_text)
+			
 
 			#print sublime_src_text
 			if sublime_src_text != db_src_text:
-				obj.set_sources(sublime_src_text)
+				obj.set_sources(view.text)
 			else:
 				print "Текст операции не изменился"
 
@@ -1405,22 +1390,17 @@ class dataView(object):
 	@property
 	def sections(self):
 		class section(object):
-			def __init__(self,view,begin,end):
+			def __init__(self,view,begin,end,text):
 				self.view  = view
 				self.begin = begin
-				if begin > end:
-					self.end = begin
-				else:
-					self.end = end
+				self.end   = end
+				self.text  = text
 			@property
 			def rows(self):
 				if self.begin == self.end:
 					return 0
 				else:
 					return len(self.view.lines(sublime.Region(self.begin,self.end)))
-			@property
-			def text(self):
-				return self.view.substr(sublime.Region(self.begin,self.end))
 			def view_line_num(self,line_num):
 				return self.view.rowcol(self.begin)[0] + line_num
 			@property
@@ -1428,25 +1408,10 @@ class dataView(object):
 				return self.view.lines(sublime.Region(self.begin,self.end))
 
 		sections_dict = dict()
-
-		src_text = self.view.substr(sublime.Region(0,self.view.size()))
-		#arr = re.compile(r'-+\n-+(.)*-+\n-+').split(src_text)
-		
-		regex = re.compile(r'-+\n-+(.)*-+\n-+')
-		match1 = regex.search(src_text)
-		match2 = regex.search(src_text,match1.end())
-		match3 = regex.search(src_text,match2.end())
-		match4 = regex.search(src_text,match3.end())
-
-		sections_dict["EXECUTE"]  = section(self.view,0 		    ,match1.start())
-		sections_dict["VALIDATE"] = section(self.view,match1.end()+1,match2.start())
-		sections_dict["PUBLIC"]   = section(self.view,match2.end()+1,match3.start())
-		sections_dict["PRIVATE"]  = section(self.view,match3.end()+1,match4.start())
-		sections_dict["VBSCRIPT"] = section(self.view,match4.end()+1,self.view.size())
-
-		s = sections_dict["PUBLIC"]
-		#print s.text,s.begin,s.end
-		#print "lines",s.lines
+		for s in sections_regex.finditer(self.text):
+			text = re.sub(r'\n\t',r'\n',s.group(2)).lstrip('\t')	#Удалим служебный таб в начале каждой строки
+			text = re.sub(r' +$','',text,re.MULTILINE) 				#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
+			sections_dict[s.group(1)] = section(self.view,s.start(2),s.end(2),text)
 		return sections_dict
 
 	def mark_errors(self):
@@ -1455,12 +1420,20 @@ class dataView(object):
 		warnings,errors,regions_dict = [],[],dict()		
 		for row in self.data.errors():
 			section = self.sections[row.type]
-			line = self.RegionTrim(section.lines[row.line-1])
+
+			line_num   = row.line-1
+			line_count = len(section.lines)
+			if line_count <= line_num:
+				line_num = line_count-1
+			#print "line_num=",line_num
+			#print "line_count=",line_count
+
+			line = self.RegionTrim(section.lines[line_num])
 			if row.list[6][1] == 'W': #6,1 это поле class
 				warnings.append(line)
 			elif row.list[6][1] == 'E':
 				errors.append(line)
-			regions_dict[str(section.view_line_num(row.line))] = row.text
+			regions_dict[str(section.view_line_num(line_num + 1))] = row.text
 
 		self.view.settings().set("cft-errors",regions_dict)
 		self.view.add_regions('cft-warnings',warnings,'comment', 'dot', 4 | 32)
@@ -1756,16 +1729,15 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		view = dataView.active()
 		#plplus_text = view.text[:view.caret_position]
-		plplus_text = view.text
-		blocks_parser = plplus_class(plplus_text).blocks_parser()
+		#plplus_text = view.text
+		#blocks_parser = plplus_class(plplus_text).blocks_parser()
 		#print "EXECUTE.TEXT=",blocks_parser.sections["EXECUTE"].text
 		#exec_block = plplus_class(blocks_parser.sections["EXECUTE"].text).exec_block_parser()
-		private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
-
+		#private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
+		s = view.sections
+		print s["EXECUTE"].text
 		#print private_parser.result_xml
 		#print "funcs=",private_parser.funcs
-
-
 
 #Класс для обработки событий
 #например события открытия выпадающего списка
