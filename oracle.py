@@ -346,7 +346,7 @@ class quickCommand(sublime_plugin.WindowCommand):
 
 	def run(self):
 		global a
-		
+		return
 		if a == []:
 			cnn_str = 'ibs/ibs@cfttest'
 			connection = cx_Oracle.connect(cnn_str)
@@ -1644,6 +1644,7 @@ class plplus_class(object):
 		if start:
 			if start == "blocks":
 				#print "blocks"
+				#print self.plplus_text
 				self.result = parseLine(self.plplus_text,blocks,[],True,comment)
 				#load
 				lang = self.result[0][0].what 	#plplus-language
@@ -1711,6 +1712,71 @@ class plplus_class(object):
 	def result_xml(self):
 
 		return self.pyAST2XML(self.result)
+
+	def to_object(self):
+		class symbol_class(object):
+			def __init__(self,text):
+				#self.name = ""
+				#self.value = ""
+				#print "text=",text
+				if type(text) is tuple:
+					self.unparsed = text[1]
+					text = text[0]
+				
+				if type(text) is list and len(text) == 1:
+					text = text[0]
+					
+
+				if isinstance(text, unicode) or isinstance(text, str):					
+					self.value = text
+				if type(text) is Symbol:					
+					self.name = text[0]
+					text = text[1]					
+					if type(text) is list:
+						if len(text) == 1:
+							if type(text) is list and len(text) == 1 and (isinstance(text[0], unicode) or isinstance(text[0], str)):
+								#print "TEXT='%s'"%text
+								self.value = text[0]
+							else:
+								self.value = symbol_class(text)
+						elif len(text) > 1:
+							self.value = [symbol_class(a) for a in text]							
+							d = dict([(a.name,a.value)for a in self.value])
+							if len(self.value) == len(d):
+								self.value = d
+					if isinstance(text, unicode) or isinstance(text, str):					
+						self.value = text
+						#self.value = symbol_class(text[1])
+					#for e in text[1:]:
+					#	self.value = self.pyAST2XML(e)
+					#result += u"</" + pyAST[0].replace("_", "-") + u">"
+				#else:
+				#	result = u""
+				#	for e in pyAST:
+				#		result += self.pyAST2XML(e)
+				#return result
+				#plplus_class
+			def __unicode__(self):
+				value_text = ""
+				if type(self.value) == list:
+					for a in self.value:
+						value_text += "\n" + str(a)
+				if not value_text:
+					value_text = str(self.value)
+
+				return u'{%s,%s}'%(self.name,value_text)
+			def __repr__(self):
+
+				return unicode(self)
+
+			def __getitem__(self, key):
+				#if type(self.value) == list:
+				#	return self.
+				#cl = self.classes[key]
+				#cl.update()
+				return self.value[key]
+		return symbol_class(self.result)
+
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		view = dataView.active()
@@ -1718,11 +1784,16 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		plplus_text = view.text
 		blocks_parser = plplus_class(plplus_text).blocks_parser()
 		#print "EXECUTE.TEXT=",blocks_parser.sections["EXECUTE"].text
-		#exec_block = plplus_class(blocks_parser.sections["EXECUTE"].text).exec_block_parser()
-		private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
-		#s = view.sections
-		#print s["EXECUTE"].text
-		print private_parser.result_xml
+		exec_block = plplus_class(blocks_parser.sections["EXECUTE"].text).exec_block_parser()
+		#exec_block = plplus_class(plplus_text).exec_block_parser()
+		#private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
+	
+		#print exec_block.result#_xml
+		obj = exec_block.to_object()
+		print obj
+		print "v=",obj[0]["symbol"]#_xml
+		print "v=",obj[0]["datatype"].value#_xml
+
 		#print "funcs=",private_parser.funcs
 
 #Класс для обработки событий
