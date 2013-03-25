@@ -1,22 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import with_statement
 import sublime, sublime_plugin, sublime_plugin
-import re
-import json
-import cx_Oracle
-import os
-import sublime
-import threading,thread
-import datetime,time
-import xml.parsers.expat
-import sys,traceback
-
-#для pyPEG
-import pyPEG
+import re,cx_Oracle,json,xml.parsers.expat
+import os,sys,traceback,datetime,time,threading,thread
 from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
 from xml.sax.saxutils import escape
-
-
 
 
 plugin_name = "CFT"
@@ -30,38 +18,6 @@ beg_whites_regex  = re.compile(r'^\s*') #ищем начало строки бе
 end_whites_regex  = re.compile(r'\s*$') #ищем конец строки без пробелов
 sections_regex    = re.compile(r'╒═+╕\n│ ([A-Z]+) +│\n(.*?)\n?└─+┘\n'.decode('utf-8'),re.S) #поиск секций
 
-#import cftdb
-#from cftdb import call_async
-
-class Hello(object):
-	"""docstring for Hello"""
-	def __init__(self, arg):
-		super(Hello, self).__init__()
-		self.arg = arg
-class PathHelper(object):
-	"""docstring for PathHelper"""
-	def __init__(self, file_name):
-		super(PathHelper, self).__init__()
-		#self.arg = arg
-
-		types = {			
-			'B' : 'EXECUTE',	#тело
-			'V' : 'VALIDATE',	#проверка
-			'G' : 'PUBLIC',		#глобальные описания
-			'L' : 'PRIVATE',	#локальные описания
-			'S' : 'VBSCRIPT',	#клиент-скрипт
-			'IBSO_METHOD' : 'METHODS',
-			'RUN_SQL' : 'RUN_SQL',
-		}
-
-		full_file_name = file_name
-		path_parts = full_file_name.split('\\')
-		count = len(path_parts)
-		self.file_name = path_parts[count-1]
-		self.oper_name = path_parts[count-1].split('.')[0].upper()
-		self.extention = path_parts[count-1].split('.')[1].upper()
-		self.class_name = path_parts[count-2].upper()
-		self.type = types[self.extention]
 class NewCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		p = PathHelper(self.view.file_name())
@@ -85,290 +41,6 @@ class NewCommand(sublime_plugin.TextCommand):
 		connection.close()
 
 		return method_id.getvalue();
-class UpdateCommand(sublime_plugin.TextCommand):
-	def run(self, edit):
-		p = PathHelper(self.view.file_name())
-		print ''
-		if p.extention == 'IBSO_METHOD':
-			self.view.replace(edit,sublime.Region(0,self.view.size()),'')
-			self.PrintSection(edit,p,'EXECUTE')
-			self.PrintSection(edit,p,'VALIDATE')
-			self.PrintSection(edit,p,'PUBLIC')
-			self.PrintSection(edit,p,'PRIVATE')
-			self.PrintSection(edit,p,'VBSCRIPT')
-		else:
-			method_text = self.Update_Method(p.class_name,p.oper_name,p.type)
-			self.view.replace(edit,sublime.Region(0,self.view.size()),method_text)
-
-	def PrintSection(self,edit,path_helper,type_str):
-		if self.view.size()>0:
-			self.view.insert(edit,self.view.size(),'\n')
-		self.view.insert(edit,self.view.size(),'------------------------------------------------')
-		self.view.insert(edit,self.view.size(),'\n--	             %s                     --' % (type_str))
-		self.view.insert(edit,self.view.size(),'\n------------------------------------------------')
-		method_text = self.Update_Method(path_helper.class_name,path_helper.oper_name,type_str)
-		if len(method_text)>0:
-			self.view.insert(edit,self.view.size(),'\n')
-		self.view.insert(edit,self.view.size(),method_text)
-
-	def Update_Method(self,class_name,oper_name,oper_type):
-		
-
-		cnn_str = 'ibs/ibs@cfttest'
-		connection = cx_Oracle.connect(cnn_str)
-		cursor = connection.cursor()
-
-		sql = """select text from sources where name = (select m.id from METHODS m where m.class_id = :class_name and m.short_name = :oper_name) and type = :oper_type order by line"""
-		#print sql
-		cursor.execute(sql, (class_name, oper_name.upper(), oper_type))
-		
-
-		method_text = ''
-		
-		for text in cursor.fetchall():
-			#sublime.status_message("text=" + text)
-			for s in text:
-				try:
-					if s == None:
-						method_text += u'\n'
-					else:
-						method_text += unicode(s,'1251')
-				except:
-					pass#self.view.insert(edit, self.view.size(), u'%%%%%%%%')
-			method_text += u'\n'
-
-		method_text = method_text.rstrip(u'\n')
-
-		cursor.close()
-		connection.close()
-		
-		
-		#print u"Текст операции ::[%s].[%s] успешно загружен" % (class_name,oper_name)
-		print u"%s Текст операции ::[%s].[%s]-%s успешно загружен" % (str(datetime.datetime.now()),class_name,oper_name,oper_type)
-		sublime.status_message(u"\n%s Текст операции ::[%s].[%s]-%s успешно загружен" % (str(datetime.datetime.now()),class_name,oper_name,oper_type))
-		return method_text
-class uploadCommand(sublime_plugin.TextCommand):
-	def run(self, edit):
-		#path = PathHelper(self.view.file_name())
-		class obj(object):
-			def __init__(self):
-				self.class_name = 'EXT_DOCS_SVOD'
-				self.oper_name  = 'NEW_AUTO'
-				self.extention  = 'IBSO_METHOD'
-				
-		path = obj()
-		
-		err_msg = []
-		#err_msg.append('')
-		if path.extention == 'IBSO_METHOD':
-			src_text = sublime.Region(0,self.view.size())
-			src_text = self.view.substr(src_text)
-			
-			regexp = r'-+\n-+(.)*-+\n-+'
-			#print regexp
-			p = re.compile(regexp)
-			arr = p.split(src_text)
-
-			B = arr[2].strip('\n')
-			V = arr[4].strip('\n')
-			G = arr[6].strip('\n')
-			L = arr[8].strip('\n')
-			S = arr[10].strip('\n')
-			#print 'B=' + B
-			# print 'V=' + V
-			# print 'G=' + G
-			# print 'L=' + L
-			# print 'S=' + S
-
-			self.Upload(path.class_name,path.oper_name,err_msg,'B',B)
-			self.Upload(path.class_name,path.oper_name,err_msg,'V',V)
-			self.Upload(path.class_name,path.oper_name,err_msg,'G',G)
-			self.Upload(path.class_name,path.oper_name,err_msg,'L',L)
-			self.Upload(path.class_name,path.oper_name,err_msg,'S',S)
-		else:
-			self.Upload(path.class_name,path.oper_name,err_msg,path.extention,self.view.substr(src_text))
-		#self.view.insert(edit, self.view.size(),method_id )
-		d = datetime.datetime.now().strftime("%Y.%m.%d %H:%M:%S")
-		if len(err_msg)>0:
-			print u"%s Ошибки при сохранении операции ::[%s].[%s]" % (d,path.class_name,path.oper_name)
-			for s in err_msg:
-				print s
-
-		else:
-			print u"%s Операция ::[%s].[%s] успешно скомпилирована" % (d,path.class_name,path.oper_name)
-		
-
-	def Upload(self,class_name,oper_name,err_msg,oper_type,src_text):
-		print u"1[%s]" % (datetime.datetime.now())
-		connection = cx_Oracle.connect('ibs/ibs@cfttest')
-		cursor = connection.cursor()
-		oper_type = str(oper_type)
-		print u"2[%s]" % (datetime.datetime.now())
-
-		cursor.setinputsizes(p_Src=cx_Oracle.CLOB)
-		#str_sqlerrm = cursor.var(cx_Oracle.STRING)
-		#src_text = cursor.var(cx_Oracle.CLOB)
-
-		plsql = """
-			BEGIN			
-				Z$RUNTIME_PLP_TOOLS.Open_Method(:p_class_name,:p_oper);
-				Z$RUNTIME_PLP_TOOLS.Add_Method_Src(:p_oper_type,:p_Src);
-				Z$RUNTIME_PLP_TOOLS.Update_Method_Src;
-				Z$RUNTIME_PLP_TOOLS.reset;
-			END;"""
-
-		try:
-			execute_proc = cursor.execute(plsql
-									 ,p_Src = src_text
-									 ,p_class_name = class_name
-									 ,p_oper = oper_name
-									 ,p_oper_type = oper_type
-									 )
-		except cx_Oracle.DatabaseError as e:
-			error, = e.args
-			print 'Ошибка сохранения ORA-0' + str(error.code)
-		print u"3[%s]" % (datetime.datetime.now())
-
-
-		t = {
-			'B' : 'EXECUTE',
-			'V'	: 'VALIDATE',
-			'G'	: 'PUBLIC',
-			'L'	: 'LOCAL',
-			'S' : 'SCRIPT',
-			}
-
-		sql = """
-			select class || ' ' || type || '  line:' || line || ',position:'||position||' \t '||text from ERRORS t
-			where t.method_id = (select id from METHODS m
-								  where m.class_id = :p_class_name
-								    and m.short_name = :p_oper_name)
-			  and t.type = :error_block
-			  and t.class != 'W'
-			order by class,type,sequence,line,position,text
-			"""
-		cursor.execute(sql, p_class_name = class_name, p_oper_name = oper_name,error_block = t[oper_type])
-		print u"4[%s]" % (datetime.datetime.now())
-		#arr = cursor.fetchall()
-		#if len(arr)>0:
-			
-
-		for text in cursor.fetchall():
-			#d = datetime.datetime.now()
-			#err_msg += u"%s ошибки при сохранении операции ::[%s].[%s]-%s\n" % (d,class_name,oper_name,oper_type)
-			err_msg.append(u'*** %s *** %s' % (oper_type,unicode(text[0],'1251')))
-			#print u'*** %s *** %s' % (oper_type,unicode(text[0],'1251'))
-			#print unicode('*** ' + s,'1251')
-		print u"5[%s]" % (datetime.datetime.now())
-		cursor.close()
-		connection.close()
-		print u"6[%s]" % (datetime.datetime.now())
-class runsqlCommand(sublime_plugin.TextCommand):
-	def run(self, edit):
-		d1 = datetime.datetime.now()
-		#print 'Hello'
-		path = PathHelper(self.view.file_name())
-		#print path.extention
-		# #err_msg = []
-		# #err_msg.append('')
-		if path.extention == 'RUN_SQL':
-		 	src_text = sublime.Region(0,self.view.size())
-		 	src_text = self.view.substr(src_text)
-			regexp = r'---------------------'
-			p = re.compile(regexp)
-			arr = p.split(src_text)
-			#print arr[3]
-		 	dic = json.loads(arr[0])
-
-		 	cnn = dic['connection_string']
-		 	sql = dic['sql']
-		 	xml_file_name = dic['xml_file_name']
-		 	xml_file_index = dic['xml_file_index']
-		 	#arr[1].strip('\n')
-		 	xslt = arr[2].strip('\n')
-		 	xml_file_clob = arr[xml_file_index].strip('\n')
-		 	#print cnn
-		 	#print sql
-		 	#print xml_file_clob
-		 	#print xml_file_name
-
-
-			connection = cx_Oracle.connect(cnn)
-			cursor = connection.cursor()
-			cursor.setinputsizes(xslt=cx_Oracle.CLOB)
-			cursor.execute(sql, xslt = xslt)
-			connection.commit()
-
-			plsql = """
-			BEGIN			
-				Z$CIT_ABONENT_LIB_XML.CLOB_TO_FILE(:xml_file_clob,:xml_file_name);
-			END;"""
-			cursor.setinputsizes(xml_file_clob=cx_Oracle.CLOB)
-			cursor.execute(plsql,xml_file_clob = xml_file_clob,xml_file_name = xml_file_name)
-			cursor.close()
-			connection.close()
-
-		print ''
-		print u"%s SQL выполнен за %sсек" % (datetime.datetime.now().strftime("%H:%M:%S"),datetime.datetime.now()-d1)
-			
-
-
-		# 	# regexp = r'-+\n-+(.)*-+\n-+'
-		# 	# #print regexp
-		# 	# p = re.compile(regexp)
-		# 	# arr = p.split(src_text)
-
-		# 	# B = arr[2].strip('\n')
-		# 	# V = arr[4].strip('\n')
-		# 	# print B
-		# 	# print V
-class inputCommand(sublime_plugin.WindowCommand):
-	def run(self):
-		#print self.window#.__class__.showQuickPanel("hello window","","content")
-		#for m in dir(self.window):
-		#	if callable(getattr(self.window,m)):
-		#		print m
-		
-		#self.window.show_quick_panel(["hello window","2"],self.m)
-	
-		self.window.show_input_panel("s1","s2",
-			self.on_done, self.on_change, self.on_cancel)
-
-	def on_done(self, input):
-		pass
-
-	def on_change(self, input):
-		pass
-
-	def on_cancel(self):
-		pass
-class quickCommand(sublime_plugin.WindowCommand):
-
-	def run(self):
-		global a
-		return
-		if a == []:
-			cnn_str = 'ibs/ibs@cfttest'
-			connection = cx_Oracle.connect(cnn_str)
-			cursor = connection.cursor()
-
-			#sql = """select m.class_id || '.' || m.short_name || '@' || c.name || '.' || m.name  from methods m,classes c where m.class_id = c.id order by nvl(m.modified,to_date('01.01.0001','dd.mm.yyyy')) desc"""
-			sql = """select c.id || '@' || c.name from classes c 
-					 order by nvl(c.modified,to_date('01.01.0001','dd.mm.yyyy')) desc"""
-			cursor.execute(sql)
-
-			a = [unicode(text[0],'1251') for text in cursor.fetchall()]
-
-			#a = ["a","b"]
-			#for text in cursor.fetchall():
-			#	a.append(text)
-
-		self.window.show_quick_panel(a,self.on_done,sublime.MONOSPACE_FONT)
-		
-		#print "show_quick_panel"
-
-	def on_done(self, c):
-		print c
 def with_exec_time(callback):
 	dbeg = datetime.datetime.now()
 	r = None
@@ -457,7 +129,6 @@ def sub(p_str,from_str,to_str,p_start=0):
 	end = p_str.rfind(to_str,p_start)+len(to_str)
 	return p_str[begin:end].strip()
 
-
 class FileReader(object):
 	def __init__(self):
 		self.dir_path = os.path.join(sublime.packages_path(),plugin_name,"sql")
@@ -498,9 +169,6 @@ class FileReader(object):
 		self.method_sources_json = self.read(os.path.join(plugin_path,"sql","method_sources_json.tst"))
 		self.save_criteria_text  = self.read(os.path.join(plugin_path,"sql","save_criteria_text.tst"))
 		self.classes_update		 = self.read(os.path.join(plugin_path,"sql","classes_update.sql"))
-		
-
-		
 class cft_settings_class(dict):
 	def __init__(self):
 		super(cft_settings_class,self).__init__()
@@ -1215,43 +883,6 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 
 	def on_cancel(self):
 		pass
-class MarkErrors(sublime_plugin.TextCommand):
-	def run(self,edit):
-
-
-
-		if err_num == 0:
-			sublime.status_message(u"Успешно откомпилированно за %s сек" % t.get_time())
-			print u"Успешно откомпилированно за %s сек" % t.get_time()
-
-			view.erase_regions('cft-errors')
-			view.settings().set("cft-errors",dict())
-		else:
-			err_msg = unicode(err_clob.getvalue().read(),'1251').strip()
-			#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
-			sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))
-			print "**********************************************"
-			print "** %s" % t.get_now()
-			print err_msg
-
-			regions = []
-			regions_dict = dict()
-
-			for err in regions_dict:
-				lineno = err.line
-				text_point = view.text_point(lineno - 1, 0)
-				l = view.text_point(lineno, 0) - text_point - 1
-				regions.append(sublime.Region(text_point, text_point + l))
-				regions_dict[str(err.line)] = err.text
-
-			view.settings().set("cft-errors",regions_dict)
-			view.add_regions(
-							'cft-errors',
-							regions,
-							'keyword', 'dot', 4 | 32)
-
-			#view.fold(sublime.Region(10,15))
-			#view.sel().add(cur_sel)
 class save_methodCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		#import cProfile
@@ -1290,34 +921,6 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			sublime.status_message(u"Компиляция завершена за " + self.t.get_time())
 
 		#self.profiler.print_stats()
-class close_methodCommand(sublime_plugin.TextCommand):
-	def run(self, edit):
-
-		aview = sublime.active_window().active_view()
-		if aview.settings().has("cft_method"):
-			m = aview.settings().get("cft_method")
-			m = db.classes[m["cft_class"]].meths[m["cft_method"]]
-			
-			sublime_src_text = aview.substr(sublime.Region(0,aview.size()))
-			db_src_text = m.get_sources()
-
-			if sublime_src_text == db_src_text:
-				aview
-
-			#print self.view.id()
-			#print 
-			#views[self.view.id()].set_sources(src_text)
-			#m = sublime.active_window().active_view().settings().get("cft_method")
-class get_settingCommand(sublime_plugin.TextCommand):
-	def run(self, edit):
-		#print "run"
-		#sublime.run_command("insert_snippet", {"contents": "hello ($0)"})
-		
-		#sublime.active_window().run_command('insert_snippet', {"contents": "hello text ${1:ttext} second ${2:second}"})
-		a = self.view.settings().get("a")
-		print "get setting = ", a
-		a = sublime.active_window().active_view().settings().get("a")
-		print "get setting = ", a
 
 class dataView(object):
 	def __init__(self,view):
@@ -1462,16 +1065,19 @@ class plplus_class(object):
 	# 		self.type_name 	= var_def[1][1][0]	#имя типа
 	class variable_class(object):
 		def __init__(self,var_define_symbol):
-			s = var_define_symbol
-			if s.__name__ != 'var_define':
-				raise Exception ("Переменная должна быть символом var_define")
+			try:
+				s = var_define_symbol
+				if s.__name__ != 'var_define':
+					raise Exception ("Переменная должна быть символом var_define")
 
-			self.name = s()[0]() # [1] или what или () синонимы
-			self.kind = s.what[1].what[0].__name__
-			if self.kind == 'cft':
-				self.type = s.what[1].what[0].what[0]
-			else:
-				self.type = s.what[1].what[0].what
+				self.name = s()[0]() # [1] или what или () синонимы
+				self.kind = s.what[1].what[0].__name__
+				if self.kind == 'cft':
+					self.type = s.what[1].what[0].what[0]
+				else:
+					self.type = s.what[1].what[0].what
+			except Exception as e:
+				print e
 		def __unicode__(self):
 
 			return u'Variable(%s,%s,%s)'%(self.name,self.kind,self.type)
@@ -1575,9 +1181,10 @@ class plplus_class(object):
 		def cfttype():			return 0,"ref",0,"::","[",re.compile(r"\w+"),"]"
 		def macro_type():		return re.compile(r"[&a-zA-Z_.0-9]+")
 		def datatype():			return [basetype,cfttype,macro_type]
-		#def null():				return "null"
-		#def variable():			return symbol
-		def var_define():		return symbol,datatype,";"				
+		#def null():			return "null"
+		#def variable():		return symbol
+		#def var_define():		return symbol,datatype,";"				
+		def var_define():		return symbol,[basetype,cfttype,macro_type],";"
 		#def null_statement():	return null
 		def return_statement():	return keyword("return"),expression
 		def pragma_statement():	return keyword("pragma"),symbol,";"
@@ -1788,11 +1395,11 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		#exec_block = plplus_class(plplus_text).exec_block_parser()
 		#private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
 	
-		#print exec_block.result#_xml
+		print exec_block.result#_xml
 		obj = exec_block.to_object()
 		print obj
-		print "v=",obj[0]["symbol"]#_xml
-		print "v=",obj[0]["datatype"].value#_xml
+		#print "v=",obj[0]["symbol"]#_xml
+		#print "v=",obj[0]["datatype"].value#_xml
 
 		#print "funcs=",private_parser.funcs
 
@@ -1974,4 +1581,3 @@ class my_auto_completeCommand(sublime_plugin.TextCommand):
                 'next_completion_if_showing': False
             }
         )
-
