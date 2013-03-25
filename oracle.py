@@ -3,6 +3,7 @@ from __future__ import with_statement
 import sublime, sublime_plugin, sublime_plugin
 import re,cx_Oracle,json,xml.parsers.expat
 import os,sys,traceback,datetime,time,threading,thread
+import pyPEG
 from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
 from xml.sax.saxutils import escape
 
@@ -13,6 +14,7 @@ cache_path  			= os.path.join(plugin_path,"cache")
 used_classes_file_path 	= os.path.join(plugin_path,"cache","cft_settings.json")
 
 TIMER_DEBUG = True
+pyPEG.print_trace = False
 
 beg_whites_regex  = re.compile(r'^\s*') #ищем начало строки без пробелов
 end_whites_regex  = re.compile(r'\s*$') #ищем конец строки без пробелов
@@ -781,6 +783,27 @@ class cftDB(object):
 		cl = self.classes[key]
 		cl.update()
 		return cl
+# class unicode_dict(dict):
+# 	"""dict for unicode"""
+# 	def __init__(self, *args):
+# 		super(unicode_dict, self).__init__(*args)
+		
+# 	def __unicode__(self):
+# 		r = u""
+# 		for k,v in self.iteritems():
+# 			r += u'{%s:%s}'%(k,v)
+
+# 		return r
+# 	def __str__(self):
+# 		r = ""
+# 		for k,v in self.iteritems():
+# 			r += '{%s:%s}'%(k.dcode('1251'),v.encode('1251'))
+
+# 		return r
+		
+# 	def __repr__(self):
+
+# 		return unicode(self)	
 
 db = cftDB()
 #db = None
@@ -1168,7 +1191,7 @@ class plplus_class(object):
 
 	def parse(self,start = None):
 
-		pyPEG.print_trace = True
+		
 
 		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
 		def symbol():           return re.compile(r"\w+")
@@ -1183,8 +1206,8 @@ class plplus_class(object):
 		def datatype():			return [basetype,cfttype,macro_type]
 		#def null():			return "null"
 		#def variable():		return symbol
-		#def var_define():		return symbol,datatype,";"				
-		def var_define():		return symbol,[basetype,cfttype,macro_type],";"
+		def var_define():		return symbol,datatype,";"				
+		#def var_define():		return symbol,[basetype,cfttype,macro_type],";"
 		#def null_statement():	return null
 		def return_statement():	return keyword("return"),expression
 		def pragma_statement():	return keyword("pragma"),symbol,";"
@@ -1250,16 +1273,13 @@ class plplus_class(object):
 		start_lambda = plplus_language
 		if start:
 			if start == "blocks":
-				#print "blocks"
-				#print self.plplus_text
 				self.result = parseLine(self.plplus_text,blocks,[],True,comment)
-				#load
-				lang = self.result[0][0].what 	#plplus-language
-				self.sections = dict([(s.what[0],plplus_class.section(s)) for s in lang])
-				#print len(self.sections)
+				#self.sections = dict([(s.what[0],plplus_class.section(s)) for s in lang])
+				#print self.to_object()
+				#lang = self.result[0][0].what 	#plplus-language
+				#self.sections = dict([(s.what[0],plplus_class.section(s)) for s in lang])
 
-				k,self.last_section = self.sections.items()[len(self.sections.items())-1]
-				#print "last",self.last_section
+				#k,self.last_section = self.sections.items()[len(self.sections.items())-1]
 			if start == "private":
 				self.result = parseLine(self.plplus_text,private_block,[],True,comment)
 
@@ -1285,13 +1305,10 @@ class plplus_class(object):
 			self.result = parseLine(self.plplus_text,plplus_language,[],True,comment)
 		
 		return self
-
 	def blocks_parser(self):
 		return self.parse("blocks")
-
 	def exec_block_parser(self):
 		return self.parse("exec_block")
-
 	def private_parser(self):
 		return self.parse("private")
 
@@ -1323,8 +1340,8 @@ class plplus_class(object):
 	def to_object(self):
 		class symbol_class(object):
 			def __init__(self,text):
-				#self.name = ""
-				#self.value = ""
+				self.name = ""
+				self.value = ""
 				#print "text=",text
 				if type(text) is tuple:
 					self.unparsed = text[1]
@@ -1347,35 +1364,42 @@ class plplus_class(object):
 							else:
 								self.value = symbol_class(text)
 						elif len(text) > 1:
-							self.value = [symbol_class(a) for a in text]							
+							print "TEXT=",text
+							self.value = [symbol_class(a) for a in text]
+							print "NAME=",self.name
+							for a in self.value:
+								print "a=",a.name,"value=",a.value
+							if not a.name and type(a.value) is Symbol:
+								self = symbol_class(a.value)
+
 							d = dict([(a.name,a.value)for a in self.value])
 							if len(self.value) == len(d):
 								self.value = d
 					if isinstance(text, unicode) or isinstance(text, str):					
 						self.value = text
-						#self.value = symbol_class(text[1])
-					#for e in text[1:]:
-					#	self.value = self.pyAST2XML(e)
-					#result += u"</" + pyAST[0].replace("_", "-") + u">"
-				#else:
-				#	result = u""
-				#	for e in pyAST:
-				#		result += self.pyAST2XML(e)
-				#return result
-				#plplus_class
 			def __unicode__(self):
-				value_text = ""
+				value_text = u""
 				if type(self.value) == list:
 					for a in self.value:
-						value_text += "\n" + str(a)
-				if not value_text:
-					value_text = str(self.value)
+						value_text += u"\n" + unicode(a)
+				elif type(self.value) == dict:
+					#import unicodedata					
+					#print "значение = ",self.value.__repr__().decode('unicode-escape')
+					value_text = self.value.__repr__().decode('unicode-escape')
+					#print u"value_text="+value_text#.decode('utf-8')
+				else:
+					#print "value=",self.value
+					value_text = self.value
+				
+				value_text = u'{%s,%s}'%(self.name,value_text)
+				#print u"value_text="+value_text#.decode('utf-8')
+				return value_text
+			def __str__(self):
 
-				return u'{%s,%s}'%(self.name,value_text)
+				return unicode(self).encode('utf-8')
 			def __repr__(self):
-
+				#print "unicode",unicode(self)
 				return unicode(self)
-
 			def __getitem__(self, key):
 				#if type(self.value) == list:
 				#	return self.
@@ -1390,13 +1414,18 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		#plplus_text = view.text[:view.caret_position]
 		plplus_text = view.text
 		blocks_parser = plplus_class(plplus_text).blocks_parser()
+		sections = blocks_parser.to_object()
+		s = sections[0]
+		print blocks_parser.result.__repr__().decode('unicode-escape')
+		#print obj#.__repr__()#.decode('utf-8')
 		#print "EXECUTE.TEXT=",blocks_parser.sections["EXECUTE"].text
 		exec_block = plplus_class(blocks_parser.sections["EXECUTE"].text).exec_block_parser()
 		#exec_block = plplus_class(plplus_text).exec_block_parser()
 		#private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
 	
-		print exec_block.result#_xml
+		#print exec_block.result#_xml
 		obj = exec_block.to_object()
+		#print u'This is a full block: \u2588'
 		print obj
 		#print "v=",obj[0]["symbol"]#_xml
 		#print "v=",obj[0]["datatype"].value#_xml
