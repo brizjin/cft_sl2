@@ -1340,8 +1340,8 @@ class plplus_class(object):
 	def to_object(self):
 		class symbol_class(object):
 			def __init__(self,text):
-				self.name = ""
-				self.value = ""
+				self.name = u""
+				self.value = u""
 				#print "text=",text
 				if type(text) is tuple:
 					self.unparsed = text[1]
@@ -1351,61 +1351,124 @@ class plplus_class(object):
 					text = text[0]
 					
 
-				if isinstance(text, unicode) or isinstance(text, str):					
-					self.value = text
+				if isinstance(text, unicode) or isinstance(text, str):		
+					#print "UNICODE"			
+					self.value = unicode(text)
 				if type(text) is Symbol:					
 					self.name = text[0]
-					text = text[1]					
+					text = text[1]
+					if isinstance(text, unicode) or isinstance(text, str):		
+						#print "UNICODE6",type(text)			
+						self.value = text#.encode("utf-8")					
 					if type(text) is list:
 						if len(text) == 1:
 							if type(text) is list and len(text) == 1 and (isinstance(text[0], unicode) or isinstance(text[0], str)):
 								#print "TEXT='%s'"%text
+								#print "UNICODE2"		
 								self.value = text[0]
 							else:
+								#print "UNICODE3"		
 								self.value = symbol_class(text)
 						elif len(text) > 1:
-							print "TEXT=",text
-							self.value = [symbol_class(a) for a in text]
-							print "NAME=",self.name
-							for a in self.value:
-								print "a=",a.name,"value=",a.value
-							if not a.name and type(a.value) is Symbol:
-								self = symbol_class(a.value)
+							#print "TEXT=",text
+							#print "NAME=",self.name
+							#print "value=",text[1].__name__
 
-							d = dict([(a.name,a.value)for a in self.value])
-							if len(self.value) == len(d):
-								self.value = d
-					if isinstance(text, unicode) or isinstance(text, str):					
-						self.value = text
+							#проверяем из каких типов состоит массив
+							s = set([type(a) for a in text])							
+							#если он состоит только из элементов Symbol
+							if len(s) == 1 and Symbol in s:
+								#проверяем что все Symbol одного типа
+								if len(set([a.__name__ for a in text])) == 1:
+									self.value = dict()
+									for a in text:
+										sym = symbol_class(a)
+										#v = object()
+										#setattr(v,sym.value.name,sym.value.value)
+										self.value[sym.name] = sym.value#print "TEXT=",
+										#print "NAME=",sym.name,u"VALUE="+sym.value.__unicode__()#.encode('utf-8')
+									#print "SELF.VALUE=",self.value.__repr__().encode('utf-8')
+							#если элемент состоит из строки и символа за ней
+							elif len(s) > 1 and (isinstance(text[0], unicode) or isinstance(text[0], str)) \
+										    and type(text[1]) is Symbol:
+								#print "UNICODE4"
+								self.name = text[0]
+								self.value = symbol_class(text[1])
+							else:
+								#print "UNICODE5"
+								self.value = [symbol_class(a) for a in text]
+
+
+								#print "value=",self.value.__repr__().encode('utf-8').decode('unicode-escape')
+								#for a in self.value:
+								#	print "a=",a.name,"value=",a.value
+								#if not hasattr(a,"name") and type(a.value) is Symbol:
+								#	self = symbol_class(a.value)
+
+								d = dict([(a.name,a.value)for a in self.value])
+								if len(self.value) == len(d):
+									self.value = d
+
 			def __unicode__(self):
+				#print "REPR",self.name,self.value
 				value_text = u""
 				if type(self.value) == list:
+					#print "LIST"
 					for a in self.value:
 						value_text += u"\n" + unicode(a)
 				elif type(self.value) == dict:
 					#import unicodedata					
 					#print "значение = ",self.value.__repr__().decode('unicode-escape')
-					value_text = self.value.__repr__().decode('unicode-escape')
+					#print "DICT=",type(self.value)
+					r = u""
+					for k,v in self.value.iteritems():
+						r += u"%s:%s,"%(k,v)
+					value_text = "{%s}"%r.rstrip(",")
+					#value_text = u"{%s:%s}"%(self.value.__repr__().decode('unicode-escape')
+				
+					
 					#print u"value_text="+value_text#.decode('utf-8')
 				else:
+					#print "ELSE",type(self.value)
 					#print "value=",self.value
-					value_text = self.value
+					value_text = self.value#.decode('utf-8')
 				
-				value_text = u'{%s,%s}'%(self.name,value_text)
+				value_text = u"{%s,%s}"%(self.name,value_text)
 				#print u"value_text="+value_text#.decode('utf-8')
 				return value_text
 			def __str__(self):
-
-				return unicode(self).encode('utf-8')
+				#print "STR"
+				return self.__repr__().encode('utf-8')
+				# value_text = ""
+				# if type(self.value) == list:
+				# 	for a in self.value:
+				# 		value_text += "\n" + a
+				# elif type(self.value) == dict:
+				# 	#import unicodedata					
+				# 	#print "значение = ",self.value.__repr__().decode('unicode-escape')
+				# 	#print "VALUETYPE=",type(self.value)
+				# 	print "REPR=",self.value.__repr__()
+				# 	value_text = self.value.__repr__().encode('utf-8')
+				# 	#print u"value_text="+value_text#.decode('utf-8')
+				# else:
+				# 	#print "value=",self.value
+				# 	value_text = self.value
+				# value_text = value_text.decode("utf-8")
+				# value_text = "{%s,%s}"%(self.name,value_text)
+				# #print u"value_text="+value_text#.decode('utf-8')
+				# return value_text
 			def __repr__(self):
 				#print "unicode",unicode(self)
-				return unicode(self)
+				return unicode(self)#.encode('utf-8')
 			def __getitem__(self, key):
 				#if type(self.value) == list:
 				#	return self.
 				#cl = self.classes[key]
 				#cl.update()
 				return self.value[key]
+			def __getattr__(self,name):
+				if self.name == name:
+					return self.value
 		return symbol_class(self.result)
 
 class print_cmdCommand(sublime_plugin.TextCommand):
@@ -1415,18 +1478,23 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		plplus_text = view.text
 		blocks_parser = plplus_class(plplus_text).blocks_parser()
 		sections = blocks_parser.to_object()
-		s = sections[0]
-		print blocks_parser.result.__repr__().decode('unicode-escape')
+		#s = sections[0]
+		#print blocks_parser.result.__repr__().decode('unicode-escape')
+		#print blocks_parser.result_xml
+		#obj = blocks_parser.to_object()
+		#print obj["EXECUTE"].blocks_text
 		#print obj#.__repr__()#.decode('utf-8')
 		#print "EXECUTE.TEXT=",blocks_parser.sections["EXECUTE"].text
-		exec_block = plplus_class(blocks_parser.sections["EXECUTE"].text).exec_block_parser()
+		#exec_block = plplus_class(blocks_parser.sections["EXECUTE"].text).exec_block_parser()
+		exec_block = plplus_class(sections["EXECUTE"].blocks_text).exec_block_parser()
 		#exec_block = plplus_class(plplus_text).exec_block_parser()
 		#private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
 	
 		#print exec_block.result#_xml
 		obj = exec_block.to_object()
-		#print u'This is a full block: \u2588'
 		print obj
+		#print u'This is a full block: \u2588'
+		#print obj
 		#print "v=",obj[0]["symbol"]#_xml
 		#print "v=",obj[0]["datatype"].value#_xml
 
