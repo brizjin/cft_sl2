@@ -1637,26 +1637,33 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		def cfttype():		return "[",re.compile(r"\w+"),"]"
 		def cftref():		return "ref","[",re.compile(r"\w+"),"]"
 		def var_name():		return re.compile(r"\w+")
-		def data_type():	return [basetype,cfttype,cftref]
-		def vardef():		return var_name,data_type,0,(":=",ignore(r".*?(?=;)")),";"
+		def datatype():		return [basetype,cfttype,cftref]
+		#def vardef():		return var_name,datatype,0,(":=",ignore(r".*?(?=;)")),";"
+		def vardef():		return var_name,datatype,";"
 
 		#def return_type():	return datatype		
 		# def begin_block():	return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
 		def param_name():	return re.compile(r"\w+")
-		def param_type():	return re.compile(r"(?i)in out|in|out")
+		def param_type():	return [keyword("in out"),keyword("in"),keyword("out")]
 		def param():		return param_name,0,param_type,datatype
 		def params():		return param,-1,(',',param)
 		def proc():			return
 		def func_name():	return re.compile(r"\w+")
 		def func():			return (keyword('function'),
 									func_name,
-									0,("(", ignore(r".*?(?=\))",re.S),")"),
+									0,("(", params,")"),
 									keyword('return'),
-									data_type,
+									datatype,
 									keyword('is'),
 									ignore(r".*?(?=end;)end;",re.S))
-		
-		def func_cur():		return keyword('function'),func_name,0,("(", ignore(r".*?(?=\))",re.S),")"),keyword('return'),data_type,keyword('is'), ignore(r".*",re.S)
+
+		def func_cur():		return (keyword('function'),
+									func_name,
+									0,("(", ignore(r".*?(?=\))",re.S),")"),
+									keyword('return'),
+									datatype,
+									keyword('is'),
+									ignore(r".*",re.S))
 		def block():		return -2,[func,proc,func_cur,vardef]	
 		#print "TEXT=",view.sections[view.current_section].text[:view.caret_position]
 		result = parseLine(view.current_text,block,[],True,comment)
@@ -1685,28 +1692,97 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		# 	def __getattr__(self,name):
 		# 		if self.name == name:
 		# 			return self.value
+		
 
-		block = result[0][0].what
-		variables = dict()
-		funcs = dict()
+		class sym(object):
+			def __init__(self,s):
+				self.s = s
+			def get_arr(self,name):
+				arr = list()
+				for s in self.s:
+					if type(s) is Symbol and s[0] == name:
+						arr.append(sym(s.what))
+				return arr
+			@property
+			def name(self):
+				s = self.s
+				if type(s) is list:		s = s[0]
+				if type(s) is Symbol:	return s.__name__
+				return ""
 
-		for d in block:
-			# if d[0] == 'vardef':
-			name = d.what[0].what#,d.what[1][0]
-			kind = d.what[1].what[0][0]
-			if kind in ["cftref","cfttype"]: type_ = d.what[1].what[0].what[0]
-			else:							 type_ = d.what[1].what[0].what
+			@property
+			def value(self):
+				s = self.s
+				if type(s) is list:	s = s[0]
+				if type(s) is Symbol:	s = s.what
+				if type(s) is Symbol: 	return sym(s)
+				if isinstance(s, unicode) or isinstance(s, str): return s
+				else: return sym(s).value
+				
+			def __iter__(self):
+				arr = list()
+				for s in self.s:
+					if type(s) is Symbol:
+						arr.append(sym(s.what))
+				return iter(arr)
+				#return iter(self.s)
+			
 
-			if   d[0] == 'vardef': ds = variables
-			elif d[0] == 'func':   ds = funcs
+			def __getattr__(self,name):
+				s = self.s
+				if type(s) == tuple:
+					s = s[0]
+				if type(s) == list:
+					for a in s:
+						if type(a) == Symbol and a[0] == name:
+							#if type(a.what) is Symbol:	
+							return sym(a.what)
+							#else:						return a.what
+					try:
+						return getattr(s[0],name)
+					except AttributeError as e:
+						return ""
+				
+				return getattr(self.s,name)
+			def __repr__(self):
+				return self.s.__repr__()
+		
+		#print "SYM_TYPE",type(sym("hello"))
+		block = sym(result).block
+		for s in block.get_arr("vardef"):
+			print "varname=",s.var_name,s.datatype.name,s.datatype.value
+		
 
-			ds[name] = {"kind":kind,"type":type_}
+		for f in block.get_arr("func"):
+			#print "f=",f.func_name,f.datatype.name,f.datatype.value
+			print "f=",f.func_name#,f.params
+			for p in f.params:
+				print "p=",p.param_name,p.datatype.name,p.datatype.value
+		#print block
 
-		print funcs
-		print variables
+		#variables = dict()
+		#funcs = dict()
+
+		#for d in block:
+		# 	# if d[0] == 'vardef':
+			#print "d=",d
+		 	#name = d.what[0].what#,d.what[1][0]
+		 	#print "name=",d.what[1][0]
+		# 	kind = d.what[1].what[0][0]
+		# 	if kind in ["cftref","cfttype"]: type_ = d.what[1].what[0].what[0]
+		# 	else:							 type_ = d.what[1].what[0].what
+
+		# 	if   d[0] == 'vardef': ds = variables
+		# 	elif d[0] == 'func':   ds = funcs
+
+		# 	ds[name] = {"kind":kind,"type":type_}
+
+		# print funcs
+		# print variables
+
 		#print variables
 			#print "d=",d[0]
-		#print pyAST2XML(result)
+		print pyAST2XML(result)
 
 
 #Класс для обработки событий
