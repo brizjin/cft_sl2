@@ -1001,10 +1001,11 @@ class dataView(object):
 	@property
 	def sections(self):
 		class section(object):
-			def __init__(self,view,begin,end,text):
+			def __init__(self,view,begin,end,name,text):
 				self.view  = view
 				self.begin = begin
 				self.end   = end
+				self.name  = name
 				self.text  = text
 			@property
 			def rows(self):
@@ -1022,8 +1023,27 @@ class dataView(object):
 		for s in sections_regex.finditer(self.text):
 			text = re.sub(r'\n\t',r'\n',s.group(2)).lstrip('\t')	#Удалим служебный таб в начале каждой строки
 			text = re.sub(r' +$','',text,re.MULTILINE) 				#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
-			sections_dict[s.group(1)] = section(self.view,s.start(2),s.end(2),text)
+			sections_dict[s.group(1)] = section(self.view,s.start(2),s.end(2),s.group(1),text)
 		return sections_dict
+	#@property
+	def current_section(self):
+		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
+		#def blocks_text():		return re.compile(r".*?((?=└─)|$)".decode('utf-8'),re.S)
+		#def blocks_text():		return ignore(r".*?((?=└─)|$)".decode('utf-8'),re.S)
+		def blocks_section():	return ignore(r'╒═+╕\n│ +'.decode('utf-8')),re.compile(r'[A-Z]+') 	\
+									  ,ignore(r' *│'.decode('utf-8')) \
+									  ,ignore(r".*?((?=└─)|$)".decode('utf-8'),re.S) \
+									  ,0,ignore(r'└─+┘\n'.decode('utf-8'))
+		def blocks(): 			return -2,blocks_section
+		
+		result = parseLine(self.text[:self.caret_position],blocks,[],True,comment)
+		#sections = dict([(s.what[0],s.what[1].what) for s in result[0][0].what])
+		sections = [s.what[0] for s in result[0][0].what]
+		#k,self.last_section = self.sections.items()[len(self.sections.items())-1]
+		last_section = sections[len(sections)-1]
+		return last_section
+
+
 
 	def mark_errors(self):
 		#self.view.erase_regions('cft-errors')
@@ -1251,12 +1271,6 @@ class plplus_class(object):
 		#def plplus_language():  return -2,block
 		def plplus_language():  return -2,section
 		########################
-		#2 поиск текущего редактируемого блока
-		def blocks_text():		return re.compile(r".*?((?=└─)|$)".decode('utf-8'),re.S)
-		def blocks_section():	return ignore(r'╒═+╕\n│ +'.decode('utf-8')),re.compile(r'[A-Z]+') 	\
-									  ,ignore(r' *│'.decode('utf-8')) ,blocks_text,0,ignore(r'└─+┘\n'.decode('utf-8'))
-		def blocks(): 			return -2,blocks_section
-		########################
 		#3 для секции exec поиск только переменных
 		def exec_block():   	return -1,var_define,0,(keyword("begin"),-1,ignore(r".*?;",re.S),0,keyword("end"))
 		########################
@@ -1274,7 +1288,8 @@ class plplus_class(object):
 		if start:
 			if start == "blocks":
 				self.result = parseLine(self.plplus_text,blocks,[],True,comment)
-				#self.sections = dict([(s.what[0],plplus_class.section(s)) for s in lang])
+				#self.sections = dict([(s.value[0],s.value[1].value) for s in self.to_object()])
+				self.sections = dict([(s.what[0],s.what[1].what) for s in self.result[0][0].what])
 				#print self.to_object()
 				#lang = self.result[0][0].what 	#plplus-language
 				#self.sections = dict([(s.what[0],plplus_class.section(s)) for s in lang])
@@ -1339,9 +1354,9 @@ class plplus_class(object):
 
 	def to_object(self):
 		class symbol_class(object):
-			def __init__(self,text):
+			def __init__2(self,text):
 				self.name = u""
-				self.value = u""
+				#self.value = u""
 				#print "text=",text
 				if type(text) is tuple:
 					self.unparsed = text[1]
@@ -1351,9 +1366,7 @@ class plplus_class(object):
 					text = text[0]
 					
 
-				if isinstance(text, unicode) or isinstance(text, str):		
-					#print "UNICODE"			
-					self.value = unicode(text)
+				
 				if type(text) is Symbol:					
 					self.name = text[0]
 					text = text[1]
@@ -1370,6 +1383,7 @@ class plplus_class(object):
 								#print "UNICODE3"		
 								self.value = symbol_class(text)
 						elif len(text) > 1:
+							print "LEN>1",self.name
 							#print "TEXT=",text
 							#print "NAME=",self.name
 							#print "value=",text[1].__name__
@@ -1387,6 +1401,8 @@ class plplus_class(object):
 										#setattr(v,sym.value.name,sym.value.value)
 										self.value[sym.name] = sym.value#print "TEXT=",
 										#print "NAME=",sym.name,u"VALUE="+sym.value.__unicode__()#.encode('utf-8')
+								else:
+									self.value = [symbol_class(a) for a in text]
 									#print "SELF.VALUE=",self.value.__repr__().encode('utf-8')
 							#если элемент состоит из строки и символа за ней
 							elif len(s) > 1 and (isinstance(text[0], unicode) or isinstance(text[0], str)) \
@@ -1395,7 +1411,7 @@ class plplus_class(object):
 								self.name = text[0]
 								self.value = symbol_class(text[1])
 							else:
-								#print "UNICODE5"
+								#print "UNICODE5",self.name
 								self.value = [symbol_class(a) for a in text]
 
 
@@ -1408,29 +1424,92 @@ class plplus_class(object):
 								d = dict([(a.name,a.value)for a in self.value])
 								if len(self.value) == len(d):
 									self.value = d
+					#else:
+						#print "TYPE=",type(text)
+				if isinstance(text, unicode) or isinstance(text, str):		
+					#print "UNICODE",text
+					self.value = unicode(text)
+				if not self.value:
+					print "NONE=",self.name,type(text),text
+					if type(text) == list:
+						print "LEN=",len(text)
+			def __init__(self,text):
+				self.name = u""
+				#self.value = u""
+				#print "text=",text
+				if type(text) is tuple:
+					self.unparsed = text[1]
+					text = text[0]
+				if type(text) is list and len(text)==1:
+					#print "LISTTYPE"
+					text = text[0]
+
+
+				if isinstance(text, unicode) or isinstance(text, str):
+					self.value = text
+				elif type(text) is Symbol:
+					#print "SYMBOL=",text[0]
+					self.name = text[0]
+					a = text[1]
+					if isinstance(a, unicode) or isinstance(a, str):
+						#print "SYMBOL UNICODE"
+						self.value = a
+					#elif type(a) is Symbol:
+					else:
+						#print "SYMBOL NEW"
+						self.value = symbol_class(a)
+					#self.set_value(text[1])
+					#for e in pyAST[1:]:
+					#	result += self.pyAST2XML(e)
+					#result += u"</" + pyAST[0].replace("_", "-") + u">"
+				else:
+					#print "LIST",len(text),self.name
+					if len(text)==1:
+						a = text[0]
+						#print "TYPE",type(a)
+						if isinstance(a, unicode) or isinstance(a, str):
+							#print "1SYMBOL UNICODE"
+							self.value = a
+						#elif type(a) is Symbol:
+						else:
+							#print "1SYMBOL NEW"
+							self.value = symbol_class(a)
+
+					elif len(text)>1:
+						self.value = list()
+						for a in text:
+							if isinstance(a, unicode) or isinstance(a, str):
+								#print "UNICODE"
+								self.value.append(a)
+							elif type(a) is Symbol:
+								#print "new"
+								#print "LIST EL TYPE=",type(a)
+								self.value.append(symbol_class(a))
+							#self.set_value(a)
+					else:
+						#print "len=",len(text)
+						self.value = ""
+			# def set_value(self,a):
+			# 	if isinstance(a, unicode) or isinstance(a, str):
+			# 		self.value.append(a)
+			# 	elif type(a) is Symbol:
+			# 		self.value.append(symbol_class(a))
+					
 
 			def __unicode__(self):
-				#print "REPR",self.name,self.value
 				value_text = u""
 				if type(self.value) == list:
-					#print "LIST"
-					for a in self.value:
-						value_text += u"\n" + unicode(a)
+					for i,a in enumerate(self.value):
+						value_text += u" %2s:%s\n"%(i,unicode(a))
+
+					value_text = u"\n[%s]\n"%value_text.rstrip('\n')[1:]
 				elif type(self.value) == dict:
-					#import unicodedata					
-					#print "значение = ",self.value.__repr__().decode('unicode-escape')
-					#print "DICT=",type(self.value)
 					r = u""
 					for k,v in self.value.iteritems():
 						r += u"%s:%s,"%(k,v)
 					value_text = "{%s}"%r.rstrip(",")
 					#value_text = u"{%s:%s}"%(self.value.__repr__().decode('unicode-escape')
-				
-					
-					#print u"value_text="+value_text#.decode('utf-8')
 				else:
-					#print "ELSE",type(self.value)
-					#print "value=",self.value
 					value_text = self.value#.decode('utf-8')
 				
 				value_text = u"{%s,%s}"%(self.name,value_text)
@@ -1474,10 +1553,16 @@ class plplus_class(object):
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		view = dataView.active()
+		p = view.current_section()
 		#plplus_text = view.text[:view.caret_position]
-		plplus_text = view.text
-		blocks_parser = plplus_class(plplus_text).blocks_parser()
-		sections = blocks_parser.to_object()
+		#plplus_text = view.text
+		#blocks_parser = plplus_class(plplus_text).blocks_parser()
+		#sections = blocks_parser.to_object()
+		#for s in sections:
+		#	print "S=",s.value[0]
+		
+		#print blocks_parser.sections["EXECUTE"]
+		#print blocks_parser.result
 		#s = sections[0]
 		#print blocks_parser.result.__repr__().decode('unicode-escape')
 		#print blocks_parser.result_xml
@@ -1486,13 +1571,14 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		#print obj#.__repr__()#.decode('utf-8')
 		#print "EXECUTE.TEXT=",blocks_parser.sections["EXECUTE"].text
 		#exec_block = plplus_class(blocks_parser.sections["EXECUTE"].text).exec_block_parser()
-		exec_block = plplus_class(sections["EXECUTE"].blocks_text).exec_block_parser()
+		#exec_block = plplus_class(sections["EXECUTE"].blocks_text).exec_block_parser()
 		#exec_block = plplus_class(plplus_text).exec_block_parser()
 		#private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
 	
 		#print exec_block.result#_xml
-		obj = exec_block.to_object()
-		print obj
+		#obj = exec_block.to_object()
+		#print obj
+		#print exec_block.result
 		#print u'This is a full block: \u2588'
 		#print obj
 		#print "v=",obj[0]["symbol"]#_xml
@@ -1540,7 +1626,7 @@ class el(sublime_plugin.EventListener):
 		
 		a = []
 		last_text = view.until_caret_row_text
-		last_section = plplus_class(view.text[:locations[0]]).blocks_parser().last_section
+		#last_section = plplus_class(view.text[:locations[0]]).blocks_parser().last_section
 		#print last_section
 		#print last_text
 		if not hasattr(db,"classes"):
@@ -1591,7 +1677,9 @@ class el(sublime_plugin.EventListener):
 						is_class = True
 						#print current_class			
 				else:
-					variables = plplus_class(last_section.text).exec_block_parser().variables
+					
+					variables = plplus_class(view.sections[view.current_section].text).exec_block_parser().variables
+					#variables = plplus_class(last_section.text).exec_block_parser().variables
 					#variables = exec_parser_class(last_section.text).variables
 
 					if name in variables:
