@@ -408,6 +408,8 @@ class cftDB(object):
 				if i<len(self.params)-1:	class_id = param.class_id + ","
 				else:						class_id = param.class_id
 
+				#if self.db.classes.has_key(class_id):	class_id = "::[%s]%stype"%(class_id,'%')
+				
 				params_str += "\t%-15s %-7s %-20s\t--%-2s %s\n"%(param.short_name
 																#,param.position
 																#,param.short_name
@@ -569,7 +571,7 @@ class cftDB(object):
 			self.class_ref = p_class
 		def get_text(self):
 			#return [self.text,u"Представление"]
-			print self
+			#print self
 			return u"Представление: " + self.text
 		def get_sources(self):
 			return self.db.select("select cr.condition from criteria cr where short_name = :view_short_name",self.short_name)
@@ -1077,8 +1079,9 @@ class dataView(object):
 			text = re.sub(r' +$','',text,re.MULTILINE) 				#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
 			sections_dict[s.group(1)] = section(self,s.start(2),s.end(2),s.group(1),text)
 		return sections_dict
-	#@property
+	@property
 	def current_section(self):
+		
 		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
 		#def blocks_text():		return re.compile(r".*?((?=└─)|$)".decode('utf-8'),re.S)
 		#def blocks_text():		return ignore(r".*?((?=└─)|$)".decode('utf-8'),re.S)
@@ -1088,11 +1091,15 @@ class dataView(object):
 									  ,0,ignore(r'└─+┘\n'.decode('utf-8'))
 		def blocks(): 			return -2,blocks_section
 		
+		old_trace = pyPEG.print_trace
+		pyPEG.print_trace = False
 		result = parseLine(self.text[:self.caret_position],blocks,[],True,comment)
+		pyPEG.print_trace = old_trace
 		#sections = dict([(s.what[0],s.what[1].what) for s in result[0][0].what])
 		sections = [s.what[0] for s in result[0][0].what]
 		#k,self.last_section = self.sections.items()[len(self.sections.items())-1]
 		last_section = sections[len(sections)-1]
+
 		return last_section
 
 	def mark_errors(self):
@@ -1147,6 +1154,15 @@ class dataView(object):
 	@property
 	def text(self):
 		return self.view.substr(sublime.Region(0,self.view.size()))
+	@property
+	def current_text(self):
+		sections = self.sections
+		text = ""
+		for k,s in sections.items():
+			if s.begin <= self.caret_position and self.caret_position <= s.end:
+				print s.name
+				return self.view.substr(sublime.Region(s.begin,self.caret_position))
+		return text
 
 	def selection_row_sub(self,begin_str,end_str):
 		from_str = self.until_caret_row_text
@@ -1595,34 +1611,103 @@ class plplus_class(object):
 					return self.value
 		return symbol_class(self.result)
 
+
+def pyAST2XML(text):
+	pyAST = text
+	if isinstance(pyAST, unicode) or isinstance(pyAST, str):
+		return escape(pyAST)
+	if type(pyAST) is Symbol:
+		result = u"<" + pyAST[0].replace("_", "-") + u">"
+		for e in pyAST[1:]:
+			result += pyAST2XML(e)
+		result += u"</" + pyAST[0].replace("_", "-") + u">"
+	else:
+		result = u""
+		for e in pyAST:
+			result += pyAST2XML(e)
+	return result
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		view = dataView.active()
 		
 		def comment():		return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
-		def body():			return re.compile(r".*",re.S)
-		def datatype():		return re.compile(r"\w+")
-		def return_type():	return datatype		
-		def begin_block():	return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
+		# def body():			return re.compile(r".*",re.S)
+		
+		def basetype():		return re.compile(r"integer|date|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
+		def cfttype():		return "[",re.compile(r"\w+"),"]"
+		def cftref():		return "ref","[",re.compile(r"\w+"),"]"
+		def var_name():		return re.compile(r"\w+")
+		def data_type():	return [basetype,cfttype,cftref]
+		def vardef():		return var_name,data_type,0,(":=",ignore(r".*?(?=;)")),";"
+
+		#def return_type():	return datatype		
+		# def begin_block():	return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
 		def param_name():	return re.compile(r"\w+")
 		def param_type():	return re.compile(r"(?i)in out|in|out")
 		def param():		return param_name,0,param_type,datatype
 		def params():		return param,-1,(',',param)
 		def proc():			return
 		def func_name():	return re.compile(r"\w+")
-		def func():			return keyword('function'),func_name,"(",params,")",keyword('return'),return_type,keyword('is'),body
-		def exec_block():	return [func,proc]	
+		def func():			return (keyword('function'),
+									func_name,
+									0,("(", ignore(r".*?(?=\))",re.S),")"),
+									keyword('return'),
+									data_type,
+									keyword('is'),
+									ignore(r".*?(?=end;)end;",re.S))
+		
+		def func_cur():		return keyword('function'),func_name,0,("(", ignore(r".*?(?=\))",re.S),")"),keyword('return'),data_type,keyword('is'), ignore(r".*",re.S)
+		def block():		return -2,[func,proc,func_cur,vardef]	
+		#print "TEXT=",view.sections[view.current_section].text[:view.caret_position]
+		result = parseLine(view.current_text,block,[],True,comment)
 
-		self.result = parseLine(view.sections["EXECUTE"].text,exec_block,[],True,comment)
-		class exe(object):
-			func = self.result[0][0].what[0]
-			func_name = func.what[0].what
-			params_arr = func.what[1].what
-			params = dict([(p.what[0].what,{"type":p.what[1].what,"datatype":p.what[2].what})for p in params_arr])
-			return_type = func.what[2].what[0].what
-			body_text = func.what[3].what
-		e = exe()
-		print e.params
+
+		# class exe(object):
+		# 	func = self.result[0][0].what[0]
+		# 	func_name = func.what[0].what
+		# 	params_arr = func.what[1].what
+		# 	params = dict([(p.what[0].what,{"type":p.what[1].what,"datatype":p.what[2].what})for p in params_arr])
+		# 	return_type = func.what[2].what[0].what
+		# 	body_text = func.what[3].what
+		# e = exe()
+		# print e.params
+
+		#print "SECTION=",view.current_section
+		#print view.current_text()
+		
+		# class sym(object):
+		# 	def __init__(self,s):
+		# 		self.s = s
+		# 	def __getitem__(self, key):
+		# 		for v in self.s.what:
+		# 			if v[0] == key:
+		# 				return 
+		# 	def __getattr__(self,name):
+		# 		if self.name == name:
+		# 			return self.value
+
+		block = result[0][0].what
+		variables = dict()
+		funcs = dict()
+
+		for d in block:
+			# if d[0] == 'vardef':
+			name = d.what[0].what#,d.what[1][0]
+			kind = d.what[1].what[0][0]
+			if kind in ["cftref","cfttype"]: type_ = d.what[1].what[0].what[0]
+			else:							 type_ = d.what[1].what[0].what
+
+			if   d[0] == 'vardef': ds = variables
+			elif d[0] == 'func':   ds = funcs
+
+			ds[name] = {"kind":kind,"type":type_}
+
+		print funcs
+		print variables
+		#print variables
+			#print "d=",d[0]
+		#print pyAST2XML(result)
+
 
 #Класс для обработки событий
 #например события открытия выпадающего списка
