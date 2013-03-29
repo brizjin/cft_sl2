@@ -14,7 +14,7 @@ cache_path  			= os.path.join(plugin_path,"cache")
 used_classes_file_path 	= os.path.join(plugin_path,"cache","cft_settings.json")
 
 TIMER_DEBUG = True
-pyPEG.print_trace = True
+pyPEG.print_trace = False
 
 beg_whites_regex  = re.compile(r'^\s*') #ищем начало строки без пробелов
 end_whites_regex  = re.compile(r'\s*$') #ищем конец строки без пробелов
@@ -130,6 +130,7 @@ def sub(p_str,from_str,to_str,p_start=0):
 	begin = p_str.find(from_str,p_start)#-len(from_str)
 	end = p_str.rfind(to_str,p_start)+len(to_str)
 	return p_str[begin:end].strip()
+
 
 class FileReader(object):
 	def __init__(self):
@@ -839,27 +840,7 @@ class cftDB(object):
 		cl = self.classes[key]
 		cl.update()
 		return cl
-# class unicode_dict(dict):
-# 	"""dict for unicode"""
-# 	def __init__(self, *args):
-# 		super(unicode_dict, self).__init__(*args)
-		
-# 	def __unicode__(self):
-# 		r = u""
-# 		for k,v in self.iteritems():
-# 			r += u'{%s:%s}'%(k,v)
 
-# 		return r
-# 	def __str__(self):
-# 		r = ""
-# 		for k,v in self.iteritems():
-# 			r += '{%s:%s}'%(k.dcode('1251'),v.encode('1251'))
-
-# 		return r
-		
-# 	def __repr__(self):
-
-# 		return unicode(self)	
 
 db = cftDB()
 #db = None
@@ -1059,8 +1040,11 @@ class dataView(object):
 				self.end   = end
 				self.name  = name
 				self.text  = text
+				self.header_begin = self.begin
 				if self.name == "EXECUTE":
+					self.header_begin = self.begin
 					self.begin = self.view.text_point(self.view.rowcol(self.begin)[0] + self.view.data.execute_header().count("\n"),0)
+
 			@property
 			def rows(self):
 				if self.begin == self.end:
@@ -1158,11 +1142,16 @@ class dataView(object):
 	def current_text(self):
 		sections = self.sections
 		text = ""
-		for k,s in sections.items():
-			if s.begin <= self.caret_position and self.caret_position <= s.end:
-				print s.name
-				return self.view.substr(sublime.Region(s.begin,self.caret_position))
-		return text
+		#print "CURRENT TEXT"
+		try:
+			for k,s in sections.items():
+				if s.header_begin <= self.caret_position and self.caret_position <= s.end:
+					#print s.name
+					return self.view.substr(sublime.Region(s.header_begin,self.caret_position))
+			return text
+		except Exception as e:
+			print e
+			return ""
 
 	def selection_row_sub(self,begin_str,end_str):
 		from_str = self.until_caret_row_text
@@ -1170,6 +1159,124 @@ class dataView(object):
 		end 	 = from_str.rfind(end_str)#-len(end_str)
 		return from_str[begin:end].strip()
 		#class_name = row_text[row_text.rfind("::[")+3:len(row_text)-2]
+
+	@property
+	def block_autocomplete(self):
+		try:
+			def comment():		return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
+			def basetype():		return re.compile(r"integer|date|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
+			def cfttype():		return "[",re.compile(r"\w+"),"]"
+			def cftref():		return "ref","[",re.compile(r"\w+"),"]"
+			def undeftype():	return re.compile(r".*?(?=(,|\)| ))")
+			def var_name():		return re.compile(r"\w+")
+			def datatype():		return [basetype,cfttype,cftref,undeftype]
+			#def vardef():		return var_name,datatype,0,(":=",ignore(r".*?(?=;)")),";"
+			def vardef():		return var_name,datatype,";"
+			# def begin_block():	return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
+			def param_name():	return re.compile(r"\w+")
+			def param_type():	return [re.compile(r"(?i)in out\b"),re.compile(r"(?i)in\b"),re.compile(r"(?i)out\b")]
+			def param():		return param_name,0,param_type,datatype
+			def params():		return param,-1,(',',param)
+			def proc():			return
+			def func_name():	return re.compile(r"\w+")
+			def func():			return (keyword('function'),
+										func_name,
+										0,("(", params,")"),
+										keyword('return'),
+										datatype,
+										keyword('is'),
+										ignore(r".*?(?=end;)end;",re.S))
+
+			def func_cur():		return (keyword('function'),
+										func_name,
+										0,("(", params,0,")"),
+										keyword('return'),
+										datatype,
+										keyword('is'),
+										#ignore(r".*",re.S)
+										-1,vardef,
+										keyword('begin'),
+										ignore(r".*",re.S)
+										)
+			def block():		return -2,[func,proc,func_cur,vardef]	
+			#print "TEXT=",view.sections[view.current_section].text[:view.caret_position]
+			result = parseLine(self.current_text,block,[],True,comment)
+
+			
+			
+			#print "SYM_TYPE",type(sym("hello"))
+
+			block = sym(result).block
+			block_autocomplete = list()
+			block_dict = dict()
+			for s in block.get_arr("vardef"):
+				#print "varname=",s.var_name,s.datatype.name,s.datatype.value
+				#print "DATA=",s.datatype
+				block_autocomplete.append(("%s\t%s"%(s.var_name,s.datatype.value),s.var_name))
+			
+
+			for f in block.get_arr("func"):
+				#print "f=",f.func_name,f.datatype.name,f.datatype.value
+				#print "f=",f.func_name,dict([(p.param_name,{"kind":p.datatype.name,"type":p.datatype.value}) for p in f.params])
+
+				#print "params=",f.params
+				
+				if len(f.params.as_arr())>0:
+					p = max(f.params,key=lambda a:len(a.param_name))
+					max_len=len(p.param_name)
+					if max_len>15: max_len=15
+				else: max_len = 15
+
+				params_str = ""
+				params_tmp = "\t, %-"+str(max_len)+"s == ${%s:null} \t--%-2s %-7s %-20s\n"
+
+				#print "f.name=",f.func_name,len(f.params.as_arr())
+				if len(f.params.as_arr())==0:
+					f_snip  = "%s;"%f.func_name
+				elif len(f.params.as_arr())==1:
+					f_snip  = "%s(${1:null}); \t--%-7s %-20s\n"% \
+						(f.func_name,
+						 f.params.param.param_type.value,
+						 f.params.param.datatype.value)
+				elif len(f.params.as_arr())>1:
+
+					for i,param in enumerate(f.params):
+						#print param
+						#params_str += "\t,%-15s \t== ${%s:%-15s} \t--%-2s %-7s %-20s %s\n"%(param.short_name.replace('$','\$')
+						#params_str += "\t, %-15s \t== ${%s:null} \t--%-2s %-7s %-20s\n"% \
+						params_str += params_tmp%\
+							(param.param_name.replace('$','\$')
+							,i+1,i+1,param.param_type.replace('$','\$')
+							,param.datatype.value.replace('$','\$'))
+
+					params_str = params_str.lstrip('\t,')
+					params_str = "\n\t " + params_str
+					f_snip  = "%s(%s);"%(f.func_name,params_str)
+					#print "p=",p.param_name,p.datatype.name,p.datatype.value
+				block_autocomplete.append(("%s()\t%s"%(f.func_name,f.datatype.value),f_snip))
+
+			func_cur = block.func_cur
+			#print "func_cur.name=",func_cur.func_name
+			for p in func_cur.params:
+				if db.classes.has_key(p.datatype.value):
+					block_dict[p.param_name] = db.classes[p.datatype.value]
+
+				block_autocomplete.append(("%s\t%s {f param}"%(p.param_name,p.datatype.value),p.param_name))
+				#print "p=",p
+			for v in func_cur.get_arr("vardef"):
+				if db.classes.has_key(v.datatype.value):
+					block_dict[v.var_name] = db.classes[v.datatype.value]
+				block_autocomplete.append(("%s\t%s {var}"%(v.var_name,v.datatype.value),v.var_name))
+			
+			#print pyAST2XML(result)
+			return block_autocomplete,block_dict
+		except Exception as e:
+			print "BLOCK AUTOCOMPLITE ERROR",e
+			exc_type, exc_value, exc_traceback = sys.exc_info()					
+			traceback.print_exception(exc_type, exc_value, exc_traceback, limit=10, file=sys.stdout)
+			return []
+
+
 class plplus_class(object):
 	# class variable_class(object):
 	# 	def __init__(self,var_define):
@@ -1630,161 +1737,71 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		view = dataView.active()
 		
-		def comment():		return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
-		# def body():			return re.compile(r".*",re.S)
+
+		#print view.current_text
+
+class sym(object):
+	def __init__(self,s):
+		self.s = s
+	def get_arr(self,name):
+		arr = list()
+		for s in self.s:
+			if type(s) is Symbol and s[0] == name:
+				arr.append(sym(s.what))
+		return arr
+	@property
+	def name(self):
+		s = self.s
+		if type(s) is list:		s = s[0]
+		if type(s) is Symbol:	return s.__name__
+		return ""
+
+	@property
+	def value(self):
+		s = self.s
+		if type(s) is list:	s = s[0]
+		if type(s) is Symbol:	s = s.what
+		if type(s) is Symbol: 	return sym(s)
+		if isinstance(s, unicode) or isinstance(s, str): return s
+		else: return sym(s).value
 		
-		def basetype():		return re.compile(r"integer|date|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
-		def cfttype():		return "[",re.compile(r"\w+"),"]"
-		def cftref():		return "ref","[",re.compile(r"\w+"),"]"
-		def var_name():		return re.compile(r"\w+")
-		def datatype():		return [basetype,cfttype,cftref]
-		#def vardef():		return var_name,datatype,0,(":=",ignore(r".*?(?=;)")),";"
-		def vardef():		return var_name,datatype,";"
-
-		#def return_type():	return datatype		
-		# def begin_block():	return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
-		def param_name():	return re.compile(r"\w+")
-		def param_type():	return [keyword("in out"),keyword("in"),keyword("out")]
-		def param():		return param_name,0,param_type,datatype
-		def params():		return param,-1,(',',param)
-		def proc():			return
-		def func_name():	return re.compile(r"\w+")
-		def func():			return (keyword('function'),
-									func_name,
-									0,("(", params,")"),
-									keyword('return'),
-									datatype,
-									keyword('is'),
-									ignore(r".*?(?=end;)end;",re.S))
-
-		def func_cur():		return (keyword('function'),
-									func_name,
-									0,("(", ignore(r".*?(?=\))",re.S),")"),
-									keyword('return'),
-									datatype,
-									keyword('is'),
-									ignore(r".*",re.S))
-		def block():		return -2,[func,proc,func_cur,vardef]	
-		#print "TEXT=",view.sections[view.current_section].text[:view.caret_position]
-		result = parseLine(view.current_text,block,[],True,comment)
-
-
-		# class exe(object):
-		# 	func = self.result[0][0].what[0]
-		# 	func_name = func.what[0].what
-		# 	params_arr = func.what[1].what
-		# 	params = dict([(p.what[0].what,{"type":p.what[1].what,"datatype":p.what[2].what})for p in params_arr])
-		# 	return_type = func.what[2].what[0].what
-		# 	body_text = func.what[3].what
-		# e = exe()
-		# print e.params
-
-		#print "SECTION=",view.current_section
-		#print view.current_text()
+	def __iter__(self):		
+		return iter(self.as_arr())
+		#return iter(self.s)
+	
+	def as_arr(self):
 		
-		# class sym(object):
-		# 	def __init__(self,s):
-		# 		self.s = s
-		# 	def __getitem__(self, key):
-		# 		for v in self.s.what:
-		# 			if v[0] == key:
-		# 				return 
-		# 	def __getattr__(self,name):
-		# 		if self.name == name:
-		# 			return self.value
+		#print "TYPE=",type(self.s)
+		if type(self.s) is list:
+			arr = list()
+			for s in self.s:
+				if type(s) is Symbol:
+					arr.append(sym(s.what))
+			return arr
+		else: return []
+
+	def __getattr__(self,name):
+		s = self.s
+		if type(s) == tuple:
+			s = s[0]
+		if type(s) == list:
+			for a in s:
+				if type(a) == Symbol and a[0] == name:
+					a = a.what
+					#if type(a.what) is Symbol:
+					#if type(a) is list and len(a) == 1:
+					#	a = a[0]							
+					if type(a) is Symbol or type(a) is list:	return sym(a)
+					else:										return a
+					#else:						return a.what
+			try:
+				return getattr(s[0],name)
+			except AttributeError as e:
+				return sym("")
 		
-
-		class sym(object):
-			def __init__(self,s):
-				self.s = s
-			def get_arr(self,name):
-				arr = list()
-				for s in self.s:
-					if type(s) is Symbol and s[0] == name:
-						arr.append(sym(s.what))
-				return arr
-			@property
-			def name(self):
-				s = self.s
-				if type(s) is list:		s = s[0]
-				if type(s) is Symbol:	return s.__name__
-				return ""
-
-			@property
-			def value(self):
-				s = self.s
-				if type(s) is list:	s = s[0]
-				if type(s) is Symbol:	s = s.what
-				if type(s) is Symbol: 	return sym(s)
-				if isinstance(s, unicode) or isinstance(s, str): return s
-				else: return sym(s).value
-				
-			def __iter__(self):
-				arr = list()
-				for s in self.s:
-					if type(s) is Symbol:
-						arr.append(sym(s.what))
-				return iter(arr)
-				#return iter(self.s)
-			
-
-			def __getattr__(self,name):
-				s = self.s
-				if type(s) == tuple:
-					s = s[0]
-				if type(s) == list:
-					for a in s:
-						if type(a) == Symbol and a[0] == name:
-							#if type(a.what) is Symbol:	
-							return sym(a.what)
-							#else:						return a.what
-					try:
-						return getattr(s[0],name)
-					except AttributeError as e:
-						return ""
-				
-				return getattr(self.s,name)
-			def __repr__(self):
-				return self.s.__repr__()
-		
-		#print "SYM_TYPE",type(sym("hello"))
-		block = sym(result).block
-		for s in block.get_arr("vardef"):
-			print "varname=",s.var_name,s.datatype.name,s.datatype.value
-		
-
-		for f in block.get_arr("func"):
-			#print "f=",f.func_name,f.datatype.name,f.datatype.value
-			print "f=",f.func_name#,f.params
-			for p in f.params:
-				print "p=",p.param_name,p.datatype.name,p.datatype.value
-		#print block
-
-		#variables = dict()
-		#funcs = dict()
-
-		#for d in block:
-		# 	# if d[0] == 'vardef':
-			#print "d=",d
-		 	#name = d.what[0].what#,d.what[1][0]
-		 	#print "name=",d.what[1][0]
-		# 	kind = d.what[1].what[0][0]
-		# 	if kind in ["cftref","cfttype"]: type_ = d.what[1].what[0].what[0]
-		# 	else:							 type_ = d.what[1].what[0].what
-
-		# 	if   d[0] == 'vardef': ds = variables
-		# 	elif d[0] == 'func':   ds = funcs
-
-		# 	ds[name] = {"kind":kind,"type":type_}
-
-		# print funcs
-		# print variables
-
-		#print variables
-			#print "d=",d[0]
-		print pyAST2XML(result)
-
-
+		return getattr(self.s,name)
+	def __repr__(self):
+		return "sym(%s)"%self.s.__repr__()
 #Класс для обработки событий
 #например события открытия выпадающего списка
 class el(sublime_plugin.EventListener):
@@ -1815,6 +1832,7 @@ class el(sublime_plugin.EventListener):
 	def on_query_completions(self,view,prefix,locations):
 		
 		if view.match_selector(locations[0], 'source.python'):
+
 			return []
 		print "ON_QUERY_COMPLETIONS"
 		#print "1:%s,2:%s,3:%s,4:%s" % (self,view,prefix,locations)
@@ -1877,14 +1895,20 @@ class el(sublime_plugin.EventListener):
 						#print current_class			
 				else:
 					
-					variables = plplus_class(view.sections[view.current_section].text).exec_block_parser().variables
+					#variables = plplus_class(view.sections[view.current_section].text).exec_block_parser().variables
 					#variables = plplus_class(last_section.text).exec_block_parser().variables
 					#variables = exec_parser_class(last_section.text).variables
 
-					if name in variables:
-						v = variables[name]
-						if v.kind == "cft":
-							current_class = db[v.type]
+					# if name in variables:
+					# 	v = variables[name]
+					# 	if v.kind == "cft":
+					# 		current_class = db[v.type]
+					x,arr = view.block_autocomplete
+					if arr.has_key(name):
+
+						current_class = arr[name]
+						#print "ARR=",arr
+
 					if name == "this":
 						current_class = view.data.class_ref
 
@@ -1912,27 +1936,31 @@ class el(sublime_plugin.EventListener):
 			t.print_time("DOT")
 		elif last_text[-2:] == "::": #Вводим класс
 			a = db.classes.autocomplete
-		elif view.current_section == 'EXECUTE':# last_section.name == 'EXECUTE':
-			#print "EXECUTE"
-			#for v in exec_parser_class(last_section.text).variables:
-			#	print v
+			# elif view.current_section == 'EXECUTE':# last_section.name == 'EXECUTE':
+			# 	#print "EXECUTE"
+			# 	#for v in exec_parser_class(last_section.text).variables:
+			# 	#	print v
 
-			#переменные из секции EXECUTE
-			a = [("E %s\t%s"%(v.name,v.type),""+v.name) for vk,v in plplus_class(last_section.text).exec_block_parser().variables.iteritems()]
-			#переменная THIS
-			a.append(("E this\t%s"%view.data.class_ref.id,"this"))
-			#Локальные объявления, функции и переменные
-			blocks_parser = plplus_class(view.text).blocks_parser()
-			private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
-			for fk,f in private_parser.funcs.iteritems():
-				params_snippet = "\n\t "
-				for i,(pk,p) in enumerate(f.params.iteritems()):
-					params_snippet += "%-15s --%-2s %s\n\t,"%(p.name,i,p.datatype.type)
-				params_snippet = params_snippet.rstrip("\t,")
-				a.append(("L %s()\t%s"%(f.name,f.return_type.type),"%s(%s);"%(f.name,params_snippet)))
+			# 	#переменные из секции EXECUTE
+			# 	a = [("E %s\t%s"%(v.name,v.type),""+v.name) for vk,v in plplus_class(last_section.text).exec_block_parser().variables.iteritems()]
+			# 	#переменная THIS
+			# 	a.append(("E this\t%s"%view.data.class_ref.id,"this"))
+			# 	#Локальные объявления, функции и переменные
+			# 	blocks_parser = plplus_class(view.text).blocks_parser()
+			# 	private_parser = plplus_class(blocks_parser.sections["PRIVATE"].text).private_parser()
+			# 	for fk,f in private_parser.funcs.iteritems():
+			# 		params_snippet = "\n\t "
+			# 		for i,(pk,p) in enumerate(f.params.iteritems()):
+			# 			params_snippet += "%-15s --%-2s %s\n\t,"%(p.name,i,p.datatype.type)
+			# 		params_snippet = params_snippet.rstrip("\t,")
+			# 		a.append(("L %s()\t%s"%(f.name,f.return_type.type),"%s(%s);"%(f.name,params_snippet)))
 
-			for vk,v in private_parser.variables.iteritems():
-				a.append(("L %s\t%s"%(v.name,v.type),v.name))
+			# 	for vk,v in private_parser.variables.iteritems():
+		# 		a.append(("L %s\t%s"%(v.name,v.type),v.name))
+		else:
+			t,tt = view.block_autocomplete
+			a += t
+			#print "A=",a
 
 		#completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS | sublime.INHIBIT_WORD_COMPLETIONS
 		#completion_flags = sublime.INHIBIT_WORD_COMPLETIONS
