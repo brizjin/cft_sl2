@@ -14,7 +14,7 @@ cache_path  			= os.path.join(plugin_path,"cache")
 used_classes_file_path 	= os.path.join(plugin_path,"cache","cft_settings.json")
 
 TIMER_DEBUG = True
-pyPEG.print_trace = False
+pyPEG.print_trace = True
 
 beg_whites_regex  = re.compile(r'^\s*') #ищем начало строки без пробелов
 end_whites_regex  = re.compile(r'\s*$') #ищем конец строки без пробелов
@@ -486,17 +486,21 @@ class cftDB(object):
 				def params():		return param,-1,(',',param)
 				def proc():			return
 				def func_name():	return re.compile(r"\w+")
-				def func():			return keyword('function'),func_name,"(",params,")",keyword('return'),return_type,body
+				def func():			return keyword('function'),func_name,"(",0,params,")",keyword('return'),return_type,body
 				def exec_block():	return [func,proc]	
 
 				self.result = parseLine(execute_text,exec_block,[],True,comment)
 				class exe(object):
 					func = self.result[0][0].what[0]
-					func_name = func.what[0].what
-					params_arr = func.what[1].what
-					params = dict([(p.what[0].what,{"type":p.what[1].what,"datatype":p.what[2].what})for p in params_arr])
-					return_type = func.what[2].what[0].what
-					text = func.what[3].what
+					#func_name = func.what[0].what
+					#params_arr = func.what[1].what
+					#params = dict([(p.what[0].what,{"type":p.what[1].what,"datatype":p.what[2].what})for p in params_arr])
+					#return_type = func.what[2].what[0].what
+					for w in func.what:
+						if w[0] == "body":
+							text = w.what
+					#print "WHAT=", func.what
+					#text = func.what[3].what
 					text = text[text.find("\n")+1:]
 				return exe()
 			try:
