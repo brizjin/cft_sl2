@@ -864,18 +864,15 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 			sublime.active_window().run_command('connect',{})
 		else:
 			self.open_classes()
-
 	def open_classes(self):
 		self.classes = db.get_classes()
 		self.window.show_quick_panel([clv.text for clv in self.classes],self.open_methods,sublime.MONOSPACE_FONT)
-
 	#def is_methods_ready(self,selected_class):
 		
 	 	#if not db.is_methods_ready:
 	 	#	db.on_methods_cache_loaded += lambda:sublime.set_timeout(lambda:self.open_methods(selected_class),0)
 	 	#else:
 	 	#self.open_methods(selected_class)
-
 	def open_methods(self, selected_class):
 		try:
 			if selected_class >= 0:
@@ -899,8 +896,6 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 				exc_type, exc_value, exc_traceback = sys.exc_info()
 				traceback.print_exception(exc_type, exc_value, exc_traceback,
 					                          limit=10, file=sys.stdout)
-
-
 	def method_on_done(self,input):
 
 		def write(string):			
@@ -937,10 +932,8 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 			else:
 				sublime.status_message(u"У класса нет методов для открытия")
 			#pass
-
 	def on_change(self, input):
 		pass		
-
 	def on_cancel(self):
 		pass
 class save_methodCommand(sublime_plugin.TextCommand):
@@ -1167,7 +1160,7 @@ class dataView(object):
 			def basetype():		return re.compile(r"integer|date|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
 			def cfttype():		return "[",re.compile(r"\w+"),"]"
 			def cftref():		return "ref","[",re.compile(r"\w+"),"]"
-			def undeftype():	return re.compile(r".*?(?=(,|\)| ))")
+			def undeftype():	return re.compile(r".*?(?=(,|\)| |\n))")
 			def var_name():		return re.compile(r"\w+")
 			def datatype():		return [basetype,cfttype,cftref,undeftype]
 			#def vardef():		return var_name,datatype,0,(":=",ignore(r".*?(?=;)")),";"
@@ -1275,7 +1268,195 @@ class dataView(object):
 			exc_type, exc_value, exc_traceback = sys.exc_info()					
 			traceback.print_exception(exc_type, exc_value, exc_traceback, limit=10, file=sys.stdout)
 			return []
+class Dict(dict):
+	def __init__(self,*args,**kwargs):
+		super(Dict,self).__init__(*args,**kwargs)
+	def __getattr__(self,name):
+		return self[name]
+		#print "ARGS=",args
+class plplus(object):
+	class sym(object):
+		def __init__(self,s):
+			self.s = s
+		def get_arr(self,name):
+			arr = list()
+			for s in self.s:
+				if type(s) is Symbol and s[0] == name:
+					arr.append(plplus.sym(s.what))
+			return arr
+		@property
+		def name(self):
+			s = self.s
+			if type(s) is list:		s = s[0]
+			if type(s) is Symbol:	return s.__name__
+			return ""
 
+		@property
+		def value(self):
+			s = self.s
+			if type(s) is list:	s = s[0]
+			if type(s) is Symbol:	s = s.what
+			if type(s) is Symbol: 	return plplus.sym(s)
+			if isinstance(s, unicode) or isinstance(s, str): return s
+			else: return plplus.sym(s).value
+			
+		def __iter__(self):		
+			return iter(self.as_arr())
+			#return iter(self.s)
+		
+		def as_arr(self):
+			
+			#print "TYPE=",type(self.s)
+			if type(self.s) is list:
+				arr = list()
+				for s in self.s:
+					if type(s) is Symbol:
+						arr.append(plplus.sym(s.what))
+				return arr
+			else: return []
+
+		def __getattr__(self,name):
+			s = self.s
+			if type(s) == tuple:
+				s = s[0]
+			if type(s) == list:
+				for a in s:
+					if type(a) == Symbol and a[0] == name:
+						a = a.what
+						#if type(a.what) is Symbol:
+						#if type(a) is list and len(a) == 1:
+						#	a = a[0]							
+						if type(a) is Symbol or type(a) is list:	return plplus.sym(a)
+						else:										return a
+						#else:						return a.what
+				try:
+					return getattr(s[0],name)
+				except AttributeError as e:
+					return plplus.sym("")
+			
+			return getattr(self.s,name)
+		def __repr__(self):
+			return "sym(%s)"%self.s.__repr__()
+
+	def __init__(self,text):
+		try:
+			def comment():		return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
+			def basetype():		return re.compile(r"integer|date|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
+			def cfttype():		return "[",re.compile(r"\w+"),"]"
+			def cftref():		return "ref","[",re.compile(r"\w+"),"]"
+			def undeftype():	return re.compile(r".*?(?=(,|\)| ))")
+			def var_name():		return re.compile(r"\w+")
+			def datatype():		return [basetype,cfttype,cftref,undeftype]
+			#def vardef():		return var_name,datatype,0,(":=",ignore(r".*?(?=;)")),";"
+			def vardef():		return var_name,datatype,";"
+			# def begin_block():	return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
+			def param_name():	return re.compile(r"\w+")
+			def param_type():	return [re.compile(r"(?i)in out\b"),re.compile(r"(?i)in\b"),re.compile(r"(?i)out\b")]
+			def param():		return param_name,0,param_type,datatype
+			def params():		return param,-1,(',',param)
+			def proc():			return
+			def func_name():	return re.compile(r"\w+")
+			def func():			return (keyword('function'),
+										func_name,
+										0,("(", params,")"),
+										keyword('return'),
+										datatype,
+										keyword('is'),
+										ignore(r".*?(?=end;)end;",re.S))
+
+			def func_cur():		return (keyword('function'),
+										func_name,
+										0,("(", params,0,")"),
+										keyword('return'),
+										datatype,
+										keyword('is'),
+										#ignore(r".*",re.S)
+										-1,vardef,
+										keyword('begin'),
+										ignore(r".*",re.S)
+										)
+			def block():		return -2,[func,proc,func_cur,vardef]	
+			
+			result = parseLine(text,block,[],True,comment)
+			block = plplus.sym(result).block
+			#print "TYPE=",type((s.var_name,s.datatype.value) for s in block.get_arr("vardef"))
+			#try:
+			
+			self.vars = Dict((s.var_name,s.datatype.value) for s in block.get_arr("vardef"))
+			#except Exception as e:
+			#	print "E=",e
+			
+			self.funcs = Dict((f.func_name,	Dict({	"name"			: f.func_name,
+											 		"return_type"	: f.datatype.value,
+											 		"params"		: [Dict({"name"			: param.param_name,	
+											 								 "param_type"	: param.param_type.value,
+											 								 "datatype"		: param.datatype.value,
+																		 	 "num"			: i+1
+																			}) for i,param in enumerate(f.params)]
+											})) for f in block.get_arr("func"))
+
+			func_cur = block.func_cur
+			self.func = Dict({	"name"			: func_cur.func_name,
+						 		"return_type"	: func_cur.datatype.value,
+						 		"params"		: Dict((p.param_name,Dict({	"name"		: p.param_name,
+																 	  		"param_type": p.param_type.value,
+															 		  		"datatype"	: p.datatype.value,
+														 		  			"kind"		: p.datatype.name
+														 	 				})) for p in func_cur.params),
+								"vars"			: Dict((v.var_name,v.datatype.value) for v in func_cur.get_arr("vardef"))})
+		except Exception as e:
+			print "BLOCK AUTOCOMPLITE ERROR",e
+			exc_type, exc_value, exc_traceback = sys.exc_info()					
+			traceback.print_exception(exc_type, exc_value, exc_traceback, limit=10, file=sys.stdout)
+			#return []
+	@property
+	def autocomplete(self):
+		autocomplete  = list()
+		autocomplete += [("%s\t%s"%(k,v),k) for k,v in self.vars.iteritems()] #Переменные определенные вне функции
+
+		for k,f in self.funcs.items():
+			#print "F=",f.params
+			if len(f.params)>0:
+				p = max(f.params,key=lambda a:len(a.name))
+				max_len=len(p.name)
+				if max_len>15: max_len=15
+			else: max_len = 15
+
+			params_str = ""
+			params_tmp = "\t, %-"+str(max_len)+"s == ${%s:null} \t--%-2s %-7s %-20s\n"
+
+			def string_table(*args):
+				s = ""
+				print args[0]
+
+			if len(f.params)==0:
+				f_snip  = "%s;"%f.func_name
+			elif len(f.params)==1:				
+				f_snip  = "%s(${1:%s});"% (f.name,f.params[0].name)
+			elif len(f.params)>1:
+				string_table("строка")
+				for param in f.params:
+					params_str += params_tmp%(param.name,param.num,param.num,param.param_type,param.datatype)
+				f_snip  = "%s(%s);"%(f.name,"\n\t " + params_str.lstrip('\t,'))
+				#print "p=",p.param_name,p.datatype.name,p.datatype.value
+		autocomplete.append(("%s()\t%s"%(f.name,f.return_type),f_snip))
+
+		return autocomplete
+
+	def pyAST2XML(text):
+		pyAST = text
+		if isinstance(pyAST, unicode) or isinstance(pyAST, str):
+			return escape(pyAST)
+		if type(pyAST) is Symbol:
+			result = u"<" + pyAST[0].replace("_", "-") + u">"
+			for e in pyAST[1:]:
+				result += pyAST2XML(e)
+			result += u"</" + pyAST[0].replace("_", "-") + u">"
+		else:
+			result = u""
+			for e in pyAST:
+				result += pyAST2XML(e)
+		return result
 
 class plplus_class(object):
 	# class variable_class(object):
@@ -1718,90 +1899,17 @@ class plplus_class(object):
 					return self.value
 		return symbol_class(self.result)
 
-
-def pyAST2XML(text):
-	pyAST = text
-	if isinstance(pyAST, unicode) or isinstance(pyAST, str):
-		return escape(pyAST)
-	if type(pyAST) is Symbol:
-		result = u"<" + pyAST[0].replace("_", "-") + u">"
-		for e in pyAST[1:]:
-			result += pyAST2XML(e)
-		result += u"</" + pyAST[0].replace("_", "-") + u">"
-	else:
-		result = u""
-		for e in pyAST:
-			result += pyAST2XML(e)
-	return result
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		view = dataView.active()
 		
-
+		p = plplus(view.current_text)
+		print p.funcs
+		print p.func
+		print p.vars
 		#print view.current_text
 
-class sym(object):
-	def __init__(self,s):
-		self.s = s
-	def get_arr(self,name):
-		arr = list()
-		for s in self.s:
-			if type(s) is Symbol and s[0] == name:
-				arr.append(sym(s.what))
-		return arr
-	@property
-	def name(self):
-		s = self.s
-		if type(s) is list:		s = s[0]
-		if type(s) is Symbol:	return s.__name__
-		return ""
 
-	@property
-	def value(self):
-		s = self.s
-		if type(s) is list:	s = s[0]
-		if type(s) is Symbol:	s = s.what
-		if type(s) is Symbol: 	return sym(s)
-		if isinstance(s, unicode) or isinstance(s, str): return s
-		else: return sym(s).value
-		
-	def __iter__(self):		
-		return iter(self.as_arr())
-		#return iter(self.s)
-	
-	def as_arr(self):
-		
-		#print "TYPE=",type(self.s)
-		if type(self.s) is list:
-			arr = list()
-			for s in self.s:
-				if type(s) is Symbol:
-					arr.append(sym(s.what))
-			return arr
-		else: return []
-
-	def __getattr__(self,name):
-		s = self.s
-		if type(s) == tuple:
-			s = s[0]
-		if type(s) == list:
-			for a in s:
-				if type(a) == Symbol and a[0] == name:
-					a = a.what
-					#if type(a.what) is Symbol:
-					#if type(a) is list and len(a) == 1:
-					#	a = a[0]							
-					if type(a) is Symbol or type(a) is list:	return sym(a)
-					else:										return a
-					#else:						return a.what
-			try:
-				return getattr(s[0],name)
-			except AttributeError as e:
-				return sym("")
-		
-		return getattr(self.s,name)
-	def __repr__(self):
-		return "sym(%s)"%self.s.__repr__()
 #Класс для обработки событий
 #например события открытия выпадающего списка
 class el(sublime_plugin.EventListener):
@@ -1958,8 +2066,9 @@ class el(sublime_plugin.EventListener):
 			# 	for vk,v in private_parser.variables.iteritems():
 		# 		a.append(("L %s\t%s"%(v.name,v.type),v.name))
 		else:
-			t,tt = view.block_autocomplete
-			a += t
+			#t,tt = view.block_autocomplete
+			#a += t
+			a += plplus(view.current_text).autocomplete
 			#print "A=",a
 
 		#completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS | sublime.INHIBIT_WORD_COMPLETIONS
