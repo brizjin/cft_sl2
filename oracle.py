@@ -15,6 +15,7 @@ used_classes_file_path 	= os.path.join(plugin_path,"cache","cft_settings.json")
 
 TIMER_DEBUG = True
 pyPEG.print_trace = True
+USE_PARSER = True
 
 beg_whites_regex  = re.compile(r'^\s*') #ищем начало строки без пробелов
 end_whites_regex  = re.compile(r'\s*$') #ищем конец строки без пробелов
@@ -488,7 +489,9 @@ class cftDB(object):
 				def func_name():	return re.compile(r"\w+")
 				def func():			return keyword('function'),func_name,"(",0,params,")",keyword('return'),return_type,body
 				def exec_block():	return [func,proc]	
-
+				#print execute_text
+				import pyPEG
+				from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
 				self.result = parseLine(execute_text,exec_block,[],True,comment)
 				class exe(object):
 					func = self.result[0][0].what[0]
@@ -1278,6 +1281,11 @@ class Dict(dict):
 	def __getattr__(self,name):
 		return self[name]
 		#print "ARGS=",args
+	def __iadd__(self, other):		
+		for k,v in other.items():
+			self[k] = v
+		return self
+
 class plplus(object):
 	class sym(object):
 		def __init__(self,s):
@@ -1345,14 +1353,15 @@ class plplus(object):
 	def __init__(self,text):
 		try:
 			def comment():		return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
+			def pragma():		return keyword('pragma'),re.compile(r".*?(?<=;)", re.S)
 			def basetype():		return re.compile(r"integer|date|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
 			def cfttype():		return "[",re.compile(r"\w+"),"]"
 			def cftref():		return "ref","[",re.compile(r"\w+"),"]"
-			def undeftype():	return re.compile(r".*?(?=(,|\)| ))")
+			def undeftype():	return re.compile(r".*?(?=(,|\)| |;))")
 			def var_name():		return re.compile(r"\w+")
 			def datatype():		return [basetype,cfttype,cftref,undeftype]
 			#def vardef():		return var_name,datatype,0,(":=",ignore(r".*?(?=;)")),";"
-			def vardef():		return var_name,datatype,";"
+			def vardef():		return var_name,datatype,0,(":=",ignore(r".*?(?=;)")),";"
 			# def begin_block():	return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
 			def param_name():	return re.compile(r"\w+")
 			def param_type():	return [re.compile(r"(?i)in out\b"),re.compile(r"(?i)in\b"),re.compile(r"(?i)out\b")]
@@ -1379,14 +1388,16 @@ class plplus(object):
 										keyword('begin'),
 										ignore(r".*",re.S)
 										)
-			def block():		return -2,[func,proc,func_cur,vardef]	
-			
-			result = parseLine(text,block,[],True,comment)
-			block = plplus.sym(result).block
+			def block():		return -2,[pragma,func,proc,func_cur,vardef]	
+			import pyPEG
+			from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
+			result	= parseLine(text,block,[],True,comment)
+			block	= plplus.sym(result).block
 			#print "TYPE=",type((s.var_name,s.datatype.value) for s in block.get_arr("vardef"))
 			#try:
-			
+			#self.vars = dict()
 			self.vars = Dict((s.var_name,s.datatype.value) for s in block.get_arr("vardef"))
+			#print "******************************************************************vars",self.vars
 			#except Exception as e:
 			#	print "E=",e
 			
@@ -1408,6 +1419,11 @@ class plplus(object):
 														 		  			"kind"		: p.datatype.name
 														 	 				})) for p in func_cur.params),
 								"vars"			: Dict((v.var_name,v.datatype.value) for v in func_cur.get_arr("vardef"))})
+			self.all_vars = Dict()
+			self.all_vars += self.vars
+			self.all_vars += self.func.vars
+			self.all_vars += Dict((k,v.datatype) for k,v in self.func.params.items())
+
 		except Exception as e:
 			print "BLOCK AUTOCOMPLITE ERROR",e
 			exc_type, exc_value, exc_traceback = sys.exc_info()					
@@ -1429,21 +1445,24 @@ class plplus(object):
 			params_str = ""
 			params_tmp = "\t, %-"+str(max_len)+"s == ${%s:null} \t--%-2s %-7s %-20s\n"
 
-			def string_table(*args):
-				s = ""
-				print args[0]
+			#def string_table(*args):
+			#	s = ""
+			#	print args[0]
 
 			if len(f.params)==0:
 				f_snip  = "%s;"%f.func_name
 			elif len(f.params)==1:				
 				f_snip  = "%s(${1:%s});"% (f.name,f.params[0].name)
 			elif len(f.params)>1:
-				string_table("строка")
+				#string_table("строка")
 				for param in f.params:
 					params_str += params_tmp%(param.name,param.num,param.num,param.param_type,param.datatype)
 				f_snip  = "%s(%s);"%(f.name,"\n\t " + params_str.lstrip('\t,'))
-				#print "p=",p.param_name,p.datatype.name,p.datatype.value
-		autocomplete.append(("%s()\t%s"%(f.name,f.return_type),f_snip))
+				#print "p=",p.param_name,p.datatype.name,p.datatype.value			
+			autocomplete.append(("%s()\t%s"%(f.name,f.return_type),f_snip))
+
+		autocomplete += [("%s\t%s{vars}"%(k,v),k) for k,v in self.func.vars.iteritems()] #переменные оперделенные в текущей функции
+		autocomplete += [("%s\t%s{params}"%(k,v.datatype),k) for k,v in self.func.params.iteritems()] #переменные оперделенные в текущей функции
 
 		return autocomplete
 
@@ -1942,11 +1961,11 @@ class el(sublime_plugin.EventListener):
 			if last_text[-2:] == '::' or last_text[-2:] == "]("	or last_text[-1:] == '.' or last_text[-4:] == "and ":
 				view.run_command('my_auto_complete',{})
 	def on_query_completions(self,view,prefix,locations):
-		
+		t = timer()
 		if view.match_selector(locations[0], 'source.python'):
 
 			return []
-		print "ON_QUERY_COMPLETIONS"
+		#print "ON_QUERY_COMPLETIONS"
 		#print "1:%s,2:%s,3:%s,4:%s" % (self,view,prefix,locations)
 
 		view = dataView(view)
@@ -1963,24 +1982,27 @@ class el(sublime_plugin.EventListener):
 			completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS | sublime.INHIBIT_WORD_COMPLETIONS #Список и автоподсказки
 		elif last_text[-2:] == "](" or last_text[-4:] == "and ": #Конструкция поиска
 			#class_name = view.selection_row_sub("::[","](")
+			current_class = ""
 			for m in re.finditer(r"((::)*\[[a-zA-Z_#0-9]+\])(?!\(\[)",view.until_caret_row_text):
 				name = m.group(1)
-				print name
+				#print name
 				if name[0:2] == "::":
 					current_class = db[name[3:-1]]
-				elif current_class.attrs.has_key(name[1:-1]):
-					current_class = current_class.attrs[name[1:-1]].self_class					
-					if current_class.base_class_id == 'COLLECTION':
-						current_class = current_class.target_class
-					if current_class.base_class_id == 'REFERENCE':
-						current_class = current_class.target_class
+				elif current_class:
+					if current_class.attrs.has_key(name[1:-1]):
+						current_class = current_class.attrs[name[1:-1]].self_class					
+						if current_class.base_class_id == 'COLLECTION':
+							current_class = current_class.target_class
+						if current_class.base_class_id == 'REFERENCE':
+							current_class = current_class.target_class
 				#::[EXT_DOCS_SVOD]()
 			#a = db[class_name].attrs.autocomplete
 			#print current_class.id
-			a = current_class.attrs.autocomplete
+			if current_class:
+				a = current_class.attrs.autocomplete
 		elif last_text[-1:] == '.':
 			#for m in reversed(list(re.finditer(r"(::)*\[[a-zA-Z_#]+\]",text))):
-			t = timer()
+			#t = timer()
 			current_class = None
 
 			
@@ -2015,16 +2037,21 @@ class el(sublime_plugin.EventListener):
 					# 	v = variables[name]
 					# 	if v.kind == "cft":
 					# 		current_class = db[v.type]
-					x,arr = view.block_autocomplete
-					if arr.has_key(name):
 
-						current_class = arr[name]
-						#print "ARR=",arr
+					if USE_PARSER:
+						p = plplus(view.current_text)
+						if p.all_vars.has_key(name):
+							dt = p.all_vars[name]
+							if db.classes.has_key(dt):
+								current_class = db[dt]
+						# x,arr = view.block_autocomplete
+						# if arr.has_key(name):
+						# 	current_class = arr[name]
+						if name == "this":
+						 	current_class = view.data.class_ref
+						is_class = True
 
-					if name == "this":
-						current_class = view.data.class_ref
 
-					is_class = True
 			if current_class:
 				if is_class:				
 					a = current_class.autocomplete
@@ -2045,7 +2072,7 @@ class el(sublime_plugin.EventListener):
 						##print a
 
 
-			t.print_time("DOT")
+			#t.print_time("DOT")
 		elif last_text[-2:] == "::": #Вводим класс
 			a = db.classes.autocomplete
 			# elif view.current_section == 'EXECUTE':# last_section.name == 'EXECUTE':
@@ -2070,14 +2097,17 @@ class el(sublime_plugin.EventListener):
 			# 	for vk,v in private_parser.variables.iteritems():
 		# 		a.append(("L %s\t%s"%(v.name,v.type),v.name))
 		else:
-			#t,tt = view.block_autocomplete
-			#a += t
-			a += plplus(view.current_text).autocomplete
-			#print "A=",a
+
+			if USE_PARSER:
+				a += plplus(view.current_text).autocomplete
+			#print "ELSE",a
+			
+			
 
 		#completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS | sublime.INHIBIT_WORD_COMPLETIONS
 		#completion_flags = sublime.INHIBIT_WORD_COMPLETIONS
 		completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS
+		t.print_time("ON_QUERY_COMPLETIONS")
 		return (a,completion_flags)
 	def on_selection_modified(self, view):
 		row, col = view.rowcol(view.sel()[0].a)
