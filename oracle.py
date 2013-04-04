@@ -1411,6 +1411,8 @@ class plplus(object):
 											})) for f in block.get_arr("func"))
 
 			func_cur = block.func_cur
+			print "FU=",func_cur.name
+			#if func_cur.name == "func_cur":
 			self.func = Dict({	"name"			: func_cur.func_name,
 						 		"return_type"	: func_cur.datatype.value,
 						 		"params"		: Dict((p.param_name,Dict({	"name"		: p.param_name,
@@ -1419,10 +1421,12 @@ class plplus(object):
 														 		  			"kind"		: p.datatype.name
 														 	 				})) for p in func_cur.params),
 								"vars"			: Dict((v.var_name,v.datatype.value) for v in func_cur.get_arr("vardef"))})
+			self.all_vars += Dict((k,v.datatype) for k,v in self.func.params.items())
+			#else: self.func = ""
 			self.all_vars = Dict()
 			self.all_vars += self.vars
 			self.all_vars += self.func.vars
-			self.all_vars += Dict((k,v.datatype) for k,v in self.func.params.items())
+			
 
 		except Exception as e:
 			print "BLOCK AUTOCOMPLITE ERROR",e
@@ -1449,17 +1453,45 @@ class plplus(object):
 			#	s = ""
 			#	print args[0]
 
+			def string_table(arr,template,with_header=0):
+				rows = ""
+				name_maxs = dict()
+				re_param = re.compile(r'{(\w+)}')
+				for s in re_param.finditer(template):								
+					p = max(arr,key=lambda a:len(str(getattr(a,s.group(1)))))					
+					name_maxs[s.group(1)] = len(str(getattr(p,s.group(1))))
+				#print "maxs=",name_maxs
+				for a in arr:
+					row = template					
+					for s in re_param.finditer(template):
+						param = s.group(1)
+						if name_maxs[param] == 0: tmp = "%s"
+						else:					  tmp = "%-"+str(name_maxs[param])+"s"
+						#print "P=",param,tmp
+						row = row.replace("{%s}"%param,tmp%getattr(a,param))
+						#print "ROW=",row
+					rows += row.rstrip('\n') + "\n"
+				return rows.rstrip('\n')
+
+			print string_table(f.params,"{name}|{datatype}")
+
+
 			if len(f.params)==0:
 				f_snip  = "%s;"%f.func_name
 			elif len(f.params)==1:				
 				f_snip  = "%s(${1:%s});"% (f.name,f.params[0].name)
 			elif len(f.params)>1:
-				#string_table("строка")
-				for param in f.params:
-					params_str += params_tmp%(param.name,param.num,param.num,param.param_type,param.datatype)
-				f_snip  = "%s(%s);"%(f.name,"\n\t " + params_str.lstrip('\t,'))
+				params_str = string_table(f.params,"\t, {name} == ${{num}:null} --{num} {param_type} {datatype}")
+				# for param in f.params:
+				# 	params_str += params_tmp%(param.name,param.num,param.num,param.param_type,param.datatype)
+				f_snip  = "%s(%s\n);"%(f.name,"\n\t " + params_str.lstrip('\t,'))
 				#print "p=",p.param_name,p.datatype.name,p.datatype.value			
 			autocomplete.append(("%s()\t%s"%(f.name,f.return_type),f_snip))
+
+			#if 	 len(f.params)==0:		f_snip = "%s;"%f.func_name
+			#elif len(f.params)==1:		f_snip = "%s(${1:%s});"% (f.name,f.params[0].name)
+			#elif len(f.params)>1:		f_snip = "%s(%s);"%(f.name,"\n\t " + reduce(lambda  param_str,param: params_str + params_tmp%(param.name,param.num,param.num,param.param_type,param.datatype),f.params).lstrip('\t,'))
+			#autocomplete.append(("%s()\t%s"%(f.name,f.return_type),f_snip))
 
 		autocomplete += [("%s\t%s{vars}"%(k,v),k) for k,v in self.func.vars.iteritems()] #переменные оперделенные в текущей функции
 		autocomplete += [("%s\t%s{params}"%(k,v.datatype),k) for k,v in self.func.params.iteritems()] #переменные оперделенные в текущей функции
