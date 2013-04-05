@@ -1290,6 +1290,10 @@ class dataView(object):
 			exc_type, exc_value, exc_traceback = sys.exc_info()					
 			traceback.print_exception(exc_type, exc_value, exc_traceback, limit=10, file=sys.stdout)
 			return []
+	def write(self,string):			
+		edit = self.view.begin_edit()
+		self.view.insert(edit, self.view.size(), string)
+		self.view.end_edit(edit)
 class plplus(object):
 	class sym(object):
 		def __init__(self,s):
@@ -1357,20 +1361,21 @@ class plplus(object):
 	def __init__(self,text):
 		try:
 			def comment():		return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
+			def id_():			return re.compile(r"[a-zA-Z0-9$#_]+")
 			def pragma():		return keyword('pragma'),re.compile(r".*?(?<=;)", re.S)
 			def basetype():		return re.compile(r"integer|date|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
 			def cfttype():		return "[",re.compile(r"\w+"),"]"
 			def cftref():		return "ref","[",re.compile(r"\w+"),"]"
-			def undeftype():	return re.compile(r".*?(?=(,|\)| |;))")
+			#def undeftype():	return re.compile(r".*?(?=(,|\)| |;))")
 			def var_name():		return re.compile(r"\w+")
-			def datatype():		return [basetype,cfttype,cftref,undeftype]
+			def datatype():		return [basetype,cfttype,cftref]
 			#def vardef():		return var_name,datatype,0,(":=",ignore(r".*?(?=;)")),";"
 			def vardef():		return var_name,datatype,0,(":=",ignore(r".*?(?=;)")),";"
 			# def begin_block():	return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
 			def param_name():	return re.compile(r"\w+")
 			def param_type():	return [re.compile(r"(?i)in out\b"),re.compile(r"(?i)in\b"),re.compile(r"(?i)out\b")]
 			def param():		return param_name,0,param_type,datatype
-			def params():		return param,-1,(',',param)
+			def param_list():	return param,-1,(',',param)
 			def proc():			return
 			def func_name():	return re.compile(r"\w+")
 			def func():			return (keyword('function'),
@@ -1392,7 +1397,20 @@ class plplus(object):
 										keyword('begin'),
 										ignore(r".*",re.S)
 										)
-			def block():		return -2,[pragma,func,proc,func_cur,vardef]	
+			#def block():		return -2,[pragma,func,proc,func_cur,vardef]
+			def statement():		return 
+			def statements_list():	return -2,statement
+			def declare_function(): return (keyword("function"),id_,
+											0,("(", param_list,")"),
+											keyword("return"),datatype,keyword("is"),
+											0,declarations,
+											keyword("begin"),
+											ignore(r".*?(?=end;)",re.S),
+											keyword("end"),";"
+										   )
+			def declare_element(): 	return declare_function
+			def declarations(): 	return -2,declare_element
+			def block():			return declarations
 			
 			import pyPEG
 			from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
@@ -1413,8 +1431,8 @@ class plplus(object):
 					for e in pyAST:
 						result += pyAST2XML(e)
 				return result
-			print "RES=",pyAST2XML(result)
-
+			self.xml = pyAST2XML(result)
+			return
 			self.autocomplete	= list()
 			self.vars			= dict()
 
@@ -1938,14 +1956,30 @@ class plplus_class(object):
 		return symbol_class(self.result)
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
-		view = dataView.active()
-		
-		p = plplus(view.current_text)
-		print p.funcs
-		print p.func
-		print p.vars
-		#print view.current_text
-
+		view = dataView.active()		
+		xml = plplus(view.current_text).xml
+		print xml
+		# view = dataView.new()
+		# view.set_name("xml")
+		# view.set_scratch(True)
+		# view.set_syntax_file("Packages/XML/XML.tmLanguage")		
+		# #view.set_encoding("utf-8")
+		# view.write(xml)
+		# view.run_command("indentxml")
+		# view.focus()
+class print_cmd2Command(sublime_plugin.TextCommand):
+	def run(self, edit):
+		view = dataView.active()		
+		xml = plplus(view.current_text).xml
+		#print xml
+		view = dataView.new()
+		view.set_name("xml")
+		view.set_scratch(True)
+		view.set_syntax_file("Packages/XML/XML.tmLanguage")		
+		#view.set_encoding("utf-8")
+		view.write(xml)
+		view.run_command("indentxml")
+		view.focus()
 #Класс для обработки событий
 #например события открытия выпадающего списка
 class el(sublime_plugin.EventListener):
