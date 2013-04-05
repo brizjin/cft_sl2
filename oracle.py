@@ -131,7 +131,25 @@ def sub(p_str,from_str,to_str,p_start=0):
 	begin = p_str.find(from_str,p_start)#-len(from_str)
 	end = p_str.rfind(to_str,p_start)+len(to_str)
 	return p_str[begin:end].strip()
+def string_table(arr,template):
+	rows = ""
+	tmp = template				
+	re_param = re.compile(r'{(\w+)}')
 
+	def get(obj,name):
+		if type(obj) is dict: return str(obj[name])
+		return str(getattr(obj,name))
+
+	for s in re_param.finditer(template):
+		name = s.group(1)
+		l = lambda a: len(get(a,name))
+		m = l(max(arr,key=l))
+		tmp = tmp.replace("{%s}"%name,"%-"+str(m)+"s")
+
+	for a in arr:
+		t = tuple(get(a,s.group(1)) for s in re_param.finditer(template))
+		rows += (tmp%t).rstrip('\n') + "\n"
+	return rows.rstrip('\n')
 
 class FileReader(object):
 	def __init__(self):
@@ -238,7 +256,6 @@ class EventHook(object):
         for theHandler in self.__handlers:
             if theHandler.im_self == inObject:
                 self -= theHandler
-
 class cftDB(object):
 	class db_row(object):
 		def __init__(self,db,p_list):			
@@ -850,7 +867,6 @@ class cftDB(object):
 
 
 db = cftDB()
-#db = None
 
 class connectCommand(sublime_plugin.WindowCommand):
 	def run(self):
@@ -981,7 +997,6 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			sublime.status_message(u"Компиляция завершена за " + self.t.get_time())
 
 		#self.profiler.print_stats()
-
 class dataView(object):
 	def __init__(self,view):
 		self.view = view
@@ -1275,17 +1290,6 @@ class dataView(object):
 			exc_type, exc_value, exc_traceback = sys.exc_info()					
 			traceback.print_exception(exc_type, exc_value, exc_traceback, limit=10, file=sys.stdout)
 			return []
-class Dict(dict):
-	def __init__(self,*args,**kwargs):
-		super(Dict,self).__init__(*args,**kwargs)
-	def __getattr__(self,name):
-		return self[name]
-		#print "ARGS=",args
-	def __iadd__(self, other):		
-		for k,v in other.items():
-			self[k] = v
-		return self
-
 class plplus(object):
 	class sym(object):
 		def __init__(self,s):
@@ -1389,52 +1393,63 @@ class plplus(object):
 										ignore(r".*",re.S)
 										)
 			def block():		return -2,[pragma,func,proc,func_cur,vardef]	
+			
 			import pyPEG
 			from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
 			result	= parseLine(text,block,[],True,comment)
 			block	= plplus.sym(result).block
-			#print "TYPE=",type((s.var_name,s.datatype.value) for s in block.get_arr("vardef"))
-			#try:
-			#self.vars = dict()
-			self.vars = Dict((s.var_name,s.datatype.value) for s in block.get_arr("vardef"))
-			#print "******************************************************************vars",self.vars
-			#except Exception as e:
-			#	print "E=",e
-			
-			self.funcs = Dict((f.func_name,	Dict({	"name"			: f.func_name,
-											 		"return_type"	: f.datatype.value,
-											 		"params"		: [Dict({"name"			: param.param_name,	
-											 								 "param_type"	: param.param_type.value,
-											 								 "datatype"		: param.datatype.value,
-																		 	 "num"			: i+1
-																			}) for i,param in enumerate(f.params)]
-											})) for f in block.get_arr("func"))
+
+			def pyAST2XML(text):
+				pyAST = text
+				if isinstance(pyAST, unicode) or isinstance(pyAST, str):
+					return escape(pyAST)
+				if type(pyAST) is Symbol:
+					result = u"<" + pyAST[0].replace("_", "-") + u">"
+					for e in pyAST[1:]:
+						result += pyAST2XML(e)
+					result += u"</" + pyAST[0].replace("_", "-") + u">"
+				else:
+					result = u""
+					for e in pyAST:
+						result += pyAST2XML(e)
+				return result
+			print "RES=",pyAST2XML(result)
+
+			self.autocomplete	= list()
+			self.vars			= dict()
+
+			#переменные блока, на уровне функций
+			vars_dict = dict((s.var_name,s.datatype.value) for s in block.get_arr("vardef"))
+			self.autocomplete += [("%s\t%s"%(k,v),k) for k,v in vars_dict.iteritems()]
+			self.vars.update(vars_dict)
+				
+			#функции блока
+			for f in block.get_arr("func"):
+				params = [{"num":i+1,"name":p.param_name,"param_type": p.param_type.value,"datatype": p.datatype.value} for i,p in enumerate(f.params)]
+				if 	 len(params)==0: f_snip = "%s;"%f.func_name
+				elif len(params)==1: f_snip = "%s(${1:%s});"% (f.func_name,f.params.items[0].param_name)
+				elif len(params) >1: f_snip = "%s(%s\n);"%(f.func_name,"\n\t " + string_table(params,"\t, {name} == ${{num}:null} --{num} {param_type} {datatype}").lstrip('\t,'))
+				self.autocomplete.append(("%s()\t%s"%(f.func_name,f.datatype.value),f_snip))
 
 			func_cur = block.func_cur
-			print "FU=",func_cur.name
-			#if func_cur.name == "func_cur":
-			self.func = Dict({	"name"			: func_cur.func_name,
-						 		"return_type"	: func_cur.datatype.value,
-						 		"params"		: Dict((p.param_name,Dict({	"name"		: p.param_name,
-																 	  		"param_type": p.param_type.value,
-															 		  		"datatype"	: p.datatype.value,
-														 		  			"kind"		: p.datatype.name
-														 	 				})) for p in func_cur.params),
-								"vars"			: Dict((v.var_name,v.datatype.value) for v in func_cur.get_arr("vardef"))})
-			self.all_vars += Dict((k,v.datatype) for k,v in self.func.params.items())
-			#else: self.func = ""
-			self.all_vars = Dict()
-			self.all_vars += self.vars
-			self.all_vars += self.func.vars
-			
+			if func_cur.name == 'func_name':				
+				#параметры текущей фукнкции
+				vars_dict = dict((p.param_name,p.datatype.value) for p in block.func_cur.params)
+				self.autocomplete += [("%s\t%s"%(k,v),k) for k,v in vars_dict.iteritems()]
+				self.vars.update(vars_dict)
+
+				#переменные текущей функции
+				vars_dict = dict((s.var_name,s.datatype.value) for s in  block.func_cur.get_arr("vardef"))
+				self.autocomplete += [("%s\t%s"%(k,v),k) for k,v in vars_dict.iteritems()]
+				self.vars.update(vars_dict)
 
 		except Exception as e:
 			print "BLOCK AUTOCOMPLITE ERROR",e
 			exc_type, exc_value, exc_traceback = sys.exc_info()					
 			traceback.print_exception(exc_type, exc_value, exc_traceback, limit=10, file=sys.stdout)
 			#return []
-	@property
-	def autocomplete(self):
+	#@property
+	def autocomplete_old(self):
 		autocomplete  = list()
 		autocomplete += [("%s\t%s"%(k,v),k) for k,v in self.vars.iteritems()] #Переменные определенные вне функции
 
@@ -1453,27 +1468,9 @@ class plplus(object):
 			#	s = ""
 			#	print args[0]
 
-			def string_table(arr,template,with_header=0):
-				rows = ""
-				name_maxs = dict()
-				re_param = re.compile(r'{(\w+)}')
-				for s in re_param.finditer(template):								
-					p = max(arr,key=lambda a:len(str(getattr(a,s.group(1)))))					
-					name_maxs[s.group(1)] = len(str(getattr(p,s.group(1))))
-				#print "maxs=",name_maxs
-				for a in arr:
-					row = template					
-					for s in re_param.finditer(template):
-						param = s.group(1)
-						if name_maxs[param] == 0: tmp = "%s"
-						else:					  tmp = "%-"+str(name_maxs[param])+"s"
-						#print "P=",param,tmp
-						row = row.replace("{%s}"%param,tmp%getattr(a,param))
-						#print "ROW=",row
-					rows += row.rstrip('\n') + "\n"
-				return rows.rstrip('\n')
 
-			print string_table(f.params,"{name}|{datatype}")
+
+			#print string_table(f.params,"{name}|{datatype}")
 
 
 			if len(f.params)==0:
@@ -1498,21 +1495,7 @@ class plplus(object):
 
 		return autocomplete
 
-	def pyAST2XML(text):
-		pyAST = text
-		if isinstance(pyAST, unicode) or isinstance(pyAST, str):
-			return escape(pyAST)
-		if type(pyAST) is Symbol:
-			result = u"<" + pyAST[0].replace("_", "-") + u">"
-			for e in pyAST[1:]:
-				result += pyAST2XML(e)
-			result += u"</" + pyAST[0].replace("_", "-") + u">"
-		else:
-			result = u""
-			for e in pyAST:
-				result += pyAST2XML(e)
-		return result
-
+	
 class plplus_class(object):
 	# class variable_class(object):
 	# 	def __init__(self,var_define):
@@ -1953,7 +1936,6 @@ class plplus_class(object):
 				if self.name == name:
 					return self.value
 		return symbol_class(self.result)
-
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		view = dataView.active()
@@ -1963,7 +1945,6 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		print p.func
 		print p.vars
 		#print view.current_text
-
 
 #Класс для обработки событий
 #например события открытия выпадающего списка
@@ -2072,10 +2053,11 @@ class el(sublime_plugin.EventListener):
 
 					if USE_PARSER:
 						p = plplus(view.current_text)
-						if p.all_vars.has_key(name):
-							dt = p.all_vars[name]
+						if p.vars.has_key(name):
+							dt = p.vars[name]
 							if db.classes.has_key(dt):
 								current_class = db[dt]
+						
 						# x,arr = view.block_autocomplete
 						# if arr.has_key(name):
 						# 	current_class = arr[name]
