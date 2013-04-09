@@ -1361,20 +1361,39 @@ class plplus(object):
 	def __init__(self,text):
 		try:
 			def comment():		return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
-			def id_():			return re.compile(r"[a-zA-Z0-9$#_]+")
+			def id_():			return (_not("begin"),
+										_not("declare"),
+										_not("return"),
+										#_not("pragma"),
+										re.compile(r"[a-zA-Z0-9$#_]+"))
 			def pragma():		return keyword('pragma'),re.compile(r".*?(?<=;)", re.S)
-			def basetype():		return re.compile(r"integer|date|clob|blob|boolean|(varchar2|number)(\(\d+\))?")
-			def cfttype():		return "[",re.compile(r"\w+"),"]"
-			def cftref():		return "ref","[",re.compile(r"\w+"),"]"
+			def basetype():		return re.compile(r"""(?i)\b((integer	|
+													  date		|
+													  clob		|
+													  blob		|
+													  boolean	|
+													  exception	|
+													  bfile		|
+													  long		|
+													  long raw)\b |
+													  (varchar2	|
+													  	number	|
+													  	string	|
+													  	raw		|
+													  	interval|
+													  	timestamp)\b(\(\d+\))?)""",re.X)
+
+			def cfttype():		return 0,"ref",[("[",id_,"]"),(id_)]
+			#def cftref():		return "ref","[",id_,"]"
 			#def undeftype():	return re.compile(r".*?(?=(,|\)| |;))")
 			def var_name():		return re.compile(r"\w+")
-			def datatype():		return [basetype,cfttype,cftref]
+			def datatype():		return [basetype,cfttype]
 			#def vardef():		return var_name,datatype,0,(":=",ignore(r".*?(?=;)")),";"
 			def vardef():		return var_name,datatype,0,(":=",ignore(r".*?(?=;)")),";"
 			# def begin_block():	return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
-			def param_name():	return re.compile(r"\w+")
-			def param_type():	return [re.compile(r"(?i)in out\b"),re.compile(r"(?i)in\b"),re.compile(r"(?i)out\b")]
-			def param():		return param_name,0,param_type,datatype
+			#def param_name():	return re.compile(r"\w+")
+			def param_type():	return re.compile(r"(?i)(in out|in|out|const)\b")
+			def param():		return id_,0,param_type,datatype
 			def param_list():	return param,-1,(',',param)
 			def proc():			return
 			def func_name():	return re.compile(r"\w+")
@@ -1398,17 +1417,59 @@ class plplus(object):
 										ignore(r".*",re.S)
 										)
 			#def block():		return -2,[pragma,func,proc,func_cur,vardef]
-			def statement():		return 
+			#def undef_statement():	return ignore(r".*?(?!end;);",re.S)
+			def string():			return "'",re.compile(r".*?(?=')"),"'"
+			def expression_element():return [keyword("null"),keyword("true"),keyword("false"),string,variable]
+			def expr_concatenate(): return expression_element,"||",expression
+			def expression():		return [expr_concatenate,expression_element]
+			def expression_list():	return -2,expression
+			def struct_variable():	return 0,"::",[("[",id_,"]"),(id_)],-1,(".",struct_variable)
+			def insert_variable():	return struct_variable,("%",keyword("insert"),"(",expression_list,")")
+			def call_param():		return 0,(id_,"=="),expression
+			def call_param_list():	return call_param,-1,(",",call_param)
+			def call_variable():	return struct_variable,"(",0,call_param_list,")"
+			def variable():			return [insert_variable,call_variable,struct_variable]
+											
+			def plp_block():		return 0,(keyword("declare"),declarations),keyword("begin"),statements_list,exceptions,keyword("end"),";"
+			#def proc_call_statement():return variable
+			def assign_statement():	return [(variable,":=",expression),(variable,"=",assign_statement)],";"
+			def return_statement():	return keyword("return"),expression,";"
+			def null_statement():	return keyword("null"),";"
+			def commit_statement(): return keyword("commit"),";"
+			def pragma_statement():	return keyword("pragma"),id_,0,expression_list,";"
+			def statement():		return [assign_statement,
+											return_statement,
+											plp_block,
+											null_statement,
+											pragma_statement,
+											commit_statement,
+											#proc_call_statement
+											]
 			def statements_list():	return -2,statement
+			def exception_when():	return keyword("when"),re.compile(r"(?i)others|no_data_found|too_many_rows"),keyword("then")#
+			def exception():		return exception_when,statements_list
+			def exceptions():		return keyword("exception"),-2,exception
 			def declare_function(): return (keyword("function"),id_,
 											0,("(", param_list,")"),
 											keyword("return"),datatype,keyword("is"),
 											0,declarations,
 											keyword("begin"),
-											ignore(r".*?(?=end;)",re.S),
+											#ignore(r".*?(?=end;)",re.S),
+											statements_list,
+											0,exceptions,
 											keyword("end"),";"
 										   )
-			def declare_element(): 	return declare_function
+			def declare_procedure():return (keyword("procedure"),id_,
+											0,("(", param_list,")"),
+											keyword("is"),
+											0,declarations,
+											keyword("begin"),
+											#ignore(r".*?(?=end;)",re.S),
+											statements_list,
+											0,exceptions,
+											keyword("end"),";"
+										   )
+			def declare_element(): 	return [pragma_statement,declare_function,declare_procedure,(param,";")]
 			def declarations(): 	return -2,declare_element
 			def block():			return declarations
 			
