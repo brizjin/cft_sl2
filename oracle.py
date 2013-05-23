@@ -304,7 +304,8 @@ class cftDB(object):
 			self.is_updated = False
 		def add_method(self,attrs):
 			m = cftDB.method_row(self.db,self,attrs)
-			self.meths[m.id] = m
+			#self.meths[m.id] = m
+			self.meths[m.short_name] = m
 			return m
 		def add_view(self,attrs):
 			v = cftDB.view_row(self.db,self,attrs)
@@ -492,45 +493,61 @@ class cftDB(object):
 			return value
 		
 		def set_sources(self,text):
-			def execute_function(execute_text):
-				def comment():		return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
-				def body():			return re.compile(r"is.*",re.S)
-				def datatype():		return re.compile(r"\w+")
-				def return_type():	return datatype		
-				def begin_block():	return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
-				def param_name():	return re.compile(r"\w+")
-				def param_type():	return re.compile(r"(?i)in out|in|out")
-				def param():		return param_name,0,param_type,datatype
-				def params():		return param,-1,(',',param)
-				def proc():			return
-				def func_name():	return re.compile(r"\w+")
-				def func():			return keyword('function'),func_name,"(",0,params,")",keyword('return'),return_type,body
-				def exec_block():	return [func,proc]	
-				#print execute_text
-				import pyPEG
-				from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
-				self.result = parseLine(execute_text,exec_block,[],True,comment)
-				class exe(object):
-					func = self.result[0][0].what[0]
-					#func_name = func.what[0].what
-					#params_arr = func.what[1].what
-					#params = dict([(p.what[0].what,{"type":p.what[1].what,"datatype":p.what[2].what})for p in params_arr])
-					#return_type = func.what[2].what[0].what
-					for w in func.what:
-						if w[0] == "body":
-							text = w.what
-					#print "WHAT=", func.what
-					#text = func.what[3].what
-					text = text[text.find("\n")+1:]
-				return exe()
+			# def execute_function(execute_text):
+			# 	def comment():		return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
+			# 	def body():			return re.compile(r"is.*",re.S)
+			# 	def datatype():		return re.compile(r"\w+")
+			# 	def return_type():	return datatype		
+			# 	def begin_block():	return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
+			# 	def param_name():	return re.compile(r"\w+")
+			# 	def param_type():	return re.compile(r"(?i)in out|in|out")
+			# 	def param():		return param_name,0,param_type,datatype
+			# 	def params():		return param,-1,(',',param)
+			# 	def proc():			return
+			# 	def func_name():	return re.compile(r"\w+")
+			# 	def func():			return keyword('function'),func_name,"(",0,params,")",keyword('return'),return_type,body
+			# 	def exec_block():	return [func,proc]	
+			# 	#print execute_text
+			# 	import pyPEG
+			# 	from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
+			# 	self.result = parseLine(execute_text,exec_block,[],True,comment)
+			# 	class exe(object):
+			# 		func = self.result[0][0].what[0]
+			# 		#func_name = func.what[0].what
+			# 		#params_arr = func.what[1].what
+			# 		#params = dict([(p.what[0].what,{"type":p.what[1].what,"datatype":p.what[2].what})for p in params_arr])
+			# 		#return_type = func.what[2].what[0].what
+			# 		for w in func.what:
+			# 			if w[0] == "body":
+			# 				text = w.what
+			# 		#print "WHAT=", func.what
+			# 		#text = func.what[3].what
+			# 		text = text[text.find("\n")+1:]
+			# 	return exe()
 			try:
 				sections_dict = dict()
+				
+				#from collections import namedtuple
+				#section = namedtuple("section",['text','header'])
+				class section(object):
+					text = ""
+					header = ""
+					body = ""
+					
 				for s in sections_regex.finditer(text):
-					text = re.sub(r'\n\t',r'\n',s.group(2)).lstrip('\t')					#Удалим служебный таб в начале каждой строки
+					text = re.sub(r'\n\t',r'\n',s.group(2)).lstrip('\t')	#Удалим служебный таб в начале каждой строки
 					text = re.sub(r' +$','',text,re.MULTILINE) 				#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
-					sections_dict[s.group(1)] = text
-
-				#print "VALIDATE='%s'"%sections_dict["VALIDATE"],len(sections_dict["VALIDATE"])
+					#sections_dict[s.group(1)] = text
+					sobj = section()
+					sobj.text = text
+					sections_dict[s.group(1)] = sobj
+				
+				#setattr(sections_dict["EXECUTE"],"header","")
+				s_exec 		  = sections_dict["EXECUTE"]
+				s_exec.header = self.execute_header()
+				#s_exec.body   = s_exec.text[len(s_exec.header)-3:]
+				s_exec.body   = s_exec.text[len(s_exec.header.replace('\n','')):]
+				#print "EXECUTE='%s'"%s_exec.header,len(s_exec.header.replace('\n','')),len(s_exec.header)-8
 
 				t = timer()
 				conn = self.db.pool.acquire()
@@ -545,31 +562,39 @@ class cftDB(object):
 				err_clob,err_num = cursor.var(cx_Oracle.CLOB),cursor.var(cx_Oracle.NUMBER)
 				#print "TEXT=",execute_function(sections_dict["EXECUTE"]).text
 
+				#print s_exec.header,s_exec.body,len(s_exec.header)
+				#print execute_function(sections_dict["EXECUTE"]).text
+				#print 
+
 				cursor.execute(
 					self.db.fr.save_method_sources,
 					class_name=self.class_ref.id,
 					method_name=self.short_name.upper(),
-					b=execute_function(sections_dict["EXECUTE"]).text,
-					v=sections_dict["VALIDATE"],
-					g=sections_dict["PUBLIC"],
-					l=sections_dict["PRIVATE"],
-					s=sections_dict["VBSCRIPT"],
+					#b=execute_function(sections_dict["EXECUTE"]).text,
+					b=sections_dict["EXECUTE"].body,
+					v=sections_dict["VALIDATE"].text,
+					g=sections_dict["PUBLIC"].text,
+					l=sections_dict["PRIVATE"].text,
+					s=sections_dict["VBSCRIPT"].text,
 					out=err_clob,
 					out_count=err_num
-				)				
+				)
+				#print "Ошибка сохраниения:",unicode(err_clob.getvalue().read(),'1251').strip()			
 				err_num = int(err_num.getvalue())
 		
+				print "**********************************************"
+				print "** Компиляция %s.%s в %s"% (self.class_ref.id.encode('1251'),self.short_name.encode('1251'),t.get_now())
+				print "**********************************************"
 
 				if err_num == 0:					
-					print u"Успешно откомпилированно за %s сек" % t.get_time()
+					print u"** Успешно откомпилированно за %s сек" % t.get_time()
+					print "**********************************************"
 				else:
 					err_msg = unicode(err_clob.getvalue().read(),'1251').strip()
 					#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
-					sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))
-					print "**********************************************"
-					print "** Ошибки компиляции %s за %s"% (self.short_name.encode('1251'),t.get_now())
-					print "**********************************************"
+					sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))					
 					print err_msg
+					print "**********************************************"
 
 				conn.commit()
 				self.db.pool.release(conn)		
@@ -1025,7 +1050,8 @@ class dataView(object):
 					cl = db.classes[value["class"]]
 					if len(cl.meths)==0:
 						cl.update()
-					value = cl.meths[value["id"]]
+					#value = cl.meths[value["id"]]
+					value = cl.meths[value["short_name"]]
 				self._data = value
 				return value
 		except Exception,e:
@@ -1037,7 +1063,8 @@ class dataView(object):
 	@data.setter
 	def data(self,value):
 		if value.__class__.__name__ == "method_row":
-			self.view.settings().set("cft_object",{"id": value.id,"class" : value.class_ref.id, "type": value.__class__.__name__})
+			#self.view.settings().set("cft_object",{"id": value.id,"class" : value.class_ref.id, "type": value.__class__.__name__})
+			self.view.settings().set("cft_object",{"short_name": value.short_name,"class" : value.class_ref.id, "type": value.__class__.__name__})
 			self._data = value
 	def focus(self):
 

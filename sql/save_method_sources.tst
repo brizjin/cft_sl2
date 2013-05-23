@@ -1,8 +1,9 @@
 ﻿PL/SQL Developer Test script 3.0
-22
+27
 declare 
   i integer;
 begin
+  :out_count := 0;
   Z$RUNTIME_PLP_TOOLS.Open_Method(:class_name,:method_name);
   Z$RUNTIME_PLP_TOOLS.Add_Method_Src('B',:b);--'EXECUTE'
   Z$RUNTIME_PLP_TOOLS.Add_Method_Src('V',:v);--'VALIDATE'
@@ -12,7 +13,8 @@ begin
   Z$RUNTIME_PLP_TOOLS.Update_Method_Src;
   Z$RUNTIME_PLP_TOOLS.reset;
   
-  select listagg(class || ' ' || type || '  line:' || line || ',position:'||position||' \t '||text,chr(10))within group (order by line),count(1)
+  --select listagg(class || ' ' || type || '  line:' || line || ',position:'||position||' \t '||text,chr(10))within group (order by line),count(1)
+  select regexp_replace(xmlagg(xmlelement("ERROR",class || ' ' || type || '  line:' || line || ',position:'||position||' \t '||text,chr(10))).getclobval(),'<ERROR>|</ERROR>',''),count(1)
   into :out,:out_count
   from ERRORS t 
   where t.method_id = (select id from METHODS m
@@ -20,7 +22,10 @@ begin
                           and m.short_name = :method_name)
     --and t.type = oper_type
     --and t.class != 'W'
-    order by class,type,sequence,line,position,text;  
+    order by class,type,sequence,line,position,text;
+exception when others then
+  :out := :out || 'Ошибка сохранения методов' || chr(10) || sqlerrm || chr(10) || dbms_utility.format_error_backtrace;
+  :out_count := 1;
 end;
 9
 class_name
