@@ -362,7 +362,7 @@ class cftDB(object):
 			xml_class = '<?xml version="1.0" encoding="windows-1251"?>' + xml_class
 			parser.Parse(xml_class, 1)
 
-			t.print_time("%s update"%self.id)
+			#t.print_time("%s update"%self.id)
 		@property
 		def target_class(self):
 			if hasattr(self,"target_class_id"):
@@ -582,9 +582,10 @@ class cftDB(object):
 				#print "Ошибка сохраниения:",unicode(err_clob.getvalue().read(),'1251').strip()			
 				err_num = int(err_num.getvalue())
 		
-				print "**********************************************"
-				print "** Компиляция %s.%s в %s"% (self.class_ref.id.encode('1251'),self.short_name.encode('1251'),t.get_now())
-				print "**********************************************"
+				#print "**********************************************"
+				print "╒══════════════════════════════════════════════════════════════════════════════╕"
+				print "│ Компиляция %s.%s в %s"% (self.class_ref.id.encode('1251'),self.short_name.encode('1251'),t.get_now())
+				print "├──────────────────────────────────────────────────────────────────────────────┤"
 
 				if err_num == 0:					
 					print u"** Успешно откомпилированно за %s сек" % t.get_time()
@@ -593,8 +594,8 @@ class cftDB(object):
 					err_msg = unicode(err_clob.getvalue().read(),'1251').strip()
 					#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
 					sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))					
-					print err_msg
-					print "**********************************************"
+					print err_msg#.replace("\n","\n| ")
+					#print "└──────────────────────────────────────────────────────────────────────────────┘"
 
 				conn.commit()
 				self.db.pool.release(conn)		
@@ -752,6 +753,9 @@ class cftDB(object):
 			call_async(self.load_classes)
 			call_async(self.load)
 			call_async(self.read_sql)
+
+			#print "DSN=",dsn_
+			self.name = dsn_
 		except Exception as e:
 			print "e=",e
 	def read_sql(self):
@@ -963,6 +967,9 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 				view.set_scratch(True)
 				view.set_syntax_file("Packages/CFT/PL_SQL (Oracle).tmLanguage")
 				view.set_encoding("utf-8")
+				#print os.path.join(cft_settings["work_folder"],obj.class_ref.id + "." + obj.short_name)
+				#view.set_name(os.path.join(cft_settings["work_folder"],obj.class_ref.id + "." + obj.short_name))
+				#view.run_command("save")
 
 				#view.settings().set("cft_object",{"id": obj.id,"class" : obj.class_ref.id, "type": obj.__class__.__name__})
 				view.data = obj
@@ -970,7 +977,12 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 				
 				#text = obj.get_sources()
 				text = obj.get_sources()
+
+
 				#print "text",text
+				#print db.name
+				FileReader.write(os.path.join(cft_settings["work_folder"],obj.class_ref.id + "." + obj.short_name + '.' + db.name.upper()  + ".METHOD")
+								,text.encode('utf-8'))
 
 				write(text)
 
@@ -995,21 +1007,101 @@ class save_methodCommand(sublime_plugin.TextCommand):
 		else:
 			self.save()
 			#self.profiler.runcall(self.save)
+	
+	def show_text_in_panel(self,panel_name,text):
+		if not hasattr(self, 'output_view'):
+			self.output_view = sublime.active_window().get_output_panel("git")
+
+		def _output_to_view(output_file, output, clear=False, syntax="Packages/Diff/Diff.tmLanguage"):
+		    output_file.set_syntax_file(syntax)
+		    edit = output_file.begin_edit()
+		    if clear:
+		        region = sublime.Region(0, self.output_view.size())
+		        output_file.erase(edit, region)
+		    output_file.insert(edit, 0, output)
+		    output_file.end_edit(edit)
+
+		self.output_view.set_read_only(False)
+		_output_to_view(self.output_view, output, clear=True)
+		self.output_view.set_read_only(True)
+		sublime.active_window().run_command("show_panel", {"panel": "output.git"})
+			
+		output = u"""diff --git a/EPL_REQUESTS.L.CFTTEST.METHOD b/EPL_REQUESTS.L.CFTTEST.METHOD
+		new file mode 100644
+		index 0000000..11bd2b6
+		--- /dev/null
+		+++ b/EPL_REQUESTS.L.CFTTEST.METHOD
+		@@ -0,0 +1,91 @@
+		+╒══════════════════════════════════════════════════════════════════════════════╕
+		+│ EXECUTE                                                                      │
+		+	function L(
+		+		)return null
+		+	is
+		+└──────────────────────────────────────────────────────────────────────────────┘
+		+╒══════════════════════════════════════════════════════════════════════════════╕
+		+│ VALIDATE                                                                     │
+		+└──────────────────────────────────────────────────────────────────────────────┘
+		+"""
+
+
 	def save(self):
 		try:
-			#profiler.runcall(self.save)
-			#profiler.print_stats()
-			self.t = timer()
-			view = dataView.active()#(sublime.active_window().active_view())
-			obj = view.data
-			sublime_src_text = view.text#view.substr(sublime.Region(0,view.size()))
-			db_src_text = obj.get_sources()
-			#print sublime_src_text
-			if sublime_src_text != db_src_text:
-				obj.set_sources(view.text)
-			else:
-				print "Текст операции не изменился"
+			print "\n"
+			#s += "╒══════════════════════════════════════════════════════════════════════════════╕\n"
+			#s += "│ Сохранение...                                                                │\n"
+			#print s
+
+			self.t  = timer()
+			view    = dataView.active()
+			obj     = view.data
+			sb_text = view.text			#текст из окна sublime
+			db_text = obj.get_sources() #текст из базы данных
+
+			#закоммитим изменения
+			git_path	= cft_settings["git_path"]#.encode('windows-1251')
+			work_folder = cft_settings["work_folder"]#.encode('windows-1251')
+			file_name	= os.path.join(work_folder,obj.class_ref.id + "." + obj.short_name + "." + db.name.upper()  + ".METHOD")
+			
+			import subprocess			
+			if not os.path.exists(os.path.join(work_folder,".git")):
+				print "INIT"
+				subprocess.call([git_path.encode('windows-1251'),"init",work_folder.encode('windows-1251')], stdout=subprocess.PIPE  , stderr=subprocess.STDOUT, stdin =subprocess.PIPE)
+			if work_folder != "":
+				os.chdir(work_folder)
+			
+			def commit_text(text,commit_msg):			
+				FileReader.write(file_name, text.encode('utf-8'))
+				proc = subprocess.Popen(git_path + " add ."						  , stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin =subprocess.PIPE,creationflags=0x08000000)		
+				proc = proc.communicate()[0]
+				proc = subprocess.Popen(git_path + " commit -m \"%s\""%commit_msg , stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin =subprocess.PIPE,creationflags=0x08000000)
+				proc = proc.communicate()[0]
+				if proc != "# On branch master\nnothing to commit, working directory clean\n":
+					print proc
+
+			#Закоммитим сначала из базы
+			proc = commit_text(db_text,"database changes")
+			#Закоммитим изменения в файле
+			proc = commit_text(sb_text,"sublime text changes")
+			#	print "Были изменения в базе\n",proc
+			
+			
+			#if proc != "# On branch master\nnothing to commit, working directory clean\n":
+			#	print proc
+			#FileReader.write(file_name, sb_text.encode('utf-8'))
+			#proc = subprocess.Popen(git_path + " add .", stdout=subprocess.PIPE  , stderr=subprocess.STDOUT, stdin =subprocess.PIPE)		
+			#proc = subprocess.Popen(git_path + " commit -m \"add some changes\"" , stdout=subprocess.PIPE,   stderr=subprocess.STDOUT, stdin =subprocess.PIPE)
+			#print proc.communicate()[0]
+
+
+			#Сохраним изменения
+			#if sb_text != db_text:
+			obj.set_sources(sb_text)
+			#else:
+			#	print "Текст операции не изменился"
 			view.mark_errors()
+			print "└──────────────────────────────────────────────────────────────────────────────┘"
+
+
 		except Exception,e:
 			print "*** Ошибка сохранения исходников:",e
 			if sys != None:
