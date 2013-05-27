@@ -15,7 +15,7 @@ used_classes_file_path 	= os.path.join(plugin_path,"cache","cft_settings.json")
 
 TIMER_DEBUG = True
 pyPEG.print_trace = True
-USE_PARSER = True
+USE_PARSER = False
 
 beg_whites_regex  = re.compile(r'^\s*') #ищем начало строки без пробелов
 end_whites_regex  = re.compile(r'\s*$') #ищем конец строки без пробелов
@@ -489,7 +489,7 @@ class cftDB(object):
 			value += get_section_with_header('PRIVATE'  ,self.private)
 			value += get_section_with_header('VBSCRIPT' ,self.vbscript)
 			self.db.pool.release(conn)
-
+			#value = re.sub(r' +$','',text,re.MULTILINE) 				#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
 			return value
 		
 		def set_sources(self,text):
@@ -1007,42 +1007,6 @@ class save_methodCommand(sublime_plugin.TextCommand):
 		else:
 			self.save()
 			#self.profiler.runcall(self.save)
-	
-	def show_text_in_panel(self,panel_name,text):
-		if not hasattr(self, 'output_view'):
-			self.output_view = sublime.active_window().get_output_panel("git")
-
-		def _output_to_view(output_file, output, clear=False, syntax="Packages/Diff/Diff.tmLanguage"):
-		    output_file.set_syntax_file(syntax)
-		    edit = output_file.begin_edit()
-		    if clear:
-		        region = sublime.Region(0, self.output_view.size())
-		        output_file.erase(edit, region)
-		    output_file.insert(edit, 0, output)
-		    output_file.end_edit(edit)
-
-		self.output_view.set_read_only(False)
-		_output_to_view(self.output_view, output, clear=True)
-		self.output_view.set_read_only(True)
-		sublime.active_window().run_command("show_panel", {"panel": "output.git"})
-			
-		output = u"""diff --git a/EPL_REQUESTS.L.CFTTEST.METHOD b/EPL_REQUESTS.L.CFTTEST.METHOD
-		new file mode 100644
-		index 0000000..11bd2b6
-		--- /dev/null
-		+++ b/EPL_REQUESTS.L.CFTTEST.METHOD
-		@@ -0,0 +1,91 @@
-		+╒══════════════════════════════════════════════════════════════════════════════╕
-		+│ EXECUTE                                                                      │
-		+	function L(
-		+		)return null
-		+	is
-		+└──────────────────────────────────────────────────────────────────────────────┘
-		+╒══════════════════════════════════════════════════════════════════════════════╕
-		+│ VALIDATE                                                                     │
-		+└──────────────────────────────────────────────────────────────────────────────┘
-		+"""
-
 
 	def save(self):
 		try:
@@ -1060,7 +1024,8 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			#закоммитим изменения
 			git_path	= cft_settings["git_path"]#.encode('windows-1251')
 			work_folder = cft_settings["work_folder"]#.encode('windows-1251')
-			file_name	= os.path.join(work_folder,obj.class_ref.id + "." + obj.short_name + "." + db.name.upper()  + ".METHOD")
+			file_name	= obj.class_ref.id + "." + obj.short_name + "." + db.name.upper()  + ".METHOD"
+			file_path	= os.path.join(work_folder,file_name)
 			
 			import subprocess			
 			if not os.path.exists(os.path.join(work_folder,".git")):
@@ -1069,29 +1034,27 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			if work_folder != "":
 				os.chdir(work_folder)
 			
-			def commit_text(text,commit_msg):			
-				FileReader.write(file_name, text.encode('utf-8'))
-				proc = subprocess.Popen(git_path + " add ."						  , stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin =subprocess.PIPE,creationflags=0x08000000)		
-				proc = proc.communicate()[0]
-				proc = subprocess.Popen(git_path + " commit -m \"%s\""%commit_msg , stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin =subprocess.PIPE,creationflags=0x08000000)
-				proc = proc.communicate()[0]
-				if proc != "# On branch master\nnothing to commit, working directory clean\n":
-					print proc
+			def git_command(command):
+				proc = subprocess.Popen(git_path + " " + command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin =subprocess.PIPE,creationflags=0x08000000)
+				return proc.communicate()[0]
 
-			#Закоммитим сначала из базы
-			proc = commit_text(db_text,"database changes")
-			#Закоммитим изменения в файле
-			proc = commit_text(sb_text,"sublime text changes")
-			#	print "Были изменения в базе\n",proc
-			
-			
-			#if proc != "# On branch master\nnothing to commit, working directory clean\n":
-			#	print proc
-			#FileReader.write(file_name, sb_text.encode('utf-8'))
-			#proc = subprocess.Popen(git_path + " add .", stdout=subprocess.PIPE  , stderr=subprocess.STDOUT, stdin =subprocess.PIPE)		
-			#proc = subprocess.Popen(git_path + " commit -m \"add some changes\"" , stdout=subprocess.PIPE,   stderr=subprocess.STDOUT, stdin =subprocess.PIPE)
-			#print proc.communicate()[0]
+			def commit_text(text,commit_msg,do_diff = False):
+				text = re.sub(r'\n\t',r'\n',text).lstrip('\t')	#Удалим служебный таб в начале каждой строки
+				text = re.sub(r' +$',''	   ,text,re.MULTILINE) 	#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет			
 
+				FileReader.write(file_path, text.encode('utf-8'))
+				if do_diff:	diff_text = git_command("diff HEAD -- ./"+file_name)
+				else:		diff_text = ""
+				proc = git_command("add .")
+				proc = git_command("commit -m \"%s\""%commit_msg)
+				return diff_text
+
+				#if proc != "# On branch master\nnothing to commit, working directory clean\n":
+				#	print proc
+
+			#git_command("diff --git ")
+			diff_text = commit_text(db_text, "database changes") 		#Закоммитим сначала из базы
+			diff_text = commit_text(sb_text, "sublime text changes",1) 	#Закоммитим изменения в файле
 
 			#Сохраним изменения
 			#if sb_text != db_text:
@@ -1100,6 +1063,12 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			#	print "Текст операции не изменился"
 			view.mark_errors()
 			print "└──────────────────────────────────────────────────────────────────────────────┘"
+
+			#print diff_text
+			#self.show_text_in_panel("",diff_text)
+			view.diff_text = diff_text
+			#print "DIFF=",view.diff_text
+			view.show_errors_panel()
 
 
 		except Exception,e:
@@ -1158,6 +1127,23 @@ class dataView(object):
 			#self.view.settings().set("cft_object",{"id": value.id,"class" : value.class_ref.id, "type": value.__class__.__name__})
 			self.view.settings().set("cft_object",{"short_name": value.short_name,"class" : value.class_ref.id, "type": value.__class__.__name__})
 			self._data = value
+
+	@property
+	def diff_text(self):
+		if hasattr(self,"_diff_text"):
+			print "HASATTR",self._diff_text
+			return self._diff_text
+		else:
+			self._diff_text = self.view.settings().get("diff_text")
+			print "SELF=",self._diff_text
+			return self._diff_text
+	@diff_text.setter
+	def diff_text(self,value):
+		#if value.__class__.__name__ == "method_row":
+		print "SET DIFF=",value
+		self.view.settings().set("diff_text",value.decode('utf-8'))
+		self._diff_text = value
+
 	def focus(self):
 
 		sublime.active_window().focus_view(self.view)
@@ -1413,6 +1399,33 @@ class dataView(object):
 		edit = self.view.begin_edit()
 		self.view.insert(edit, self.view.size(), string)
 		self.view.end_edit(edit)
+
+	def show_panel(self,panel_name,text):
+		#if not hasattr(self, 'output_view'):
+		output_view = sublime.active_window().get_output_panel("git")
+
+		def _output_to_view(output_file, output, clear=False, syntax="Packages/Diff/Diff.tmLanguage"):
+		    output_file.set_syntax_file(syntax)
+		    edit = output_file.begin_edit()
+		    if clear:
+		        region = sublime.Region(0, output_view.size())
+		        output_file.erase(edit, region)
+		    output_file.insert(edit, 0, output)
+		    output_file.end_edit(edit)
+
+		output_view.set_read_only(False)
+		_output_to_view(output_view, text, clear=True)
+		output_view.set_read_only(True)
+		sublime.active_window().run_command("show_panel", {"panel": "output.git"})
+
+	def show_errors_panel(self):
+		errs_text = ""
+		for row in self.data.errors():
+			errs_text += "%s: %s %s\n"%(row.list[6][1],row.line,row.text)
+		self.show_panel("",errs_text)
+	def show_diff_panel(self):
+		self.show_panel("",self.diff_text)
+
 class plplus(object):
 	class sym(object):
 		def __init__(self,s):
@@ -2160,6 +2173,18 @@ class print_cmd2Command(sublime_plugin.TextCommand):
 		view.write(xml)
 		view.run_command("indentxml")
 		view.focus()
+
+
+
+class show_errorsCommand(sublime_plugin.TextCommand):
+	def run(self, edit):
+		dataView.active().show_errors_panel()
+
+class show_diffCommand(sublime_plugin.TextCommand):
+	def run(self, edit):
+		dataView.active().show_diff_panel()
+		
+	
 #Класс для обработки событий
 #например события открытия выпадающего списка
 class el(sublime_plugin.EventListener):

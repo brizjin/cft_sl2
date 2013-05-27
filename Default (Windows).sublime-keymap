@@ -8,5 +8,7 @@
 	{"keys":["f10"], "command":"quick"},
 	{"keys":["ctrl+home"], "command":"connect"},
 	{"keys":["f11"], "command":"cft_open"},
+	{"keys":["ctrl+1"], "command":"show_errors"},
+	{"keys":["ctrl+2"], "command":"show_diff"},
 	{"keys":["f12"], "command":"connect"}
 ]
