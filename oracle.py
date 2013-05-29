@@ -1050,7 +1050,7 @@ class save_methodCommand(sublime_plugin.TextCommand):
 				#text = re.sub(r' +$',''	   ,text,re.MULTILINE) 	#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет			
 
 				FileReader.write(file_path, text.encode('utf-8'))
-				if do_diff:	diff_text = git_command("diff HEAD -- ./"+file_name)
+				if do_diff:	diff_text = git_command("diff --ignore-space-change HEAD -- ./"+file_name)
 				else:		diff_text = ""
 				proc = git_command("add .")
 				proc = git_command("commit -m \"%s\""%commit_msg)
@@ -1224,21 +1224,22 @@ class dataView(object):
 		#self.view.settings().set("cft-errors",dict())
 		warnings,errors,regions_dict = [],[],dict()		
 		for row in self.data.errors():
-			section = self.sections[row.type]
+			if not row.type in ['EXECUTESYS','VALIDSYS']:
+				section = self.sections[row.type]
 
-			line_num   = row.line-1
-			line_count = len(section.lines)
-			if line_count <= line_num:
-				line_num = line_count-1
-			#print "line_num=",line_num
-			#print "line_count=",line_count
+				line_num   = row.line-1
+				line_count = len(section.lines)
+				if line_count <= line_num:
+					line_num = line_count-1
+				#print "line_num=",line_num
+				#print "line_count=",line_count
 
-			line = RegionTrim(section.lines[line_num])
-			if row.list[6][1] == 'W': #6,1 это поле class
-				warnings.append(line)
-			elif row.list[6][1] == 'E':
-				errors.append(line)
-			regions_dict[str(section.view_line_num(line_num + 1))] = row.text
+				line = RegionTrim(section.lines[line_num])
+				if row.list[6][1] == 'W': #6,1 это поле class
+					warnings.append(line)
+				elif row.list[6][1] == 'E':
+					errors.append(line)
+				regions_dict[str(section.view_line_num(line_num + 1))] = row.text
 
 		self.view.settings().set("cft-errors",regions_dict)
 		self.view.add_regions('cft-warnings',warnings,'comment', 'dot', 4 | 32)
