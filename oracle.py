@@ -315,6 +315,9 @@ class cftDB(object):
 			v = cftDB.attr_row(self.db,self,attrs)
 			self.attrs[v.short_name] = v
 			return v
+		@property
+		def methods(self):
+			return self.meths
 		def get_objects(self):
 			objs = []
 			objs.extend([mv for mk,mv in self.meths.iteritems()])
@@ -583,18 +586,19 @@ class cftDB(object):
 				err_num = int(err_num.getvalue())
 		
 				#print "**********************************************"
-				print "╒══════════════════════════════════════════════════════════════════════════════╕"
-				print "│ Компиляция %s.%s в %s"% (self.class_ref.id.encode('1251'),self.short_name.encode('1251'),t.get_now())
-				print "├──────────────────────────────────────────────────────────────────────────────┤"
+				# print "╒══════════════════════════════════════════════════════════════════════════════╕"
+				# print "│ Компиляция %s.%s в %s"% (self.class_ref.id.encode('1251'),self.short_name.encode('1251'),t.get_now())
+				# print "├──────────────────────────────────────────────────────────────────────────────┤"
 
 				if err_num == 0:					
-					print u"** Успешно откомпилированно за %s сек" % t.get_time()
-					print "**********************************************"
+					#print u"** Успешно откомпилированно за %s сек" % t.get_time()
+					#print "**********************************************"
+					pass
 				else:
 					err_msg = unicode(err_clob.getvalue().read(),'1251').strip()
 					#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
 					sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))					
-					print err_msg#.replace("\n","\n| ")
+					#print err_msg#.replace("\n","\n| ")
 					#print "└──────────────────────────────────────────────────────────────────────────────┘"
 
 				conn.commit()
@@ -894,8 +898,11 @@ class cftDB(object):
 		cl.update()
 		return cl
 
-
+#try:
 db = cftDB()
+#except Exception,e:
+#db = ""
+
 
 class connectCommand(sublime_plugin.WindowCommand):
 	def run(self):
@@ -910,7 +917,7 @@ class connectCommand(sublime_plugin.WindowCommand):
 		pass
 class cft_openCommand(sublime_plugin.WindowCommand):
 	def run(self):
-		print "OPEN MEHTODS"
+		#print "OPEN MEHTODS"
 		if not db.is_connected():
 			db.on_classes_cache_loaded += lambda:sublime.set_timeout(self.open_classes,0)
 			sublime.active_window().run_command('connect',{})
@@ -1010,7 +1017,7 @@ class save_methodCommand(sublime_plugin.TextCommand):
 
 	def save(self):
 		try:
-			print "\n"
+			#print "\n"
 			#s += "╒══════════════════════════════════════════════════════════════════════════════╕\n"
 			#s += "│ Сохранение...                                                                │\n"
 			#print s
@@ -1018,8 +1025,8 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			self.t  = timer()
 			view    = dataView.active()
 			obj     = view.data
-			sb_text = view.text			#текст из окна sublime
-			db_text = obj.get_sources() #текст из базы данных
+			#sb_text = view.text			#текст из окна sublime
+			#db_text = obj.get_sources() 	#текст из базы данных
 
 			#закоммитим изменения
 			git_path	= cft_settings["git_path"]#.encode('windows-1251')
@@ -1039,8 +1046,8 @@ class save_methodCommand(sublime_plugin.TextCommand):
 				return proc.communicate()[0]
 
 			def commit_text(text,commit_msg,do_diff = False):
-				text = re.sub(r'\n\t',r'\n',text).lstrip('\t')	#Удалим служебный таб в начале каждой строки
-				text = re.sub(r' +$',''	   ,text,re.MULTILINE) 	#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет			
+				#text = re.sub(r'\n\t',r'\n',text).lstrip('\t')		#Удалим служебный таб в начале каждой строки
+				#text = re.sub(r' +$',''	   ,text,re.MULTILINE) 	#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет			
 
 				FileReader.write(file_path, text.encode('utf-8'))
 				if do_diff:	diff_text = git_command("diff HEAD -- ./"+file_name)
@@ -1053,16 +1060,17 @@ class save_methodCommand(sublime_plugin.TextCommand):
 				#	print proc
 
 			#git_command("diff --git ")
-			diff_text = commit_text(db_text, "database changes") 		#Закоммитим сначала из базы
-			diff_text = commit_text(sb_text, "sublime text changes",1) 	#Закоммитим изменения в файле
+			diff_text = commit_text(obj.get_sources(), "database changes") 		#Закоммитим сначала из базы
+			obj.set_sources(view.text)
+			diff_text = commit_text(obj.get_sources(), "sublime text changes",1) 	#Закоммитим изменения в файле
 
 			#Сохраним изменения
 			#if sb_text != db_text:
-			obj.set_sources(sb_text)
+			
 			#else:
 			#	print "Текст операции не изменился"
 			view.mark_errors()
-			print "└──────────────────────────────────────────────────────────────────────────────┘"
+			#print "└──────────────────────────────────────────────────────────────────────────────┘"
 
 			#print diff_text
 			#self.show_text_in_panel("",diff_text)
@@ -1131,16 +1139,16 @@ class dataView(object):
 	@property
 	def diff_text(self):
 		if hasattr(self,"_diff_text"):
-			print "HASATTR",self._diff_text
+			#print "HASATTR",self._diff_text
 			return self._diff_text
 		else:
 			self._diff_text = self.view.settings().get("diff_text")
-			print "SELF=",self._diff_text
+			#print "SELF=",self._diff_text
 			return self._diff_text
 	@diff_text.setter
 	def diff_text(self,value):
 		#if value.__class__.__name__ == "method_row":
-		print "SET DIFF=",value
+		#print "SET DIFF=",value
 		self.view.settings().set("diff_text",value.decode('utf-8'))
 		self._diff_text = value
 
@@ -1421,7 +1429,7 @@ class dataView(object):
 	def show_errors_panel(self):
 		errs_text = ""
 		for row in self.data.errors():
-			errs_text += "%s: %s %s\n"%(row.list[6][1],row.line,row.text)
+			errs_text += "%s: %-8s %-4s %-20s %s\n"%(row.list[6][1],row.type,row.line,row.text.split(":")[0],row.text.split(":")[1])
 		self.show_panel("",errs_text)
 	def show_diff_panel(self):
 		self.show_panel("",self.diff_text)
@@ -2192,8 +2200,28 @@ class el(sublime_plugin.EventListener):
 		pass
 		#print "on_activated"
 	def on_load(self,view):
-		#print "on_load_"
-		pass
+		#print "ON_LOAD"
+		view = dataView.active()
+		fileName, fileExtension = os.path.splitext(view.file_name())
+		if fileExtension == ".METHOD":
+			def set_view_data():
+				#view.set_name(obj.name)
+				view.set_scratch(True)
+				view.set_syntax_file("Packages/CFT/PL_SQL (Oracle).tmLanguage")
+				view.set_encoding("utf-8")			
+				#print "FILENAME=",view.file_name()
+				base_file_name = os.path.basename(fileName)
+				class_name, method_name, database_name = base_file_name.split(".")
+				view.data = db[class_name].methods[method_name]
+				#print class_name,method_name
+				#view.data = db.classes[]
+			if not db.is_connected():
+				#print "NOT_CONNECTED"
+				db.on_classes_cache_loaded += lambda:sublime.set_timeout(set_view_data,0)
+				#sublime.active_window().run_command('connect',{})
+			else:
+				#print "ELSE"
+				set_view_data()
 	def on_pre_save(self,view):
 		#print "on_pre_save_"
 		pass
@@ -2373,19 +2401,21 @@ class el(sublime_plugin.EventListener):
 			else:
 				view.set_status('cft-errors',"")
 class my_auto_completeCommand(sublime_plugin.TextCommand):
-    '''Used to request a full autocompletion when
-    complete_as_you_type is turned off'''
-    def run(self, edit, block=False):
-    	#print "hello" 
-        self.view.run_command('hide_auto_complete')
-        sublime.set_timeout(self.show_auto_complete, 1)
+	'''Used to request a full autocompletion when
+	complete_as_you_type is turned off'''
+	def run(self, edit, block=False):
+		#print "hello" 
+		self.view.run_command('hide_auto_complete')
+		sublime.set_timeout(self.show_auto_complete, 1)
 
-    def show_auto_complete(self):
-    	#print "second"
-        self.view.run_command(
-            'auto_complete', {
-                'disable_auto_insert': True,
-                'api_completions_only': True,
-                'next_completion_if_showing': False
-            }
-        )
+	def show_auto_complete(self):
+		#print "second"
+		self.view.run_command(
+			'auto_complete', {
+				'disable_auto_insert': True,
+				'api_completions_only': True,
+				'next_completion_if_showing': False
+			}
+		)
+
+
