@@ -551,6 +551,7 @@ class cftDB(object):
 				#s_exec.body   = s_exec.text[len(s_exec.header)-3:]
 				s_exec.body   = s_exec.text[len(s_exec.header.replace('\n','')):]
 				#print "EXECUTE='%s'"%s_exec.header,len(s_exec.header.replace('\n','')),len(s_exec.header)-8
+				#print "PUBLIC=",sections_dict["PUBLIC"].text
 
 				t = timer()
 				conn = self.db.pool.acquire()
@@ -562,7 +563,7 @@ class cftDB(object):
 					l=cx_Oracle.CLOB,
 					s=cx_Oracle.CLOB
 				)
-				err_clob,err_num = cursor.var(cx_Oracle.CLOB),cursor.var(cx_Oracle.NUMBER)
+				err_clob,out_others,err_num = cursor.var(cx_Oracle.CLOB),cursor.var(cx_Oracle.CLOB),cursor.var(cx_Oracle.NUMBER)
 				#print "TEXT=",execute_function(sections_dict["EXECUTE"]).text
 
 				#print s_exec.header,s_exec.body,len(s_exec.header)
@@ -580,16 +581,20 @@ class cftDB(object):
 					l=sections_dict["PRIVATE"].text,
 					s=sections_dict["VBSCRIPT"].text,
 					out=err_clob,
-					out_count=err_num
+					out_count=err_num,
+					out_others=out_others
 				)
 				#print "Ошибка сохраниения:",unicode(err_clob.getvalue().read(),'1251').strip()			
 				err_num = int(err_num.getvalue())
-		
+				
+				if out_others.getvalue():
+					print unicode(out_others.getvalue().read(),'1251').strip()
+
 				#print "**********************************************"
 				# print "╒══════════════════════════════════════════════════════════════════════════════╕"
 				# print "│ Компиляция %s.%s в %s"% (self.class_ref.id.encode('1251'),self.short_name.encode('1251'),t.get_now())
 				# print "├──────────────────────────────────────────────────────────────────────────────┤"
-
+				#print unicode(err_clob.getvalue().read(),'1251').strip()
 				if err_num == 0:					
 					#print u"** Успешно откомпилированно за %s сек" % t.get_time()
 					#print "**********************************************"
@@ -1050,7 +1055,8 @@ class save_methodCommand(sublime_plugin.TextCommand):
 				#text = re.sub(r' +$',''	   ,text,re.MULTILINE) 	#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет			
 
 				FileReader.write(file_path, text.encode('utf-8'))
-				if do_diff:	diff_text = git_command("diff --ignore-space-change HEAD -- ./"+file_name)
+				#if do_diff:	diff_text = git_command("diff --ignore-space-change HEAD -- ./"+file_name)
+				if do_diff:	diff_text = git_command("diff HEAD -- ./"+file_name)
 				else:		diff_text = ""
 				proc = git_command("add .")
 				proc = git_command("commit -m \"%s\""%commit_msg)
@@ -1061,7 +1067,9 @@ class save_methodCommand(sublime_plugin.TextCommand):
 
 			#git_command("diff --git ")
 			diff_text = commit_text(obj.get_sources(), "database changes") 		#Закоммитим сначала из базы
+			#print "TEXT=",view.text,obj.short_name
 			obj.set_sources(view.text)
+			#print "END"
 			diff_text = commit_text(obj.get_sources(), "sublime text changes",1) 	#Закоммитим изменения в файле
 
 			#Сохраним изменения
@@ -1111,6 +1119,7 @@ class dataView(object):
 		try:
 			#if self.view.settings().has("cft_object"):
 			if hasattr(self,"_data"):
+				#print "GetData",self._data
 				return self._data
 			else:
 				value = self.view.settings().get("cft_object")
@@ -1122,6 +1131,7 @@ class dataView(object):
 					#value = cl.meths[value["id"]]
 					value = cl.meths[value["short_name"]]
 				self._data = value
+				#print "GetData",self._data
 				return value
 		except Exception,e:
 			print "*** Ошибка настроек представления:",e

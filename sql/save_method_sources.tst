@@ -1,15 +1,34 @@
 ﻿PL/SQL Developer Test script 3.0
-27
+46
 declare 
   i integer;
+  
+  procedure set_source(section_name varchar2,text clob)
+  is
+    i integer := 0;
+  begin
+    loop exit when i>length(text);
+      Z$RUNTIME_PLP_TOOLS.Add_Method_Src(section_name,substr(text,i+1,i+32000));
+      i := i + 32000;    
+    end loop;
+  end;
+  
 begin
   :out_count := 0;
   Z$RUNTIME_PLP_TOOLS.Open_Method(:class_name,:method_name);
-  Z$RUNTIME_PLP_TOOLS.Add_Method_Src('B',:b);--'EXECUTE'
-  Z$RUNTIME_PLP_TOOLS.Add_Method_Src('V',:v);--'VALIDATE'
-  Z$RUNTIME_PLP_TOOLS.Add_Method_Src('G',:g);--'PUBLIC'
-  Z$RUNTIME_PLP_TOOLS.Add_Method_Src('L',:l);--'PRIVATE'
-  Z$RUNTIME_PLP_TOOLS.Add_Method_Src('S',:s);--'VBSCRIPT'
+  --Z$RUNTIME_PLP_TOOLS.Add_Method_Src('B',:b);--'EXECUTE'
+  --Z$RUNTIME_PLP_TOOLS.Add_Method_Src('V',:v);--'VALIDATE'
+  set_source('B',:b);--'EXECUTE'
+  set_source('V',:v);--'VALIDATE'
+--  Z$RUNTIME_PLP_TOOLS.Add_Method_Src('G',substr(:g,1,32000));--'PUBLIC'
+--  if length(substr(:g,32001))>0 then
+--    Z$RUNTIME_PLP_TOOLS.Add_Method_Src('G',substr(:g,32001));--'PUBLIC'
+--  end if;
+  set_source('G',:g);--'PUBLIC'
+  --Z$RUNTIME_PLP_TOOLS.Add_Method_Src('L',:l);--'PRIVATE'
+  --Z$RUNTIME_PLP_TOOLS.Add_Method_Src('S',:s);--'VBSCRIPT'
+  set_source('L',:l);--'PRIVATE'
+  set_source('S',:s);--'VBSCRIPT'
   Z$RUNTIME_PLP_TOOLS.Update_Method_Src;
   Z$RUNTIME_PLP_TOOLS.reset;
   
@@ -24,7 +43,7 @@ begin
     --and t.class != 'W'
     order by class,type,sequence,line,position,text;
 exception when others then
-  :out := :out || 'Ошибка сохранения методов' || chr(10) || sqlerrm || chr(10) || dbms_utility.format_error_backtrace;
+  :out_others := :out || 'Ошибка сохранения методов' || chr(10) || sqlerrm || chr(10) || dbms_utility.format_error_backtrace;
   :out_count := 1;
 end;
 9
