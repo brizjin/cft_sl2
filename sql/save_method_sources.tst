@@ -1,9 +1,9 @@
 ﻿PL/SQL Developer Test script 3.0
-46
+80
 declare 
   i integer;
   
-  procedure set_source(section_name varchar2,text clob)
+  /*procedure set_source(section_name varchar2,text clob)
   is
     i integer := 0;
   begin
@@ -11,22 +11,56 @@ declare
       Z$RUNTIME_PLP_TOOLS.Add_Method_Src(section_name,substr(text,i+1,i+32000));
       i := i + 32000;    
     end loop;
+  end;*/
+  /*procedure set_source(section_name varchar2,text clob)
+  is
+    i integer := 1;
+    end_i integer := 1;
+  begin
+    loop exit when i>length(text);
+      end_i := instr(text,chr(10),i);
+      if end_i = 0 then
+        end_i := length(text)+1;      
+      end if;
+      Z$RUNTIME_PLP_TOOLS.Add_Method_Src(section_name,substr(text,i,end_i-i));
+      --stdio.put_line_pipe('i='||i||',end_i='||end_i||',text='||substr(text,i,end_i-i),'DEBUG_PIPE');
+      i := end_i + 1;    
+    end loop;
+    stdio.put_line_pipe('END','DEBUG_PIPE');
+  end;*/
+  procedure set_source(section_name varchar2,text clob)
+  is
+    i integer := 1;
+    end_i integer := 1;
+    tmp_str varchar2(32000) := '';
+    sub_str varchar2(32000) := '';
+  begin
+    loop exit when i>length(text);
+      end_i := instr(text,chr(10),i);
+      if end_i = 0 then
+        end_i := length(text)+1;      
+      end if;
+      sub_str := substr(text,i,end_i-i+1);
+      if length(tmp_str) + length(sub_str) > 32000 then        
+        Z$RUNTIME_PLP_TOOLS.Add_Method_Src(section_name,tmp_str);
+        stdio.put_line_pipe('i='||length(tmp_str),'DEBUG_PIPE');
+        tmp_str := sub_str;
+      else
+        tmp_str := tmp_str || sub_str;  
+      end if;
+      --stdio.put_line_pipe('i='||i||',end_i='||end_i||',text='||substr(text,i,end_i-i),'DEBUG_PIPE');
+      i := end_i+1;    
+    end loop;
+    Z$RUNTIME_PLP_TOOLS.Add_Method_Src(section_name,tmp_str);
+    --stdio.put_line_pipe('END','DEBUG_PIPE');
   end;
-  
 begin
   :out_count := 0;
+  Z$RUNTIME_PLP_TOOLS.reset;
   Z$RUNTIME_PLP_TOOLS.Open_Method(:class_name,:method_name);
-  --Z$RUNTIME_PLP_TOOLS.Add_Method_Src('B',:b);--'EXECUTE'
-  --Z$RUNTIME_PLP_TOOLS.Add_Method_Src('V',:v);--'VALIDATE'
   set_source('B',:b);--'EXECUTE'
   set_source('V',:v);--'VALIDATE'
---  Z$RUNTIME_PLP_TOOLS.Add_Method_Src('G',substr(:g,1,32000));--'PUBLIC'
---  if length(substr(:g,32001))>0 then
---    Z$RUNTIME_PLP_TOOLS.Add_Method_Src('G',substr(:g,32001));--'PUBLIC'
---  end if;
   set_source('G',:g);--'PUBLIC'
-  --Z$RUNTIME_PLP_TOOLS.Add_Method_Src('L',:l);--'PRIVATE'
-  --Z$RUNTIME_PLP_TOOLS.Add_Method_Src('S',:s);--'VBSCRIPT'
   set_source('L',:l);--'PRIVATE'
   set_source('S',:s);--'VBSCRIPT'
   Z$RUNTIME_PLP_TOOLS.Update_Method_Src;

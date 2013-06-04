@@ -600,7 +600,8 @@ class cftDB(object):
 					#print "**********************************************"
 					pass
 				else:
-					err_msg = unicode(err_clob.getvalue().read(),'1251').strip()
+
+					#err_msg = unicode(err_clob.getvalue().read(),'1251').strip()
 					#sublime.active_window().run_command('show_panel', {"panel": "console", "toggle": "true"})
 					sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))					
 					#print err_msg#.replace("\n","\n| ")
