@@ -1124,6 +1124,9 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			sublime.status_message(u"Компиляция завершена за " + self.t.get_time())
 
 		#self.profiler.print_stats()
+
+dataViews = dict()
+
 class dataView(object):
 	def __init__(self,view):
 		self.view = view
@@ -1136,8 +1139,13 @@ class dataView(object):
 		return dataView(sublime.active_window().new_file())
 	@staticmethod
 	def active():
+		a = dataView(sublime.active_window().active_view())
 
-		return dataView(sublime.active_window().active_view())
+		if not dataViews.has_key(a.data.name):
+			dataViews[a.data.name] = a
+		dataViews[a.data.name].view = sublime.active_window().active_view()
+		return dataViews[a.data.name]
+		#return dataView(sublime.active_window().active_view())
 
 	@property
 	def data(self):
@@ -1214,8 +1222,13 @@ class dataView(object):
 					return 0
 				else:
 					return len(self.view.lines(sublime.Region(self.begin,self.end)))
+
+			#по номеру строки в исходнике находит номер строки в представлении саблайм
 			def view_line_num(self,line_num):
 				return self.view.rowcol(self.begin)[0] + line_num
+			#по номеру строки в представлении саблайм показывает номер строки в исходнике
+			def sub_line_num(self,line_num):
+				return line_num - self.view.rowcol(self.begin)[0] + 1
 			@property
 			def lines(self):
 				return self.view.lines(sublime.Region(self.begin,self.end))
@@ -1445,8 +1458,10 @@ class dataView(object):
 		self.view.end_edit(edit)
 
 	def show_panel(self,panel_name,text,syntax="Packages/Diff/Diff.tmLanguage"):
+		if not panel_name:
+			panel_name="git"
 		#if not hasattr(self, 'output_view'):
-		output_view = sublime.active_window().get_output_panel("git")
+		output_view = sublime.active_window().get_output_panel(panel_name)
 
 		def _output_to_view(output_file, output, clear=False, syntax=syntax):
 		    output_file.set_syntax_file(syntax)
@@ -1460,7 +1475,9 @@ class dataView(object):
 		output_view.set_read_only(False)
 		_output_to_view(output_view, text, clear=True)
 		output_view.set_read_only(True)
-		sublime.active_window().run_command("show_panel", {"panel": "output.git"})
+		sublime.active_window().run_command("show_panel", {"panel": "output.%s"%panel_name})
+		return output_view
+
 
 	def show_errors_panel(self):
 		errs_text = ""
@@ -1472,7 +1489,31 @@ class dataView(object):
 	def show_plsql_panel(self):
 		self.show_panel("",self.data.get_package_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")
 	def show_plsql_b_panel(self):
-		self.show_panel("",self.data.get_package_body_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")
+		v = self.show_panel("plsql",self.data.get_package_body_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")
+		r = []
+		execute_region = v.find('--#section %s '%self.current_section,1)
+		#print "CURRENT_SECTION=%s,%s"%(self.current_section,execute_region)
+		row, col = self.rowcol(self.sel()[0].a)
+		line_num = self.sections[self.current_section].sub_line_num(row)
+		region = None
+
+		while not region and line_num>0:			
+			print line_num
+			region = v.find('(--# %s,)(\n|\t|(?!--).)*'%line_num,execute_region.begin())
+			line_num -= 1
+			#print line_num
+
+		if not region:
+			print "Не удалось найти"
+		else:
+			r.append(region)
+			v.show(r[0])	
+			#r = v.find_all('--# 8,2',1)
+			#self.view.add_regions('select',r,'comment', 'dot', 4 | 32)		
+			#self.view.add_regions('select',r,'keyword', 'dot', 4 | 32)		
+			v.add_regions('select',r,'keyword', 'dot', 4 | 32)
+		self.plsql = v		
+
 
 class plplus(object):
 	class sym(object):
@@ -2197,9 +2238,19 @@ class plplus_class(object):
 		return symbol_class(self.result)
 class print_cmdCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
-		view = dataView.active()		
-		xml = plplus(view.current_text).xml
-		print xml
+		view = dataView.active()
+		#view.show(100,10)
+		r = []
+		r.append(sublime.Region(10,20))
+		#self.view.add_regions('select',r,'comment', 'dot', 4 | 32)		
+		#self.view.add_regions('select',r,'keyword', 'dot', 4 | 32)		
+		view.plsql_b_panel.add_regions('select',r,'keyword', 'dot', 4 | 32)		
+
+
+
+
+		#xml = plplus(view.current_text).xml
+		#print xml
 		# view = dataView.new()
 		# view.set_name("xml")
 		# view.set_scratch(True)
@@ -2208,6 +2259,7 @@ class print_cmdCommand(sublime_plugin.TextCommand):
 		# view.write(xml)
 		# view.run_command("indentxml")
 		# view.focus()
+
 class print_cmd2Command(sublime_plugin.TextCommand):
 	def run(self, edit):
 		view = dataView.active()		
@@ -2447,6 +2499,35 @@ class el(sublime_plugin.EventListener):
 				view.set_status('cft-errors',cft_errors[str(row)])
 			else:
 				view.set_status('cft-errors',"")
+
+		#обновление в панели plsql кода
+		view = dataView.active()
+		
+
+		if hasattr(view,"plsql"):
+			v = view.plsql
+			r = []
+			execute_region = v.find('--#section %s '%view.current_section,1)
+			row, col = view.rowcol(view.sel()[0].a)
+			line_num = view.sections[view.current_section].sub_line_num(row)
+			region = None
+
+			while not region and line_num>0:			
+				region = v.find('(--# %s,)(\n|\t|(?!--).)*'%line_num,execute_region.begin())
+				line_num -= 1
+				#print line_num
+
+			if not region:
+				print "Не удалось найти"
+			else:
+				r.append(region)
+				v.show(r[0])	
+				#r = v.find_all('--# 8,2',1)
+				#view.view.add_regions('select',r,'comment', 'dot', 4 | 32)		
+				#view.view.add_regions('select',r,'keyword', 'dot', 4 | 32)		
+				v.add_regions('select',r,'keyword', 'dot', 4 | 32)
+
+
 class my_auto_completeCommand(sublime_plugin.TextCommand):
 	'''Used to request a full autocompletion when
 	complete_as_you_type is turned off'''
