@@ -187,6 +187,7 @@ class FileReader(object):
 	def load(self):
 		self.cft_schema_sql 	 = self.read(os.path.join(plugin_path,"sql","cft_schema.sql"))
 		self.method_sources 	 = self.read(os.path.join(plugin_path,"sql","method_sources.tst"))
+		self.package_sources 	 = self.read(os.path.join(plugin_path,"sql","package_sources.tst"))
 		self.save_method_sources = self.read(os.path.join(plugin_path,"sql","save_method_sources.tst"))
 		self.method_sources_json = self.read(os.path.join(plugin_path,"sql","method_sources_json.tst"))
 		self.save_criteria_text  = self.read(os.path.join(plugin_path,"sql","save_criteria_text.tst"))
@@ -494,7 +495,27 @@ class cftDB(object):
 			self.db.pool.release(conn)
 			#value = re.sub(r' +$','',text,re.MULTILINE) 				#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
 			return value
-		
+		def get_package(self,package_type):
+			def read_clob(clob_val):
+				clob_val = clob_val.getvalue()
+				if clob_val:	clob_val = clob_val.read().decode('1251')
+				else:			clob_val = ""
+				return clob_val
+
+			conn = self.db.pool.acquire()
+			cursor = conn.cursor()
+			
+			s  = cursor.var(cx_Oracle.CLOB)
+			cursor.execute(self.db.fr.package_sources,(self.class_ref.id, self.short_name.upper(),package_type,s))
+
+			s  = read_clob(s)
+			self.db.pool.release(conn)
+			return s
+		def get_package_body_text(self):
+			return self.get_package('PACKAGE BODY')
+		def get_package_text(self):
+			return self.get_package('PACKAGE')
+
 		def set_sources(self,text):
 			# def execute_function(execute_text):
 			# 	def comment():		return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
@@ -1039,7 +1060,7 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			work_folder = cft_settings["work_folder"]#.encode('windows-1251')
 			file_name	= obj.class_ref.id + "." + obj.short_name + "." + db.name.upper()  + ".METHOD"
 			file_path	= os.path.join(work_folder,file_name)
-			
+			#self.t.print_time("Подготовка")
 			import subprocess			
 			if not os.path.exists(os.path.join(work_folder,".git")):
 				print "INIT"
@@ -1067,11 +1088,14 @@ class save_methodCommand(sublime_plugin.TextCommand):
 				#	print proc
 
 			#git_command("diff --git ")
+			#self.t.print_time("До Git1")
 			diff_text = commit_text(obj.get_sources(), "database changes") 		#Закоммитим сначала из базы
 			#print "TEXT=",view.text,obj.short_name
+			#self.t.print_time("До Сохранения в базу")
 			obj.set_sources(view.text)
 			#print "END"
-			diff_text = commit_text(obj.get_sources(), "sublime text changes",1) 	#Закоммитим изменения в файле
+			#self.t.print_time("До Git2")
+			view.diff_text = commit_text(obj.get_sources(), "sublime text changes",1) 	#Закоммитим изменения в файле
 
 			#Сохраним изменения
 			#if sb_text != db_text:
@@ -1083,10 +1107,10 @@ class save_methodCommand(sublime_plugin.TextCommand):
 
 			#print diff_text
 			#self.show_text_in_panel("",diff_text)
-			view.diff_text = diff_text
+			# = diff_text
 			#print "DIFF=",view.diff_text
 			view.show_errors_panel()
-
+			#self.t.print_time("show panel and mark errors")
 
 		except Exception,e:
 			print "*** Ошибка сохранения исходников:",e
@@ -1420,11 +1444,11 @@ class dataView(object):
 		self.view.insert(edit, self.view.size(), string)
 		self.view.end_edit(edit)
 
-	def show_panel(self,panel_name,text):
+	def show_panel(self,panel_name,text,syntax="Packages/Diff/Diff.tmLanguage"):
 		#if not hasattr(self, 'output_view'):
 		output_view = sublime.active_window().get_output_panel("git")
 
-		def _output_to_view(output_file, output, clear=False, syntax="Packages/Diff/Diff.tmLanguage"):
+		def _output_to_view(output_file, output, clear=False, syntax=syntax):
 		    output_file.set_syntax_file(syntax)
 		    edit = output_file.begin_edit()
 		    if clear:
@@ -1445,6 +1469,10 @@ class dataView(object):
 		self.show_panel("",errs_text)
 	def show_diff_panel(self):
 		self.show_panel("",self.diff_text)
+	def show_plsql_panel(self):
+		self.show_panel("",self.data.get_package_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")
+	def show_plsql_b_panel(self):
+		self.show_panel("",self.data.get_package_body_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")
 
 class plplus(object):
 	class sym(object):
@@ -2203,6 +2231,13 @@ class show_errorsCommand(sublime_plugin.TextCommand):
 class show_diffCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		dataView.active().show_diff_panel()
+
+class show_plsqlCommand(sublime_plugin.TextCommand):
+	def run(self, edit):
+		dataView.active().show_plsql_panel()
+class show_plsqlbCommand(sublime_plugin.TextCommand):
+	def run(self, edit):
+		dataView.active().show_plsql_b_panel()
 		
 	
 #Класс для обработки событий

@@ -43,7 +43,7 @@ declare
       sub_str := substr(text,i,end_i-i+1);
       if length(tmp_str) + length(sub_str) > 32000 then        
         Z$RUNTIME_PLP_TOOLS.Add_Method_Src(section_name,tmp_str);
-        stdio.put_line_pipe('i='||length(tmp_str),'DEBUG_PIPE');
+        --stdio.put_line_pipe('i='||length(tmp_str),'DEBUG_PIPE');
         tmp_str := sub_str;
       else
         tmp_str := tmp_str || sub_str;  
