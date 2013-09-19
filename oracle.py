@@ -1140,11 +1140,13 @@ class dataView(object):
 	@staticmethod
 	def active():
 		a = dataView(sublime.active_window().active_view())
-
-		if not dataViews.has_key(a.data.name):
-			dataViews[a.data.name] = a
-		dataViews[a.data.name].view = sublime.active_window().active_view()
-		return dataViews[a.data.name]
+		if a.data:
+			if not dataViews.has_key(a.data.name):
+				dataViews[a.data.name] = a
+			dataViews[a.data.name].view = sublime.active_window().active_view()
+			return dataViews[a.data.name]
+		else:
+			return a
 		#return dataView(sublime.active_window().active_view())
 
 	@property
@@ -1157,7 +1159,8 @@ class dataView(object):
 			else:
 				value = self.view.settings().get("cft_object")
 				#db.classes[value["class"]].update()
-				if value["type"] == "method_row":
+
+				if value and value["type"] == "method_row":
 					cl = db.classes[value["class"]]
 					if len(cl.meths)==0:
 						cl.update()
@@ -1183,16 +1186,17 @@ class dataView(object):
 	def diff_text(self):
 		if hasattr(self,"_diff_text"):
 			#print "HASATTR",self._diff_text
-			return self._diff_text
+			return self._diff_text#.encode('utf-8')
 		else:
-			self._diff_text = self.view.settings().get("diff_text")
+			self._diff_text = self.view.settings().get("diff_text")#.decode('utf-8')
 			#print "SELF=",self._diff_text
-			return self._diff_text
+			return self._diff_text#.encode('utf-8')
 	@diff_text.setter
 	def diff_text(self,value):
 		#if value.__class__.__name__ == "method_row":
 		#print "SET DIFF=",value
-		self.view.settings().set("diff_text",value.decode('utf-8'))
+		value = value.decode('utf-8')
+		self.view.settings().set("diff_text",value)
 		self._diff_text = value
 
 	def focus(self):
@@ -1488,26 +1492,50 @@ class dataView(object):
 		self.show_panel("",self.diff_text)
 	def show_plsql_panel(self):
 		self.show_panel("",self.data.get_package_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")
+
 	def show_plsql_b_panel(self):
 		v = self.show_panel("plsql",self.data.get_package_body_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")
 		r = []
-		execute_region = v.find('--#section %s '%self.current_section,1)
+		execute_region = v.find('--#section %s'%self.current_section,1)
+		
+		cur_regions = v.find_all('--#section %s( |\n)(\n|\t|(?!--#section).)*'%self.current_section)
+		#print "LEN=%i,%s"%(len(cur_regions),self.current_section)
+		#for a in cur_regions:
+		#	print "a=%s"%a
+
+
+
+
 		#print "CURRENT_SECTION=%s,%s"%(self.current_section,execute_region)
 		row, col = self.rowcol(self.sel()[0].a)
 		line_num = self.sections[self.current_section].sub_line_num(row)
 		region = None
+		print "line_num =%s"%line_num
 
 		while not region and line_num>0:			
-			print line_num
+			#print line_num
 			region = v.find('(--# %s,)(\n|\t|(?!--).)*'%line_num,execute_region.begin())
 			line_num -= 1
 			#print line_num
+			print "l=%s"%line_num
+			#if region and line_num>0:# and any(a.begin()<=region.begin() and region.end()<=a.end() for a in cur_regions):
+			if region and line_num>0 and not any(a.begin()<=region.begin() and region.end()<=a.end() for a in cur_regions):
+				region = None
+				#br = False
+				#for a in cur_regions:
+				#	if a.begin()<=region.begin() and region.end()<=a.end():
+				#		print "a(%s,%s),region(%s,%s)"%(a.begin(),a.end(),region.begin(),region.end())
+				#		br = True
+				#		break
+				#if not br:
+				#	region = None
+
 
 		if not region:
 			print "Не удалось найти"
 		else:
 			r.append(region)
-			v.show(r[0])	
+			v.show(region)	
 			#r = v.find_all('--# 8,2',1)
 			#self.view.add_regions('select',r,'comment', 'dot', 4 | 32)		
 			#self.view.add_regions('select',r,'keyword', 'dot', 4 | 32)		
@@ -2502,26 +2530,50 @@ class el(sublime_plugin.EventListener):
 
 		#обновление в панели plsql кода
 		view = dataView.active()
-		
-
 		if hasattr(view,"plsql"):
 			v = view.plsql
 			r = []
 			execute_region = v.find('--#section %s '%view.current_section,1)
+			execute_region = v.find('--#section %s'%view.current_section,1)
+		
+			cur_regions = v.find_all('--#section %s( |\n)(\n|\t|(?!--#section).)*'%view.current_section)
+			#print "LEN=%i,%s"%(len(cur_regions),self.current_section)
+			#for a in cur_regions:
+			#	print "a=%s"%a
+
+
+
+
+			#print "CURRENT_SECTION=%s,%s"%(self.current_section,execute_region)
 			row, col = view.rowcol(view.sel()[0].a)
 			line_num = view.sections[view.current_section].sub_line_num(row)
 			region = None
+			print "line_num =%s"%line_num
 
 			while not region and line_num>0:			
+				#print line_num
 				region = v.find('(--# %s,)(\n|\t|(?!--).)*'%line_num,execute_region.begin())
 				line_num -= 1
 				#print line_num
+				print "l=%s"%line_num
+				#if region and line_num>0:# and any(a.begin()<=region.begin() and region.end()<=a.end() for a in cur_regions):
+				if region and line_num>0 and not any(a.begin()<=region.begin() and region.end()<=a.end() for a in cur_regions):
+					region = None
+					#br = False
+					#for a in cur_regions:
+					#	if a.begin()<=region.begin() and region.end()<=a.end():
+					#		print "a(%s,%s),region(%s,%s)"%(a.begin(),a.end(),region.begin(),region.end())
+					#		br = True
+					#		break
+					#if not br:
+					#	region = None
+
 
 			if not region:
 				print "Не удалось найти"
 			else:
 				r.append(region)
-				v.show(r[0])	
+				v.show(region)	
 				#r = v.find_all('--# 8,2',1)
 				#view.view.add_regions('select',r,'comment', 'dot', 4 | 32)		
 				#view.view.add_regions('select',r,'keyword', 'dot', 4 | 32)		
