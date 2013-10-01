@@ -1135,7 +1135,6 @@ class dataView(object):
 
 	@staticmethod
 	def new():
-
 		return dataView(sublime.active_window().new_file())
 	@staticmethod
 	def active():
@@ -1143,31 +1142,22 @@ class dataView(object):
 		if a.data:
 			if not dataViews.has_key(a.data.name):
 				dataViews[a.data.name] = a
-			dataViews[a.data.name].view = sublime.active_window().active_view()
 			return dataViews[a.data.name]
-		else:
-			return a
-		#return dataView(sublime.active_window().active_view())
+		return a
 
 	@property
 	def data(self):
 		try:
-			#if self.view.settings().has("cft_object"):
 			if hasattr(self,"_data"):
-				#print "GetData",self._data
 				return self._data
 			else:
 				value = self.view.settings().get("cft_object")
-				#db.classes[value["class"]].update()
-
 				if value and value["type"] == "method_row":
 					cl = db.classes[value["class"]]
 					if len(cl.meths)==0:
 						cl.update()
-					#value = cl.meths[value["id"]]
 					value = cl.meths[value["short_name"]]
 				self._data = value
-				#print "GetData",self._data
 				return value
 		except Exception,e:
 			print "*** Ошибка настроек представления:",e
@@ -1464,10 +1454,10 @@ class dataView(object):
 	def show_panel(self,panel_name,text,syntax="Packages/Diff/Diff.tmLanguage"):
 		if not panel_name:
 			panel_name="git"
-		#if not hasattr(self, 'output_view'):
-		output_view = sublime.active_window().get_output_panel(panel_name)
+		output_view = self.view.window().get_output_panel(panel_name)
+		output_view.set_name(panel_name)
 
-		def _output_to_view(output_file, output, clear=False, syntax=syntax):
+		def _output_to_view(output_file, output, clear=False, syntax=syntax):			
 		    output_file.set_syntax_file(syntax)
 		    edit = output_file.begin_edit()
 		    if clear:
@@ -1492,55 +1482,47 @@ class dataView(object):
 		self.show_panel("",self.diff_text)
 	def show_plsql_panel(self):
 		self.show_panel("",self.data.get_package_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")
+	
+	class OutputPanel(object):
+		def __init__(self,name):
+			self.name = name
+			pass
+
+		def show(self):
+			sublime.active_window().run_command("show_panel", {"panel": "output.%"%self.name})
+
+
+
+
+
 
 	def show_plsql_b_panel(self):
-		v = self.show_panel("plsql",self.data.get_package_body_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")
-		r = []
+		if not hasattr(self,"plsql"):
+			self.plsql = self.show_panel("plsql",self.data.get_package_body_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")			
+		v =	self.plsql
+		#if not v.window():
+		#	sublime.active_window().run_command("show_panel", {"panel": "output.plsql"})
+		#return
+
 		execute_region = v.find('--#section %s'%self.current_section,1)
-		
 		cur_regions = v.find_all('--#section %s( |\n)(\n|\t|(?!--#section).)*'%self.current_section)
-		#print "LEN=%i,%s"%(len(cur_regions),self.current_section)
-		#for a in cur_regions:
-		#	print "a=%s"%a
-
-
-
-
-		#print "CURRENT_SECTION=%s,%s"%(self.current_section,execute_region)
 		row, col = self.rowcol(self.sel()[0].a)
 		line_num = self.sections[self.current_section].sub_line_num(row)
 		region = None
-		print "line_num =%s"%line_num
-
 		while not region and line_num>0:			
-			#print line_num
 			region = v.find('(--# %s,)(\n|\t|(?!--).)*'%line_num,execute_region.begin())
 			line_num -= 1
-			#print line_num
-			print "l=%s"%line_num
-			#if region and line_num>0:# and any(a.begin()<=region.begin() and region.end()<=a.end() for a in cur_regions):
 			if region and line_num>0 and not any(a.begin()<=region.begin() and region.end()<=a.end() for a in cur_regions):
 				region = None
-				#br = False
-				#for a in cur_regions:
-				#	if a.begin()<=region.begin() and region.end()<=a.end():
-				#		print "a(%s,%s),region(%s,%s)"%(a.begin(),a.end(),region.begin(),region.end())
-				#		br = True
-				#		break
-				#if not br:
-				#	region = None
-
-
 		if not region:
 			print "Не удалось найти"
 		else:
-			r.append(region)
+			r = [region]
 			v.show(region)	
-			#r = v.find_all('--# 8,2',1)
-			#self.view.add_regions('select',r,'comment', 'dot', 4 | 32)		
-			#self.view.add_regions('select',r,'keyword', 'dot', 4 | 32)		
 			v.add_regions('select',r,'keyword', 'dot', 4 | 32)
-		self.plsql = v		
+		
+		
+				
 
 
 class plplus(object):
@@ -2317,7 +2299,15 @@ class show_plsqlCommand(sublime_plugin.TextCommand):
 		dataView.active().show_plsql_panel()
 class show_plsqlbCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
-		dataView.active().show_plsql_b_panel()
+		#view = dataView.active()
+		#if not hasattr(view,"plsql"):
+		#	self.plsql = view.show_panel("plsql",self.data.get_package_body_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")			
+		#v =	self.plsql
+		view = dataView.active()
+		if not view.window():
+			sublime.active_window().run_command("show_panel", {"panel": "output.plsql"})
+
+		view.show_plsql_b_panel()
 		
 	
 #Класс для обработки событий
@@ -2529,55 +2519,31 @@ class el(sublime_plugin.EventListener):
 				view.set_status('cft-errors',"")
 
 		#обновление в панели plsql кода
-		view = dataView.active()
-		if hasattr(view,"plsql"):
-			v = view.plsql
-			r = []
-			execute_region = v.find('--#section %s '%view.current_section,1)
-			execute_region = v.find('--#section %s'%view.current_section,1)
+		#print "id=%s,name=%s,%s"%(view.id(),view.name(),view)
+		#print "f=%s"%view.extract_completions("text")
+		#print view.layout_extent()
+		#print view.viewport_extent()
+		#print view.viewport_position()
+		#print view.visible_region()
+		#print view.__dict__
+		#print "_________________________________________________________"
 		
-			cur_regions = v.find_all('--#section %s( |\n)(\n|\t|(?!--#section).)*'%view.current_section)
-			#print "LEN=%i,%s"%(len(cur_regions),self.current_section)
-			#for a in cur_regions:
-			#	print "a=%s"%a
-
-
-
-
-			#print "CURRENT_SECTION=%s,%s"%(self.current_section,execute_region)
-			row, col = view.rowcol(view.sel()[0].a)
-			line_num = view.sections[view.current_section].sub_line_num(row)
-			region = None
-			print "line_num =%s"%line_num
-
-			while not region and line_num>0:			
-				#print line_num
-				region = v.find('(--# %s,)(\n|\t|(?!--).)*'%line_num,execute_region.begin())
-				line_num -= 1
-				#print line_num
-				print "l=%s"%line_num
-				#if region and line_num>0:# and any(a.begin()<=region.begin() and region.end()<=a.end() for a in cur_regions):
-				if region and line_num>0 and not any(a.begin()<=region.begin() and region.end()<=a.end() for a in cur_regions):
-					region = None
-					#br = False
-					#for a in cur_regions:
-					#	if a.begin()<=region.begin() and region.end()<=a.end():
-					#		print "a(%s,%s),region(%s,%s)"%(a.begin(),a.end(),region.begin(),region.end())
-					#		br = True
-					#		break
-					#if not br:
-					#	region = None
-
-
-			if not region:
-				print "Не удалось найти"
-			else:
-				r.append(region)
-				v.show(region)	
-				#r = v.find_all('--# 8,2',1)
-				#view.view.add_regions('select',r,'comment', 'dot', 4 | 32)		
-				#view.view.add_regions('select',r,'keyword', 'dot', 4 | 32)		
-				v.add_regions('select',r,'keyword', 'dot', 4 | 32)
+		#print sublime.View.__dict__
+		#v = dataView.active()
+		#if hasattr(v,"plsql"):
+		#v = v.plsql
+		#print v.layout_extent()
+		#print v.viewport_extent()
+		#print v.layout_to_text()
+		#print v.window()
+		
+		#print "on_selection=%s"%view.data
+		if view.name() and view.name() != 'plsql': #если нет имени значит это панель
+			v = dataView.active()
+			if hasattr(v,"plsql"):
+				if v.plsql.window():
+					print "ON select"
+					v.show_plsql_b_panel()
 
 
 class my_auto_completeCommand(sublime_plugin.TextCommand):
