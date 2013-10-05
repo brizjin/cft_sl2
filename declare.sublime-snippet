@@ -4,9 +4,10 @@
 	${1:a} varchar2(2000);
 begin
 	${2:null;}
-exception when others then ${3:null;}
-		  when no_data_found then ${4:null;}
-		  when too_many_rows then ${5:null;}
+exception 
+	when no_data_found then ${3:null;}
+	when too_many_rows then ${4:null;}
+	when others then ${5:null;}
 end;
     	]]></content>
     <tabTrigger>declare</tabTrigger>

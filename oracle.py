@@ -19,7 +19,7 @@ USE_PARSER = False
 
 beg_whites_regex  = re.compile(r'^\s*') #ищем начало строки без пробелов
 end_whites_regex  = re.compile(r'\s*$') #ищем конец строки без пробелов
-sections_regex    = re.compile(r'╒═+╕\n│ ([A-Z]+) +│\n(.*?)\n?└─+┘\n'.decode('utf-8'),re.S) #поиск секций
+sections_regex    = re.compile(r'(╒═+╕\n│ ([A-Z]+) +│\n)(.*?)\n?(└─+┘\n)'.decode('utf-8'),re.S) #поиск секций
 
 class NewCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
@@ -516,63 +516,24 @@ class cftDB(object):
 		def get_package_text(self):
 			return self.get_package('PACKAGE')
 
-		def set_sources(self,text):
-			# def execute_function(execute_text):
-			# 	def comment():		return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
-			# 	def body():			return re.compile(r"is.*",re.S)
-			# 	def datatype():		return re.compile(r"\w+")
-			# 	def return_type():	return datatype		
-			# 	def begin_block():	return 0,keyword("declare"),0,any_text,keyword("begin"),-2,[any_text,begin_block],0,ignore(r"end;")
-			# 	def param_name():	return re.compile(r"\w+")
-			# 	def param_type():	return re.compile(r"(?i)in out|in|out")
-			# 	def param():		return param_name,0,param_type,datatype
-			# 	def params():		return param,-1,(',',param)
-			# 	def proc():			return
-			# 	def func_name():	return re.compile(r"\w+")
-			# 	def func():			return keyword('function'),func_name,"(",0,params,")",keyword('return'),return_type,body
-			# 	def exec_block():	return [func,proc]	
-			# 	#print execute_text
-			# 	import pyPEG
-			# 	from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
-			# 	self.result = parseLine(execute_text,exec_block,[],True,comment)
-			# 	class exe(object):
-			# 		func = self.result[0][0].what[0]
-			# 		#func_name = func.what[0].what
-			# 		#params_arr = func.what[1].what
-			# 		#params = dict([(p.what[0].what,{"type":p.what[1].what,"datatype":p.what[2].what})for p in params_arr])
-			# 		#return_type = func.what[2].what[0].what
-			# 		for w in func.what:
-			# 			if w[0] == "body":
-			# 				text = w.what
-			# 		#print "WHAT=", func.what
-			# 		#text = func.what[3].what
-			# 		text = text[text.find("\n")+1:]
-			# 	return exe()
+		def set_sources(self,b,v,g,l,s):
 			try:
-				sections_dict = dict()
-				
-				#from collections import namedtuple
-				#section = namedtuple("section",['text','header'])
-				class section(object):
-					text = ""
-					header = ""
-					body = ""
+				# sections_dict = dict()
+				# class section(object):
+				# 	text = ""
+				# 	header = ""
+				# 	body = ""
 					
-				for s in sections_regex.finditer(text):
-					text = re.sub(r'\n\t',r'\n',s.group(2)).lstrip('\t')	#Удалим служебный таб в начале каждой строки
-					text = re.sub(r' +$','',text,re.MULTILINE) 				#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
-					#sections_dict[s.group(1)] = text
-					sobj = section()
-					sobj.text = text
-					sections_dict[s.group(1)] = sobj
+				# for s in sections_regex.finditer(text):
+				# 	text = re.sub(r'\n\t',r'\n',s.group(2)).lstrip('\t')	#Удалим служебный таб в начале каждой строки
+				# 	text = re.sub(r' +$','',text,re.MULTILINE) 				#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
+				# 	sobj = section()
+				# 	sobj.text = text
+				# 	sections_dict[s.group(1)] = sobj
 				
-				#setattr(sections_dict["EXECUTE"],"header","")
-				s_exec 		  = sections_dict["EXECUTE"]
-				s_exec.header = self.execute_header()
-				#s_exec.body   = s_exec.text[len(s_exec.header)-3:]
-				s_exec.body   = s_exec.text[len(s_exec.header.replace('\n','')):]
-				#print "EXECUTE='%s'"%s_exec.header,len(s_exec.header.replace('\n','')),len(s_exec.header)-8
-				#print "PUBLIC=",sections_dict["PUBLIC"].text
+				# s_exec 		  = sections_dict["EXECUTE"]
+				# s_exec.header = self.execute_header()
+				# s_exec.body   = s_exec.text[len(s_exec.header.replace('\n','')):]
 
 				t = timer()
 				conn = self.db.pool.acquire()
@@ -585,22 +546,24 @@ class cftDB(object):
 					s=cx_Oracle.CLOB
 				)
 				err_clob,out_others,err_num = cursor.var(cx_Oracle.CLOB),cursor.var(cx_Oracle.CLOB),cursor.var(cx_Oracle.NUMBER)
-				#print "TEXT=",execute_function(sections_dict["EXECUTE"]).text
-
-				#print s_exec.header,s_exec.body,len(s_exec.header)
-				#print execute_function(sections_dict["EXECUTE"]).text
-				#print 
 
 				cursor.execute(
 					self.db.fr.save_method_sources,
 					class_name=self.class_ref.id,
 					method_name=self.short_name.upper(),
-					#b=execute_function(sections_dict["EXECUTE"]).text,
-					b=sections_dict["EXECUTE"].body,
-					v=sections_dict["VALIDATE"].text,
-					g=sections_dict["PUBLIC"].text,
-					l=sections_dict["PRIVATE"].text,
-					s=sections_dict["VBSCRIPT"].text,
+					
+					# b=sections_dict["EXECUTE"].body,
+					# v=sections_dict["VALIDATE"].text,
+					# g=sections_dict["PUBLIC"].text,
+					# l=sections_dict["PRIVATE"].text,
+					# s=sections_dict["VBSCRIPT"].text,
+
+					b=b,
+					v=v,
+					g=g,
+					l=l,
+					s=s,
+
 					out=err_clob,
 					out_count=err_num,
 					out_others=out_others
@@ -1092,7 +1055,21 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			diff_text = commit_text(obj.get_sources(), "database changes") 		#Закоммитим сначала из базы
 			#print "TEXT=",view.text,obj.short_name
 			#self.t.print_time("До Сохранения в базу")
-			obj.set_sources(view.text)
+
+			#s_exec.header = self.execute_header()
+			# s_exec.body   = s_exec.text[len(s_exec.header.replace('\n','')):]
+
+
+			sections = view.sections
+
+			b = sections["EXECUTE"].body.cft_text 
+			v = sections["VALIDATE"].body.cft_text
+			g = sections["PUBLIC"].body.cft_text
+			l = sections["PRIVATE"].body.cft_text
+			s = sections["VBSCRIPT"].body.cft_text
+
+			#obj.set_sources(view.text)
+			obj.set_sources(b,v,g,l,s)
 			#print "END"
 			#self.t.print_time("До Git2")
 			view.diff_text = commit_text(obj.get_sources(), "sublime text changes",1) 	#Закоммитим изменения в файле
@@ -1197,7 +1174,7 @@ class dataView(object):
 		return getattr(self.view,name)
 	
 	@property
-	def sections(self):
+	def sections2(self):
 		class section(object):
 			def __init__(self,view,begin,end,name,text):
 				self.view  = view
@@ -1233,8 +1210,73 @@ class dataView(object):
 			text = re.sub(r' +$','',text,re.MULTILINE) 				#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
 			sections_dict[s.group(1)] = section(self,s.start(2),s.end(2),s.group(1),text)
 		return sections_dict
+	
 	@property
-	def current_section(self):
+	def sections(self):
+		try:
+			text = self.text
+			h = self.data.execute_header()
+			v = self.view
+
+			sections = dict()
+			class part:
+				def __init__(self,s,n):
+					self.name  = s.group(2)
+					self.text  = s.group(n)
+					self.start = s.start(n)
+					self.end   = s.end(n)
+
+				def is_point_from_part(self,point):
+					if self.start <= point and point <= self.end:
+						return True
+					return False
+
+				@property
+				def cft_text(self):
+					text = self.text
+					text = re.sub(r'\n\t',r'\n',text).lstrip('\t')	#Удалим служебный таб в начале каждой строки
+					text = re.sub(r' +$','',text,re.MULTILINE) 		#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
+					
+					if self.name == "EXECUTE":
+						text = text[len(h.replace('\n','')):]
+
+					return text
+				@property
+				def cft_start(self):
+					if self.name == "EXECUTE":
+						return self.start + len(h.replace('\n',''))
+						#return v.text_point(v.rowcol(self.start)[0] + h.count("\n"),0)
+					else:
+						return self.start
+
+				@property
+				def lines(self):
+					#желательно переписать разбиение на массив строк без использования v
+					return v.lines(sublime.Region(self.body.start,self.body.end))
+
+				#по номеру строки в исходнике находит номер строки в представлении саблайм
+				def view_line_num(self,line_num):
+					return v.rowcol(self.body.start)[0] + line_num
+
+			for s in sections_regex.finditer(text):
+				sobj = part(s,0)								
+				sobj.header = part(s,1)
+				sobj.body   = part(s,3)
+				sobj.footer = part(s,4)
+				sections[sobj.name] = sobj
+
+			return sections
+		except Exception, e:
+			print e
+
+		
+
+	#по номеру строки в представлении саблайм показывает номер строки в исходнике
+	#def sub_line_num(self,line_num):
+	#	return line_num - self.view.rowcol(self.begin)[0] + 1	
+
+	@property
+	def current_section_old(self):
 		
 		def comment():			return [(re.compile(r"--.*")), re.compile("/\*.*?\*/", re.S)]
 		#def blocks_text():		return re.compile(r".*?((?=└─)|$)".decode('utf-8'),re.S)
@@ -1246,7 +1288,9 @@ class dataView(object):
 		def blocks(): 			return -2,blocks_section
 		
 		old_trace = pyPEG.print_trace
-		pyPEG.print_trace = False
+		pyPEG.print_trace = True
+		#print '-----------'
+		#print self.text[:self.caret_position]
 		result = parseLine(self.text[:self.caret_position],blocks,[],True,comment)
 		pyPEG.print_trace = old_trace
 		#sections = dict([(s.what[0],s.what[1].what) for s in result[0][0].what])
@@ -1255,6 +1299,26 @@ class dataView(object):
 		last_section = sections[len(sections)-1]
 
 		return last_section
+	@property
+	def current_section(self):
+		try:
+			#print self.sections
+			for s in self.sections.values():
+				if s.is_point_from_part(self.caret_position):
+					return s
+		except Exception, e:
+			print "E",e
+
+
+
+	def section_row_by_view_row(self,view_row):		
+		return view_row - self.view.rowcol(self.current_section.body.start)[0] + 1
+
+	@property
+	def current_section_row(self):
+		row, col = self.rowcol(self.caret_position)
+		return row - self.view.rowcol(self.current_section.body.start)[0] + 1
+		#return self.section_row_by_view_row(self.rowcol(self.caret_position)[0])
 
 	def mark_errors(self):
 		def RegionTrim(region):
@@ -1504,22 +1568,31 @@ class dataView(object):
 		#	sublime.active_window().run_command("show_panel", {"panel": "output.plsql"})
 		#return
 
-		execute_region = v.find('--#section %s'%self.current_section,1)
-		cur_regions = v.find_all('--#section %s( |\n)(\n|\t|(?!--#section).)*'%self.current_section)
-		row, col = self.rowcol(self.sel()[0].a)
-		line_num = self.sections[self.current_section].sub_line_num(row)
-		region = None
-		while not region and line_num>0:			
-			region = v.find('(--# %s,)(\n|\t|(?!--).)*'%line_num,execute_region.begin())
-			line_num -= 1
-			if region and line_num>0 and not any(a.begin()<=region.begin() and region.end()<=a.end() for a in cur_regions):
+		execute_region = v.find('--#section %s'%self.current_section.name,1)
+		if execute_region:
+			line_num = self.current_section_row
+			if line_num > 0:
+				cur_regions = v.find_all('--#section %s( |\n)(\n|\t|(?!--#section).)*'%self.current_section.name)
+				#print "CUR=",cur_regions
+				#row, col = self.rowcol(self.sel()[0].a)
+				#print "s",self.sections
+				#line_num = self.sections[self.current_section].sub_line_num(row)
+				#line_num = self.current_section.sub_line_num(row)
+				
+				#print "LINE=",line_num
+				#print line_num
 				region = None
-		if not region:
-			print "Не удалось найти"
-		else:
-			r = [region]
-			v.show(region)	
-			v.add_regions('select',r,'keyword', 'dot', 4 | 32)
+				while not region and line_num>0:			
+					region = v.find('(--# %s,)(\n|\t|(?!--).)*'%line_num,execute_region.begin())
+					line_num -= 1
+					if region and line_num>0 and not any(a.begin()<=region.begin() and region.end()<=a.end() for a in cur_regions):
+						region = None
+				if not region:
+					print "Не удалось найти"
+				else:
+					r = [region]
+					v.show(region)	
+					v.add_regions('select',r,'keyword', 'dot', 4 | 32)
 		
 		
 				
@@ -2304,8 +2377,10 @@ class show_plsqlbCommand(sublime_plugin.TextCommand):
 		#	self.plsql = view.show_panel("plsql",self.data.get_package_body_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")			
 		#v =	self.plsql
 		view = dataView.active()
-		if not view.window():
-			sublime.active_window().run_command("show_panel", {"panel": "output.plsql"})
+		#print "W=%s"%view.window()
+		if hasattr(view,"plsql"):
+			if not view.plsql.window():
+				sublime.active_window().run_command("show_panel", {"panel": "output.plsql"})
 
 		view.show_plsql_b_panel()
 		
@@ -2542,7 +2617,7 @@ class el(sublime_plugin.EventListener):
 			v = dataView.active()
 			if hasattr(v,"plsql"):
 				if v.plsql.window():
-					print "ON select"
+					#print "ON select"
 					v.show_plsql_b_panel()
 
 
