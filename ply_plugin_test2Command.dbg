@@ -1,0 +1,903 @@
+Created by PLY version 3.4 (http://www.dabeaz.com/ply)
+
+Unused terminals:
+
+    COMMENT
+
+Grammar
+
+Rule 0     S' -> expression
+Rule 1     expression -> declarations
+Rule 2     declarations -> <empty>
+Rule 3     param_list -> <empty>
+Rule 4     param_list_paren -> <empty>
+Rule 5     param_type -> <empty>
+Rule 6     two_digit_list -> <empty>
+Rule 7     declarations -> declare_element
+Rule 8     param_list -> param
+Rule 9     declarations -> declarations declare_element
+Rule 10    declare_element -> declare_function
+Rule 11    declare_element -> variable_def
+Rule 12    declare_function -> FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON
+Rule 13    param_list_paren -> LPAREN param_list RPAREN
+Rule 14    param_list -> param_list COMMA param
+Rule 15    param_type -> IN OUT
+Rule 16    param_type -> IN
+Rule 17    param_type -> OUT
+Rule 18    param -> ID param_type datatype
+Rule 19    one_digit_list -> LPAREN DIGIT RPAREN
+Rule 20    two_digit_list -> one_digit_list
+Rule 21    two_digit_list -> LPAREN DIGIT COMMA DIGIT RPAREN
+Rule 22    datatype -> NUMBER two_digit_list
+Rule 23    datatype -> VARCHAR2 two_digit_list
+Rule 24    datatype -> STRING two_digit_list
+Rule 25    datatype -> RAW one_digit_list
+Rule 26    datatype -> INTERVAL two_digit_list
+Rule 27    datatype -> TIMESTAMP two_digit_list
+Rule 28    datatype -> INTEGER
+Rule 29    datatype -> DATE
+Rule 30    datatype -> BOOLEAN
+Rule 31    datatype -> EXCEPTION
+Rule 32    datatype -> BLOB
+Rule 33    datatype -> CLOB
+Rule 34    datatype -> BFILE
+Rule 35    datatype -> LONG
+Rule 36    datatype -> LONG_RAW
+Rule 37    variable_def -> ID datatype SEMICOLON
+
+Terminals, with rules where they appear
+
+BEGIN                : 12
+BFILE                : 34
+BLOB                 : 32
+BODY                 : 12
+BOOLEAN              : 30
+CLOB                 : 33
+COMMA                : 14 21
+COMMENT              : 
+DATE                 : 29
+DIGIT                : 19 21 21
+END                  : 12
+EXCEPTION            : 31
+FUNCTION             : 12
+ID                   : 12 18 37
+IN                   : 15 16
+INTEGER              : 28
+INTERVAL             : 26
+IS                   : 12
+LONG                 : 35
+LONG_RAW             : 36
+LPAREN               : 13 19 21
+NUMBER               : 22
+OUT                  : 15 17
+RAW                  : 25
+RETURN               : 12
+RPAREN               : 13 19 21
+SEMICOLON            : 12 37
+STRING               : 24
+TIMESTAMP            : 27
+VARCHAR2             : 23
+error                : 
+
+Nonterminals, with rules where they appear
+
+datatype             : 12 18 37
+declarations         : 1 9 12
+declare_element      : 7 9
+declare_function     : 10
+expression           : 0
+one_digit_list       : 20 25
+param                : 8 14
+param_list           : 13 14
+param_list_paren     : 12
+param_type           : 18
+two_digit_list       : 22 23 24 26 27
+variable_def         : 11
+
+Parsing method: LALR
+
+state 0
+
+    (0) S' -> . expression
+    (1) expression -> . declarations
+    (2) declarations -> .
+    (7) declarations -> . declare_element
+    (9) declarations -> . declarations declare_element
+    (10) declare_element -> . declare_function
+    (11) declare_element -> . variable_def
+    (12) declare_function -> . FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON
+    (37) variable_def -> . ID datatype SEMICOLON
+
+  ! shift/reduce conflict for FUNCTION resolved as shift
+  ! shift/reduce conflict for ID resolved as shift
+    $end            reduce using rule 2 (declarations -> .)
+    FUNCTION        shift and go to state 1
+    ID              shift and go to state 7
+
+  ! FUNCTION        [ reduce using rule 2 (declarations -> .) ]
+  ! ID              [ reduce using rule 2 (declarations -> .) ]
+
+    declarations                   shift and go to state 2
+    variable_def                   shift and go to state 3
+    declare_function               shift and go to state 4
+    declare_element                shift and go to state 5
+    expression                     shift and go to state 6
+
+state 1
+
+    (12) declare_function -> FUNCTION . ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON
+
+    ID              shift and go to state 8
+
+
+state 2
+
+    (1) expression -> declarations .
+    (9) declarations -> declarations . declare_element
+    (10) declare_element -> . declare_function
+    (11) declare_element -> . variable_def
+    (12) declare_function -> . FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON
+    (37) variable_def -> . ID datatype SEMICOLON
+
+    $end            reduce using rule 1 (expression -> declarations .)
+    FUNCTION        shift and go to state 1
+    ID              shift and go to state 7
+
+    variable_def                   shift and go to state 3
+    declare_function               shift and go to state 4
+    declare_element                shift and go to state 9
+
+state 3
+
+    (11) declare_element -> variable_def .
+
+    FUNCTION        reduce using rule 11 (declare_element -> variable_def .)
+    ID              reduce using rule 11 (declare_element -> variable_def .)
+    $end            reduce using rule 11 (declare_element -> variable_def .)
+    BEGIN           reduce using rule 11 (declare_element -> variable_def .)
+
+
+state 4
+
+    (10) declare_element -> declare_function .
+
+    FUNCTION        reduce using rule 10 (declare_element -> declare_function .)
+    ID              reduce using rule 10 (declare_element -> declare_function .)
+    $end            reduce using rule 10 (declare_element -> declare_function .)
+    BEGIN           reduce using rule 10 (declare_element -> declare_function .)
+
+
+state 5
+
+    (7) declarations -> declare_element .
+
+    FUNCTION        reduce using rule 7 (declarations -> declare_element .)
+    ID              reduce using rule 7 (declarations -> declare_element .)
+    $end            reduce using rule 7 (declarations -> declare_element .)
+    BEGIN           reduce using rule 7 (declarations -> declare_element .)
+
+
+state 6
+
+    (0) S' -> expression .
+
+
+
+state 7
+
+    (37) variable_def -> ID . datatype SEMICOLON
+    (22) datatype -> . NUMBER two_digit_list
+    (23) datatype -> . VARCHAR2 two_digit_list
+    (24) datatype -> . STRING two_digit_list
+    (25) datatype -> . RAW one_digit_list
+    (26) datatype -> . INTERVAL two_digit_list
+    (27) datatype -> . TIMESTAMP two_digit_list
+    (28) datatype -> . INTEGER
+    (29) datatype -> . DATE
+    (30) datatype -> . BOOLEAN
+    (31) datatype -> . EXCEPTION
+    (32) datatype -> . BLOB
+    (33) datatype -> . CLOB
+    (34) datatype -> . BFILE
+    (35) datatype -> . LONG
+    (36) datatype -> . LONG_RAW
+
+    NUMBER          shift and go to state 16
+    VARCHAR2        shift and go to state 20
+    STRING          shift and go to state 12
+    RAW             shift and go to state 19
+    INTERVAL        shift and go to state 15
+    TIMESTAMP       shift and go to state 14
+    INTEGER         shift and go to state 23
+    DATE            shift and go to state 22
+    BOOLEAN         shift and go to state 10
+    EXCEPTION       shift and go to state 17
+    BLOB            shift and go to state 25
+    CLOB            shift and go to state 11
+    BFILE           shift and go to state 24
+    LONG            shift and go to state 18
+    LONG_RAW        shift and go to state 21
+
+    datatype                       shift and go to state 13
+
+state 8
+
+    (12) declare_function -> FUNCTION ID . param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON
+    (4) param_list_paren -> .
+    (13) param_list_paren -> . LPAREN param_list RPAREN
+
+    RETURN          reduce using rule 4 (param_list_paren -> .)
+    LPAREN          shift and go to state 26
+
+    param_list_paren               shift and go to state 27
+
+state 9
+
+    (9) declarations -> declarations declare_element .
+
+    FUNCTION        reduce using rule 9 (declarations -> declarations declare_element .)
+    ID              reduce using rule 9 (declarations -> declarations declare_element .)
+    $end            reduce using rule 9 (declarations -> declarations declare_element .)
+    BEGIN           reduce using rule 9 (declarations -> declarations declare_element .)
+
+
+state 10
+
+    (30) datatype -> BOOLEAN .
+
+    RPAREN          reduce using rule 30 (datatype -> BOOLEAN .)
+    COMMA           reduce using rule 30 (datatype -> BOOLEAN .)
+    SEMICOLON       reduce using rule 30 (datatype -> BOOLEAN .)
+    IS              reduce using rule 30 (datatype -> BOOLEAN .)
+
+
+state 11
+
+    (33) datatype -> CLOB .
+
+    RPAREN          reduce using rule 33 (datatype -> CLOB .)
+    COMMA           reduce using rule 33 (datatype -> CLOB .)
+    SEMICOLON       reduce using rule 33 (datatype -> CLOB .)
+    IS              reduce using rule 33 (datatype -> CLOB .)
+
+
+state 12
+
+    (24) datatype -> STRING . two_digit_list
+    (6) two_digit_list -> .
+    (20) two_digit_list -> . one_digit_list
+    (21) two_digit_list -> . LPAREN DIGIT COMMA DIGIT RPAREN
+    (19) one_digit_list -> . LPAREN DIGIT RPAREN
+
+    SEMICOLON       reduce using rule 6 (two_digit_list -> .)
+    IS              reduce using rule 6 (two_digit_list -> .)
+    RPAREN          reduce using rule 6 (two_digit_list -> .)
+    COMMA           reduce using rule 6 (two_digit_list -> .)
+    LPAREN          shift and go to state 29
+
+    one_digit_list                 shift and go to state 30
+    two_digit_list                 shift and go to state 28
+
+state 13
+
+    (37) variable_def -> ID datatype . SEMICOLON
+
+    SEMICOLON       shift and go to state 31
+
+
+state 14
+
+    (27) datatype -> TIMESTAMP . two_digit_list
+    (6) two_digit_list -> .
+    (20) two_digit_list -> . one_digit_list
+    (21) two_digit_list -> . LPAREN DIGIT COMMA DIGIT RPAREN
+    (19) one_digit_list -> . LPAREN DIGIT RPAREN
+
+    SEMICOLON       reduce using rule 6 (two_digit_list -> .)
+    IS              reduce using rule 6 (two_digit_list -> .)
+    RPAREN          reduce using rule 6 (two_digit_list -> .)
+    COMMA           reduce using rule 6 (two_digit_list -> .)
+    LPAREN          shift and go to state 29
+
+    one_digit_list                 shift and go to state 30
+    two_digit_list                 shift and go to state 32
+
+state 15
+
+    (26) datatype -> INTERVAL . two_digit_list
+    (6) two_digit_list -> .
+    (20) two_digit_list -> . one_digit_list
+    (21) two_digit_list -> . LPAREN DIGIT COMMA DIGIT RPAREN
+    (19) one_digit_list -> . LPAREN DIGIT RPAREN
+
+    SEMICOLON       reduce using rule 6 (two_digit_list -> .)
+    IS              reduce using rule 6 (two_digit_list -> .)
+    RPAREN          reduce using rule 6 (two_digit_list -> .)
+    COMMA           reduce using rule 6 (two_digit_list -> .)
+    LPAREN          shift and go to state 29
+
+    one_digit_list                 shift and go to state 30
+    two_digit_list                 shift and go to state 33
+
+state 16
+
+    (22) datatype -> NUMBER . two_digit_list
+    (6) two_digit_list -> .
+    (20) two_digit_list -> . one_digit_list
+    (21) two_digit_list -> . LPAREN DIGIT COMMA DIGIT RPAREN
+    (19) one_digit_list -> . LPAREN DIGIT RPAREN
+
+    SEMICOLON       reduce using rule 6 (two_digit_list -> .)
+    IS              reduce using rule 6 (two_digit_list -> .)
+    RPAREN          reduce using rule 6 (two_digit_list -> .)
+    COMMA           reduce using rule 6 (two_digit_list -> .)
+    LPAREN          shift and go to state 29
+
+    one_digit_list                 shift and go to state 30
+    two_digit_list                 shift and go to state 34
+
+state 17
+
+    (31) datatype -> EXCEPTION .
+
+    RPAREN          reduce using rule 31 (datatype -> EXCEPTION .)
+    COMMA           reduce using rule 31 (datatype -> EXCEPTION .)
+    SEMICOLON       reduce using rule 31 (datatype -> EXCEPTION .)
+    IS              reduce using rule 31 (datatype -> EXCEPTION .)
+
+
+state 18
+
+    (35) datatype -> LONG .
+
+    RPAREN          reduce using rule 35 (datatype -> LONG .)
+    COMMA           reduce using rule 35 (datatype -> LONG .)
+    SEMICOLON       reduce using rule 35 (datatype -> LONG .)
+    IS              reduce using rule 35 (datatype -> LONG .)
+
+
+state 19
+
+    (25) datatype -> RAW . one_digit_list
+    (19) one_digit_list -> . LPAREN DIGIT RPAREN
+
+    LPAREN          shift and go to state 36
+
+    one_digit_list                 shift and go to state 35
+
+state 20
+
+    (23) datatype -> VARCHAR2 . two_digit_list
+    (6) two_digit_list -> .
+    (20) two_digit_list -> . one_digit_list
+    (21) two_digit_list -> . LPAREN DIGIT COMMA DIGIT RPAREN
+    (19) one_digit_list -> . LPAREN DIGIT RPAREN
+
+    SEMICOLON       reduce using rule 6 (two_digit_list -> .)
+    IS              reduce using rule 6 (two_digit_list -> .)
+    RPAREN          reduce using rule 6 (two_digit_list -> .)
+    COMMA           reduce using rule 6 (two_digit_list -> .)
+    LPAREN          shift and go to state 29
+
+    one_digit_list                 shift and go to state 30
+    two_digit_list                 shift and go to state 37
+
+state 21
+
+    (36) datatype -> LONG_RAW .
+
+    RPAREN          reduce using rule 36 (datatype -> LONG_RAW .)
+    COMMA           reduce using rule 36 (datatype -> LONG_RAW .)
+    SEMICOLON       reduce using rule 36 (datatype -> LONG_RAW .)
+    IS              reduce using rule 36 (datatype -> LONG_RAW .)
+
+
+state 22
+
+    (29) datatype -> DATE .
+
+    RPAREN          reduce using rule 29 (datatype -> DATE .)
+    COMMA           reduce using rule 29 (datatype -> DATE .)
+    SEMICOLON       reduce using rule 29 (datatype -> DATE .)
+    IS              reduce using rule 29 (datatype -> DATE .)
+
+
+state 23
+
+    (28) datatype -> INTEGER .
+
+    RPAREN          reduce using rule 28 (datatype -> INTEGER .)
+    COMMA           reduce using rule 28 (datatype -> INTEGER .)
+    SEMICOLON       reduce using rule 28 (datatype -> INTEGER .)
+    IS              reduce using rule 28 (datatype -> INTEGER .)
+
+
+state 24
+
+    (34) datatype -> BFILE .
+
+    RPAREN          reduce using rule 34 (datatype -> BFILE .)
+    COMMA           reduce using rule 34 (datatype -> BFILE .)
+    SEMICOLON       reduce using rule 34 (datatype -> BFILE .)
+    IS              reduce using rule 34 (datatype -> BFILE .)
+
+
+state 25
+
+    (32) datatype -> BLOB .
+
+    RPAREN          reduce using rule 32 (datatype -> BLOB .)
+    COMMA           reduce using rule 32 (datatype -> BLOB .)
+    SEMICOLON       reduce using rule 32 (datatype -> BLOB .)
+    IS              reduce using rule 32 (datatype -> BLOB .)
+
+
+state 26
+
+    (13) param_list_paren -> LPAREN . param_list RPAREN
+    (3) param_list -> .
+    (8) param_list -> . param
+    (14) param_list -> . param_list COMMA param
+    (18) param -> . ID param_type datatype
+
+    RPAREN          reduce using rule 3 (param_list -> .)
+    COMMA           reduce using rule 3 (param_list -> .)
+    ID              shift and go to state 40
+
+    param_list                     shift and go to state 38
+    param                          shift and go to state 39
+
+state 27
+
+    (12) declare_function -> FUNCTION ID param_list_paren . RETURN datatype IS declarations BEGIN BODY END SEMICOLON
+
+    RETURN          shift and go to state 41
+
+
+state 28
+
+    (24) datatype -> STRING two_digit_list .
+
+    RPAREN          reduce using rule 24 (datatype -> STRING two_digit_list .)
+    COMMA           reduce using rule 24 (datatype -> STRING two_digit_list .)
+    SEMICOLON       reduce using rule 24 (datatype -> STRING two_digit_list .)
+    IS              reduce using rule 24 (datatype -> STRING two_digit_list .)
+
+
+state 29
+
+    (21) two_digit_list -> LPAREN . DIGIT COMMA DIGIT RPAREN
+    (19) one_digit_list -> LPAREN . DIGIT RPAREN
+
+    DIGIT           shift and go to state 42
+
+
+state 30
+
+    (20) two_digit_list -> one_digit_list .
+
+    SEMICOLON       reduce using rule 20 (two_digit_list -> one_digit_list .)
+    IS              reduce using rule 20 (two_digit_list -> one_digit_list .)
+    RPAREN          reduce using rule 20 (two_digit_list -> one_digit_list .)
+    COMMA           reduce using rule 20 (two_digit_list -> one_digit_list .)
+
+
+state 31
+
+    (37) variable_def -> ID datatype SEMICOLON .
+
+    BEGIN           reduce using rule 37 (variable_def -> ID datatype SEMICOLON .)
+    FUNCTION        reduce using rule 37 (variable_def -> ID datatype SEMICOLON .)
+    ID              reduce using rule 37 (variable_def -> ID datatype SEMICOLON .)
+    $end            reduce using rule 37 (variable_def -> ID datatype SEMICOLON .)
+
+
+state 32
+
+    (27) datatype -> TIMESTAMP two_digit_list .
+
+    RPAREN          reduce using rule 27 (datatype -> TIMESTAMP two_digit_list .)
+    COMMA           reduce using rule 27 (datatype -> TIMESTAMP two_digit_list .)
+    SEMICOLON       reduce using rule 27 (datatype -> TIMESTAMP two_digit_list .)
+    IS              reduce using rule 27 (datatype -> TIMESTAMP two_digit_list .)
+
+
+state 33
+
+    (26) datatype -> INTERVAL two_digit_list .
+
+    RPAREN          reduce using rule 26 (datatype -> INTERVAL two_digit_list .)
+    COMMA           reduce using rule 26 (datatype -> INTERVAL two_digit_list .)
+    SEMICOLON       reduce using rule 26 (datatype -> INTERVAL two_digit_list .)
+    IS              reduce using rule 26 (datatype -> INTERVAL two_digit_list .)
+
+
+state 34
+
+    (22) datatype -> NUMBER two_digit_list .
+
+    RPAREN          reduce using rule 22 (datatype -> NUMBER two_digit_list .)
+    COMMA           reduce using rule 22 (datatype -> NUMBER two_digit_list .)
+    SEMICOLON       reduce using rule 22 (datatype -> NUMBER two_digit_list .)
+    IS              reduce using rule 22 (datatype -> NUMBER two_digit_list .)
+
+
+state 35
+
+    (25) datatype -> RAW one_digit_list .
+
+    RPAREN          reduce using rule 25 (datatype -> RAW one_digit_list .)
+    COMMA           reduce using rule 25 (datatype -> RAW one_digit_list .)
+    SEMICOLON       reduce using rule 25 (datatype -> RAW one_digit_list .)
+    IS              reduce using rule 25 (datatype -> RAW one_digit_list .)
+
+
+state 36
+
+    (19) one_digit_list -> LPAREN . DIGIT RPAREN
+
+    DIGIT           shift and go to state 43
+
+
+state 37
+
+    (23) datatype -> VARCHAR2 two_digit_list .
+
+    RPAREN          reduce using rule 23 (datatype -> VARCHAR2 two_digit_list .)
+    COMMA           reduce using rule 23 (datatype -> VARCHAR2 two_digit_list .)
+    SEMICOLON       reduce using rule 23 (datatype -> VARCHAR2 two_digit_list .)
+    IS              reduce using rule 23 (datatype -> VARCHAR2 two_digit_list .)
+
+
+state 38
+
+    (13) param_list_paren -> LPAREN param_list . RPAREN
+    (14) param_list -> param_list . COMMA param
+
+    RPAREN          shift and go to state 45
+    COMMA           shift and go to state 44
+
+
+state 39
+
+    (8) param_list -> param .
+
+    RPAREN          reduce using rule 8 (param_list -> param .)
+    COMMA           reduce using rule 8 (param_list -> param .)
+
+
+state 40
+
+    (18) param -> ID . param_type datatype
+    (5) param_type -> .
+    (15) param_type -> . IN OUT
+    (16) param_type -> . IN
+    (17) param_type -> . OUT
+
+    NUMBER          reduce using rule 5 (param_type -> .)
+    VARCHAR2        reduce using rule 5 (param_type -> .)
+    STRING          reduce using rule 5 (param_type -> .)
+    RAW             reduce using rule 5 (param_type -> .)
+    INTERVAL        reduce using rule 5 (param_type -> .)
+    TIMESTAMP       reduce using rule 5 (param_type -> .)
+    INTEGER         reduce using rule 5 (param_type -> .)
+    DATE            reduce using rule 5 (param_type -> .)
+    BOOLEAN         reduce using rule 5 (param_type -> .)
+    EXCEPTION       reduce using rule 5 (param_type -> .)
+    BLOB            reduce using rule 5 (param_type -> .)
+    CLOB            reduce using rule 5 (param_type -> .)
+    BFILE           reduce using rule 5 (param_type -> .)
+    LONG            reduce using rule 5 (param_type -> .)
+    LONG_RAW        reduce using rule 5 (param_type -> .)
+    IN              shift and go to state 48
+    OUT             shift and go to state 46
+
+    param_type                     shift and go to state 47
+
+state 41
+
+    (12) declare_function -> FUNCTION ID param_list_paren RETURN . datatype IS declarations BEGIN BODY END SEMICOLON
+    (22) datatype -> . NUMBER two_digit_list
+    (23) datatype -> . VARCHAR2 two_digit_list
+    (24) datatype -> . STRING two_digit_list
+    (25) datatype -> . RAW one_digit_list
+    (26) datatype -> . INTERVAL two_digit_list
+    (27) datatype -> . TIMESTAMP two_digit_list
+    (28) datatype -> . INTEGER
+    (29) datatype -> . DATE
+    (30) datatype -> . BOOLEAN
+    (31) datatype -> . EXCEPTION
+    (32) datatype -> . BLOB
+    (33) datatype -> . CLOB
+    (34) datatype -> . BFILE
+    (35) datatype -> . LONG
+    (36) datatype -> . LONG_RAW
+
+    NUMBER          shift and go to state 16
+    VARCHAR2        shift and go to state 20
+    STRING          shift and go to state 12
+    RAW             shift and go to state 19
+    INTERVAL        shift and go to state 15
+    TIMESTAMP       shift and go to state 14
+    INTEGER         shift and go to state 23
+    DATE            shift and go to state 22
+    BOOLEAN         shift and go to state 10
+    EXCEPTION       shift and go to state 17
+    BLOB            shift and go to state 25
+    CLOB            shift and go to state 11
+    BFILE           shift and go to state 24
+    LONG            shift and go to state 18
+    LONG_RAW        shift and go to state 21
+
+    datatype                       shift and go to state 49
+
+state 42
+
+    (21) two_digit_list -> LPAREN DIGIT . COMMA DIGIT RPAREN
+    (19) one_digit_list -> LPAREN DIGIT . RPAREN
+
+    COMMA           shift and go to state 51
+    RPAREN          shift and go to state 50
+
+
+state 43
+
+    (19) one_digit_list -> LPAREN DIGIT . RPAREN
+
+    RPAREN          shift and go to state 50
+
+
+state 44
+
+    (14) param_list -> param_list COMMA . param
+    (18) param -> . ID param_type datatype
+
+    ID              shift and go to state 40
+
+    param                          shift and go to state 52
+
+state 45
+
+    (13) param_list_paren -> LPAREN param_list RPAREN .
+
+    RETURN          reduce using rule 13 (param_list_paren -> LPAREN param_list RPAREN .)
+
+
+state 46
+
+    (17) param_type -> OUT .
+
+    NUMBER          reduce using rule 17 (param_type -> OUT .)
+    VARCHAR2        reduce using rule 17 (param_type -> OUT .)
+    STRING          reduce using rule 17 (param_type -> OUT .)
+    RAW             reduce using rule 17 (param_type -> OUT .)
+    INTERVAL        reduce using rule 17 (param_type -> OUT .)
+    TIMESTAMP       reduce using rule 17 (param_type -> OUT .)
+    INTEGER         reduce using rule 17 (param_type -> OUT .)
+    DATE            reduce using rule 17 (param_type -> OUT .)
+    BOOLEAN         reduce using rule 17 (param_type -> OUT .)
+    EXCEPTION       reduce using rule 17 (param_type -> OUT .)
+    BLOB            reduce using rule 17 (param_type -> OUT .)
+    CLOB            reduce using rule 17 (param_type -> OUT .)
+    BFILE           reduce using rule 17 (param_type -> OUT .)
+    LONG            reduce using rule 17 (param_type -> OUT .)
+    LONG_RAW        reduce using rule 17 (param_type -> OUT .)
+
+
+state 47
+
+    (18) param -> ID param_type . datatype
+    (22) datatype -> . NUMBER two_digit_list
+    (23) datatype -> . VARCHAR2 two_digit_list
+    (24) datatype -> . STRING two_digit_list
+    (25) datatype -> . RAW one_digit_list
+    (26) datatype -> . INTERVAL two_digit_list
+    (27) datatype -> . TIMESTAMP two_digit_list
+    (28) datatype -> . INTEGER
+    (29) datatype -> . DATE
+    (30) datatype -> . BOOLEAN
+    (31) datatype -> . EXCEPTION
+    (32) datatype -> . BLOB
+    (33) datatype -> . CLOB
+    (34) datatype -> . BFILE
+    (35) datatype -> . LONG
+    (36) datatype -> . LONG_RAW
+
+    NUMBER          shift and go to state 16
+    VARCHAR2        shift and go to state 20
+    STRING          shift and go to state 12
+    RAW             shift and go to state 19
+    INTERVAL        shift and go to state 15
+    TIMESTAMP       shift and go to state 14
+    INTEGER         shift and go to state 23
+    DATE            shift and go to state 22
+    BOOLEAN         shift and go to state 10
+    EXCEPTION       shift and go to state 17
+    BLOB            shift and go to state 25
+    CLOB            shift and go to state 11
+    BFILE           shift and go to state 24
+    LONG            shift and go to state 18
+    LONG_RAW        shift and go to state 21
+
+    datatype                       shift and go to state 53
+
+state 48
+
+    (15) param_type -> IN . OUT
+    (16) param_type -> IN .
+
+    OUT             shift and go to state 54
+    NUMBER          reduce using rule 16 (param_type -> IN .)
+    VARCHAR2        reduce using rule 16 (param_type -> IN .)
+    STRING          reduce using rule 16 (param_type -> IN .)
+    RAW             reduce using rule 16 (param_type -> IN .)
+    INTERVAL        reduce using rule 16 (param_type -> IN .)
+    TIMESTAMP       reduce using rule 16 (param_type -> IN .)
+    INTEGER         reduce using rule 16 (param_type -> IN .)
+    DATE            reduce using rule 16 (param_type -> IN .)
+    BOOLEAN         reduce using rule 16 (param_type -> IN .)
+    EXCEPTION       reduce using rule 16 (param_type -> IN .)
+    BLOB            reduce using rule 16 (param_type -> IN .)
+    CLOB            reduce using rule 16 (param_type -> IN .)
+    BFILE           reduce using rule 16 (param_type -> IN .)
+    LONG            reduce using rule 16 (param_type -> IN .)
+    LONG_RAW        reduce using rule 16 (param_type -> IN .)
+
+
+state 49
+
+    (12) declare_function -> FUNCTION ID param_list_paren RETURN datatype . IS declarations BEGIN BODY END SEMICOLON
+
+    IS              shift and go to state 55
+
+
+state 50
+
+    (19) one_digit_list -> LPAREN DIGIT RPAREN .
+
+    SEMICOLON       reduce using rule 19 (one_digit_list -> LPAREN DIGIT RPAREN .)
+    IS              reduce using rule 19 (one_digit_list -> LPAREN DIGIT RPAREN .)
+    RPAREN          reduce using rule 19 (one_digit_list -> LPAREN DIGIT RPAREN .)
+    COMMA           reduce using rule 19 (one_digit_list -> LPAREN DIGIT RPAREN .)
+
+
+state 51
+
+    (21) two_digit_list -> LPAREN DIGIT COMMA . DIGIT RPAREN
+
+    DIGIT           shift and go to state 56
+
+
+state 52
+
+    (14) param_list -> param_list COMMA param .
+
+    RPAREN          reduce using rule 14 (param_list -> param_list COMMA param .)
+    COMMA           reduce using rule 14 (param_list -> param_list COMMA param .)
+
+
+state 53
+
+    (18) param -> ID param_type datatype .
+
+    RPAREN          reduce using rule 18 (param -> ID param_type datatype .)
+    COMMA           reduce using rule 18 (param -> ID param_type datatype .)
+
+
+state 54
+
+    (15) param_type -> IN OUT .
+
+    NUMBER          reduce using rule 15 (param_type -> IN OUT .)
+    VARCHAR2        reduce using rule 15 (param_type -> IN OUT .)
+    STRING          reduce using rule 15 (param_type -> IN OUT .)
+    RAW             reduce using rule 15 (param_type -> IN OUT .)
+    INTERVAL        reduce using rule 15 (param_type -> IN OUT .)
+    TIMESTAMP       reduce using rule 15 (param_type -> IN OUT .)
+    INTEGER         reduce using rule 15 (param_type -> IN OUT .)
+    DATE            reduce using rule 15 (param_type -> IN OUT .)
+    BOOLEAN         reduce using rule 15 (param_type -> IN OUT .)
+    EXCEPTION       reduce using rule 15 (param_type -> IN OUT .)
+    BLOB            reduce using rule 15 (param_type -> IN OUT .)
+    CLOB            reduce using rule 15 (param_type -> IN OUT .)
+    BFILE           reduce using rule 15 (param_type -> IN OUT .)
+    LONG            reduce using rule 15 (param_type -> IN OUT .)
+    LONG_RAW        reduce using rule 15 (param_type -> IN OUT .)
+
+
+state 55
+
+    (12) declare_function -> FUNCTION ID param_list_paren RETURN datatype IS . declarations BEGIN BODY END SEMICOLON
+    (2) declarations -> .
+    (7) declarations -> . declare_element
+    (9) declarations -> . declarations declare_element
+    (10) declare_element -> . declare_function
+    (11) declare_element -> . variable_def
+    (12) declare_function -> . FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON
+    (37) variable_def -> . ID datatype SEMICOLON
+
+  ! shift/reduce conflict for FUNCTION resolved as shift
+  ! shift/reduce conflict for ID resolved as shift
+    BEGIN           reduce using rule 2 (declarations -> .)
+    FUNCTION        shift and go to state 1
+    ID              shift and go to state 7
+
+  ! FUNCTION        [ reduce using rule 2 (declarations -> .) ]
+  ! ID              [ reduce using rule 2 (declarations -> .) ]
+
+    declarations                   shift and go to state 57
+    variable_def                   shift and go to state 3
+    declare_function               shift and go to state 4
+    declare_element                shift and go to state 5
+
+state 56
+
+    (21) two_digit_list -> LPAREN DIGIT COMMA DIGIT . RPAREN
+
+    RPAREN          shift and go to state 58
+
+
+state 57
+
+    (12) declare_function -> FUNCTION ID param_list_paren RETURN datatype IS declarations . BEGIN BODY END SEMICOLON
+    (9) declarations -> declarations . declare_element
+    (10) declare_element -> . declare_function
+    (11) declare_element -> . variable_def
+    (12) declare_function -> . FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON
+    (37) variable_def -> . ID datatype SEMICOLON
+
+    BEGIN           shift and go to state 59
+    FUNCTION        shift and go to state 1
+    ID              shift and go to state 7
+
+    variable_def                   shift and go to state 3
+    declare_function               shift and go to state 4
+    declare_element                shift and go to state 9
+
+state 58
+
+    (21) two_digit_list -> LPAREN DIGIT COMMA DIGIT RPAREN .
+
+    SEMICOLON       reduce using rule 21 (two_digit_list -> LPAREN DIGIT COMMA DIGIT RPAREN .)
+    IS              reduce using rule 21 (two_digit_list -> LPAREN DIGIT COMMA DIGIT RPAREN .)
+    RPAREN          reduce using rule 21 (two_digit_list -> LPAREN DIGIT COMMA DIGIT RPAREN .)
+    COMMA           reduce using rule 21 (two_digit_list -> LPAREN DIGIT COMMA DIGIT RPAREN .)
+
+
+state 59
+
+    (12) declare_function -> FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN . BODY END SEMICOLON
+
+    BODY            shift and go to state 60
+
+
+state 60
+
+    (12) declare_function -> FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY . END SEMICOLON
+
+    END             shift and go to state 61
+
+
+state 61
+
+    (12) declare_function -> FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END . SEMICOLON
+
+    SEMICOLON       shift and go to state 62
+
+
+state 62
+
+    (12) declare_function -> FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON .
+
+    FUNCTION        reduce using rule 12 (declare_function -> FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON .)
+    ID              reduce using rule 12 (declare_function -> FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON .)
+    $end            reduce using rule 12 (declare_function -> FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON .)
+    BEGIN           reduce using rule 12 (declare_function -> FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON .)
+
+WARNING: 
+WARNING: Conflicts:
+WARNING: 
+WARNING: shift/reduce conflict for FUNCTION in state 0 resolved as shift
+WARNING: shift/reduce conflict for ID in state 0 resolved as shift
+WARNING: shift/reduce conflict for FUNCTION in state 55 resolved as shift
+WARNING: shift/reduce conflict for ID in state 55 resolved as shift
