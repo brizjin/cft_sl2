@@ -9,6 +9,7 @@ import os
 
 keywords = (
     'FUNCTION',
+    'PROCEDURE',
     'RETURN',
     'BEGIN',
     'END',
@@ -16,6 +17,10 @@ keywords = (
     'BODY',
     'IN',
     'OUT',
+    'REF',
+    'DEFAULT',
+    'NULL',
+
 )
 
 oracle_types = (
@@ -41,31 +46,42 @@ tokens = keywords + oracle_types + (
     #'PLUS',
     #'MINUS',
     'ID',
-    'SEMICOLON',
-    'LPAREN',
-    'RPAREN',
-    'COMMA',
+    'LPAREN', 'RPAREN',
+    'LBRACKET', 'RBRACKET',
+    'COMMA', 'PERIOD', 'SEMI', 'COLON',
     'DIGIT',
     'COMMENT',
+    'INLINE_STRING',
+
     #'TEXT',
 )
 
 #t_PLUS      = r'\+'
 #t_MINUS     = r'-'
 t_DIGIT     = r'\d+'
-t_ignore    = r' \t'
-t_SEMICOLON = r';'
+t_ignore    = r' '
 t_LPAREN    = r'\('
 t_RPAREN    = r'\)'
+t_LBRACKET  = r'\['
+t_RBRACKET  = r'\]'
 t_COMMA     = r','
+t_PERIOD    = r'\.'
+t_SEMI      = r';'
+t_COLON     = r':'
 #t_COMMENT   = r''
 #t_comment   = r'--.*'
 
 def t_ANY_COMMENT(t):
-    r'--.*|\/\*(.|\n)*\*\/'
+    r'--.*|\/\*(.|\n)*?\*\/'
     #return t
     #pass
+def t_body_INLINE_STRING(t):
+    r'\'.*?\''
 
+# def t_body_TEXT(t):
+#     r'.+(?!end;)'
+#     return t
+    #return t
 # @TOKEN(r'(?i)' + '|'.join(keywords))
 # def t_keyword(t):
 #     t.type = t.value.upper()
@@ -110,6 +126,7 @@ def t_error(t):
 
 class declare_function:
     def __init__(self):
+        self.return_type = ''
         pass
     def __repr__(self):
         if self.params:
@@ -135,6 +152,7 @@ def p_optional(p):
     param_list_paren :
     param_type :
     two_digit_list :
+    default_section :
     '''
 def p_declarations_declare_element(p):
     '''
@@ -168,19 +186,34 @@ def p_declare_element(p):
     '''
     declare_element : declare_function
                     | variable_def
+                    | declare_procedure
     '''
     #exprs.append(p[1])
     p[0] = p[1]
 
 def p_f(p):
     '''
-    declare_function : FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON
+    declare_function : FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMI
+                     | FUNCTION ID param_list_paren RETURN datatype SEMI
     '''
     #print 'FUNC %s'%p[2]
     f = declare_function()
     f.name = p[2]
     f.params = p[3]
     f.return_type = p[5]
+    #p[0] = 'FUNCTION %s return %s is %s'%(p[2],p[4],p[6])
+    p[0] = f
+
+def p_proc(p):
+    '''
+    declare_procedure : PROCEDURE ID param_list_paren IS declarations BEGIN BODY END SEMI
+                      | PROCEDURE ID param_list_paren SEMI
+    '''
+    #print 'FUNC %s'%p[2]
+    f = declare_function()
+    f.name = p[2]
+    f.params = p[3]
+    #f.return_type = p[5]
     #p[0] = 'FUNCTION %s return %s is %s'%(p[2],p[4],p[6])
     p[0] = f
 
@@ -204,10 +237,12 @@ def p_param_type(p):
                   | OUT
     '''
     p[0] = p[1]
+def p_default_section(p):
+    'default_section : DEFAULT NULL'
 
 
 def p_param(p):
-    'param : ID param_type datatype'
+    'param : ID param_type datatype default_section'
     
     param = param_class()
     param.name = p[1]
@@ -241,7 +276,6 @@ def p_number_type(p):
     else:
         p[0] = p[1]
 
-
 def p_oracle_type(p):
     '''
     datatype : INTEGER
@@ -256,9 +290,23 @@ def p_oracle_type(p):
     '''
     p[0] = p[1]
 
+def p_user_data_type(p):
+    'datatype : LBRACKET ID RBRACKET'
+    p[0] = p[2]
+def p_user_data_type_ref(p):
+    'datatype : REF LBRACKET ID RBRACKET'
+    p[0] = "ref " + p[3]
+def p_user_data_type_variable(p):
+    'datatype : variable'
+    p[0] = 'VAR:' + p[1]
+def p_variable(p):
+    'variable : ID'
+    p[0] = p[1]
+    
+
 
 def p_variable_defination(p):
-    'variable_def : ID datatype SEMICOLON'
+    'variable_def : ID datatype SEMI'
     p[0] = 'variable %s of %s'%(p[1],p[2])
 
 def p_error(p):
@@ -280,6 +328,8 @@ states = (
 def t_body_begin(t):     
     r'(?i)begin'
     t.lexer.level +=1
+
+
 
 def t_body_end(t):
     r'(?i)end'
@@ -341,6 +391,10 @@ class test2Command(sublime_plugin.TextCommand):
                         ,b out integer ,d number(10)
                         ,c in out varchar2
                         ,e number(10,10)
+                        ,h [PRCRED]
+                        ,g ref [AC_FIN] default null
+                        ,i hello
+                        ,k      test
                         /*
                         multiline
                         comment*/
@@ -356,12 +410,84 @@ class test2Command(sublime_plugin.TextCommand):
                         end;
                     begin
                     end;
+
                     function new_func2 return varchar2 is
                     begin
                         --tag_value := DBMS_XMLGEN.convert(tag_value,0); --преобразуем ESC символы                        
                         --res_out := case when res_out is not null then res_out || chr(10) else res_out end || chr(9) ||'<'||tag_name||'>'||tag_value||'</'||tag_name||'>';
                         one more line
+                        'Выполняется процедура CheckProp'
+                        'end;'
+                        &debug('Выполняется процедура CheckProp', 0)
                     end;
+
+                    function new_func3 return varchar2;
+
+                    function add_service    
+                    /*Добавление сервиса*/
+                    (   p_object_srv        reference
+                        /*Ссылка на объект для подключения дополнительного сервиса*/
+                        ,p_obj_class        ref [METACLASS]
+                        /*Класс объекта для подключения дополнительного сервиса*/
+                        ,p_info_obj         info_obj
+                        /*Информация об объетке*/
+                        ,p_service_type ref [SERVICE_DICT]
+                        /*Вид услуги*/
+                        ,p_property         tab_type
+                        /*Параметры сервиса*/
+                        ,p_take_tarif       boolean default null
+                        /*Брать тариф*/
+                        ,p_service      ref [CARD_SERVICES] default null
+                        /*Ссылка на сервис*/
+                        ,p_add_card_appl    ref [VZ_ISS_APPL] default null
+                        /*Ссылка на запрос*/
+                        ,p_add_par          varchar2(2000) default null
+                        /*Дополнительные параметры*/
+                        ,p_Date             DATE default null
+                        /*Дата*/
+                        ,p_Mess             out varchar2
+                        /*Информационное сообщение*/
+                    )
+                    return ref [VZ_ISS_APPL];
+
+                    procedure GetInfoObj
+                    /*Получение информации об объекте*/
+                    (   p_obj           in reference
+                        /*ссылка на объект*/    
+                        ,p_obj_class    in  ref[METACLASS]
+                        /*класс обекта*/
+                        ,p_info_obj     out info_obj
+                        /*информация об объекте*/
+                    );
+                    procedure CheckProp
+    /* Процедура осуществляет проверку значений параметров*/
+    (
+        p_property      tab_type,
+        p_object_srv    reference,
+        p_service_type  ref [SERVICE_DICT],
+        p_card_serv     ref [CARD_SERVICES] default null
+    ) is
+        isServCodePropsEq   boolean default false;
+        tempPropRef         ref [PROPERTY]; 
+        service_code_ref ref [UD_CODE_NAME];    
+    begin
+        &debug('Выполняется процедура CheckProp', 0)
+        for i in 1..p_property.count
+        loop
+            if p_property(i).[PROPERTY_TYPE].[CODE] = 'UCS_ADDR_TYPE' then
+                &debug('Передано свойство с кодом вида свойства "UCS_ADDR_TYPE"', 0)
+                begin
+                    -- Поиск ссылки на тип сервиса
+                    &debug('Производится выборка переданной ссылки на сервис', 0)
+                    for j in 1..p_property.count
+                    loop    
+                        if p_property(j).[PROPERTY_TYPE].[CODE] like '%SERVICE_CODE%' then
+                            service_code_ref := p_property(j).[REF_VALUE];
+                            &debug('Ссылка на сервис (service_code_ref) = ' || service_code_ref, 0)
+                        end if;
+                    end loop;
+
+    end;
                 '''
 
 

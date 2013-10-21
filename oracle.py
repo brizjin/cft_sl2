@@ -1244,7 +1244,7 @@ class dataView(object):
 				@property
 				def cft_start(self):
 					if self.name == "EXECUTE":
-						return self.start + len(h.replace('\n',''))
+						return self.start + len(h)
 						#return v.text_point(v.rowcol(self.start)[0] + h.count("\n"),0)
 					else:
 						return self.start
@@ -1252,11 +1252,12 @@ class dataView(object):
 				@property
 				def lines(self):
 					#желательно переписать разбиение на массив строк без использования v
-					return v.lines(sublime.Region(self.body.start,self.body.end))
+					return v.lines(sublime.Region(self.body.cft_start,self.body.end))
 
 				#по номеру строки в исходнике находит номер строки в представлении саблайм
 				def view_line_num(self,line_num):
-					return v.rowcol(self.body.start)[0] + line_num
+					#print "LINE=%s,%s,%s"%(line_num,v.rowcol(self.body.cft_start)[0],v.rowcol(self.body.start)[0])
+					return v.rowcol(self.body.cft_start)[0] + line_num
 
 			for s in sections_regex.finditer(text):
 				sobj = part(s,0)								
@@ -1317,7 +1318,7 @@ class dataView(object):
 	@property
 	def current_section_row(self):
 		row, col = self.rowcol(self.caret_position)
-		return row - self.view.rowcol(self.current_section.body.start)[0] + 1
+		return row - self.view.rowcol(self.current_section.body.start)[0]
 		#return self.section_row_by_view_row(self.rowcol(self.caret_position)[0])
 
 	def mark_errors(self):
