@@ -75,40 +75,200 @@ def t_ANY_COMMENT(t):
     r'--.*|\/\*(.|\n)*?\*\/'
     #return t
     #pass
+
+
+states = (
+    ('body','exclusive'),
+    ('is','exclusive'),
+)
 def t_body_INLINE_STRING(t):
     r'\'.*?\''
+def t_is_INLINE_STRING(t):
+    r'\'.*?\''
 
-# def t_body_TEXT(t):
-#     r'.+(?!end;)'
-#     return t
-    #return t
-# @TOKEN(r'(?i)' + '|'.join(keywords))
-# def t_keyword(t):
-#     t.type = t.value.upper()
-#     if t.value.upper() == 'BEGIN':
-#         t.lexer.code_start = t.lexer.lexpos        # Record the starting position
-#         t.lexer.level = 1                          # Initial brace level
-#         t.lexer.begin('body')                      # Enter 'ccode' state
-#     return t
+# def t_body_begin(t):     
+#     r'(?i)begin'
+#     t.lexer.level +=1
 
-# @TOKEN(r'(?i)' + '|'.join(oracle_types))
-# def t_oracle_types(t):
-#     #t.type = 'ORACLE_TYPE'
-#     t.type = t.value.upper()
-#     return t
+# def t_body_end(t):
+#     r'(?i)end;'
+#     t.lexer.level -=1
 
-#def t_text(p):
-#    r'([a-zA-Z_ ;]+)'
-def t_ID(t):
+#     # If closing brace, return the code fragment
+#     if t.lexer.level == 0:
+#         t.value = t.lexer.lexdata[t.lexer.code_start:t.lexer.lexpos-4]
+#         t.type = "BODY"
+#         #t.type = t.type.upper()
+#         t.lexer.lineno += t.value.count('\n')
+#         t.lexer.begin('INITIAL')
+#         t.lexer.lexpos -= 4           
+#         return t
+# Ignored characters (whitespace)
+t_body_ignore = " \t\n"
+
+
+def t_body_error(t):    # For bad characters, we just skip over it
+    t.lexer.skip(1)
+
+t_is_ignore = " \t\n"
+def t_is_error(t):
+    t.lexer.skip(1)
+
+#def t_is_is(t):
+#    r'(?i)is'
+    
+
+# def t_is_begin(t):
+#     r'(?i)begin'
+
+#def t_body_end(t):
+#    r'(?i)end\s*;'
+#    return next_state(t,'INITIAL','BODY')
+
+# def t_is_end(t):
+#     r'(?i)end\s*;'
+    
+#     t.lexer.level  -=1
+#     if t.lexer.level == 1:
+#         t.lexer.flevel -=1
+
+def begin_state(t,name):
+    #print "begin state",name
+    t.lexer.code_start = t.lexer.lexpos        # Record the starting position
+    t.lexer.level = 1                          # Initial brace level
+    t.lexer.begin(name)                        # Enter 'ccode' state
+    #t.lexer.stack = []
+    return t
+
+def next_state(t,state_name,type_name):
+    #print "end state",state_name
+    t.lexer.level -=1
+    #print "!!!!!level=",t.lexer.level
+    if t.lexer.level == 0:
+        t.value = t.lexer.lexdata[t.lexer.code_start:t.lexer.lexpos-5]
+        t.type = type_name
+        t.lexer.lineno += t.value.count('\n')
+        t.lexer.begin(state_name)
+        t.lexer.lexpos -= 5
+        #t.value = ''
+        return t
+
+#stack = []
+
+def t_ANY_ID(t):
     r'[a-zA-Z_][a-zA-Z0-9_]*'
-    #print 'called ID'
-    #print "ID=%s,%s"%(t.value,t.value.upper())
-    if t.value.upper() in keywords or t.value.upper() in oracle_types:
-        t.type = t.value.upper()
-    if t.value.upper() == 'BEGIN':
-        t.lexer.code_start = t.lexer.lexpos        # Record the starting position
-        t.lexer.level = 1                          # Initial brace level
-        t.lexer.begin('body')                      # Enter 'ccode' state
+    state = t.lexer.current_state()
+    value = t.value.upper()
+    stack = t.lexer.stack
+
+    if state in ['is','body']:
+        if not value in ['FUNCTION','PROCEDURE','BEGIN','END','CASE','LOOP','IF' ]:
+            return
+
+
+    if value in keywords or value in oracle_types:
+        t.type = value
+    #print 'TYPE=',value,state
+    #print 'TYPE1=',t.type,value,state
+    if state == 'INITIAL':
+        if value == 'IS':
+            #print "1"
+            
+            begin_state(t,'is')
+            #t.lexer.flevel = 0
+            #t.lexer.level = 0
+            return 
+        elif value == 'BEGIN':
+            #print 'BEGIN BODY'
+            begin_state(t,'body')
+            #return
+
+    elif state == 'body':
+        #if value == 'BEGIN':
+        #    t.lexer.level +=1
+        #    return
+        if value == 'BEGIN':
+            if stack[-1] in ['FUNCTION','PROCEDURE']:
+                #print 'FUNC'
+                return
+            #elif stack[-1] == 'ROOT':
+                #print 'ROOT'
+                #return next_state(t,'INITIAL','IS')
+            else:
+                #print "ANON"
+                stack.append('ANANYMUS_BLOCK')
+                return
+        elif value in ['CASE']:
+            stack.append(value)
+            return
+        elif value in ['LOOP','IF']:
+            if stack[-1] == 'END':
+                stack.pop()
+                stack.pop()
+            else:
+                stack.append(value)
+            return
+        elif value in ['FUNCTION','PROCEDURE']:
+            stack.append(value)
+            return
+        elif value =='END':
+            #print " ",value,stack
+            if stack[-1] in ['CASE','FUNCTION','PROCEDURE','ANANYMUS_BLOCK']:
+                stack.pop()
+            elif stack[-1] == 'ROOT':
+                #return
+                return next_state(t,'INITIAL','BODY')
+            else:
+                #print "ADD END"
+                stack.append(value)
+            #print "2",value,stack
+            return
+        # elif value == 'END':
+            
+        #     t.lexer.level -= 1
+        #     if t.lexer.level == 0:
+        #         #print "LEXER 0"
+        #         t.lexer.level += 1
+        #         return next_state(t,'INITIAL','BODY')
+        #     return
+    elif state == 'is':
+        
+        if value == 'BEGIN':
+            if stack[-1] in ['FUNCTION','PROCEDURE']:
+                #print 'FUNC'
+                return
+            elif stack[-1] == 'ROOT':
+                #print 'ROOT'
+                return next_state(t,'INITIAL','IS')
+            else:
+                #print "ANON"
+                stack.append('ANANYMUS_BLOCK')
+                return
+        elif value in ['CASE']:
+            stack.append(value)
+            return
+        elif value in ['LOOP','IF']:
+            if stack[-1] == 'END':
+                stack.pop()
+                stack.pop()
+            else:
+                stack.append(value)
+            return
+        elif value in ['FUNCTION','PROCEDURE']:
+            stack.append(value)
+            return
+        elif value =='END':
+            #print " ",value,stack
+            if stack[-1] in ['CASE','FUNCTION','PROCEDURE','ANANYMUS_BLOCK']:
+                stack.pop()
+            elif stack[-1] == 'ROOT':
+                return
+            else:
+                #print "ADD END"
+                stack.append(value)
+            #print "2",value,stack
+            return
+
     return t
 
 # def t_NUMBER(t):
@@ -287,6 +447,7 @@ def p_oracle_type(p):
              | BFILE
              | LONG
              | LONG_RAW
+             | NULL
     '''
     p[0] = p[1]
 
@@ -318,43 +479,15 @@ def p_error(p):
 #    pass
 
 # Declare the state
-states = (
-    ('body','exclusive'),
-)
-#def t_body_COMMENT(t):
-#    r'--.*|\/\*(.|\n)*\*\/'
-#    return t
-# Rules for the ccode state
-def t_body_begin(t):     
-    r'(?i)begin'
-    t.lexer.level +=1
 
-
-
-def t_body_end(t):
-    r'(?i)end'
-    t.lexer.level -=1
-
-    # If closing brace, return the code fragment
-    if t.lexer.level == 0:
-        t.value = t.lexer.lexdata[t.lexer.code_start:t.lexer.lexpos-3]
-        t.type = "BODY"
-        #t.type = t.type.upper()
-        t.lexer.lineno += t.value.count('\n')
-        t.lexer.begin('INITIAL')
-        t.lexer.lexpos -= 4           
-        return t
-# Ignored characters (whitespace)
-t_body_ignore = " \t\n"
-
-# For bad characters, we just skip over it
-def t_body_error(t):
-    t.lexer.skip(1)
 
 
 
 class test2Command(sublime_plugin.TextCommand):
     def run(self, edit):
+        from oracle import timer
+        t = timer()
+
         text = self.view.substr(sublime.Region(0, self.view.size()))
         #print text
         #calc = Calc()
@@ -368,7 +501,7 @@ class test2Command(sublime_plugin.TextCommand):
         #print "p=",p
 
         #lexer = lex.lex(debug=1)
-        debug = 1
+        debug = 0
         try:
             modname = os.path.split(os.path.splitext(__file__)[0])[1] + "_" + self.__class__.__name__
         except:
@@ -381,7 +514,7 @@ class test2Command(sublime_plugin.TextCommand):
 
         # Build the lexer and parser
         lexer = lex.lex(debug=debug)
-        
+        lexer.stack = ['ROOT']
 
 
         #lexer = lex.lex()
@@ -407,7 +540,14 @@ class test2Command(sublime_plugin.TextCommand):
                         d integer;
                         function inner1 return varchar2 is
                         begin
-                        end;
+                            for j in 1..p_property.count
+                            loop    
+                                if p_property(j).[PROPERTY_TYPE].[CODE] like '%SERVICE_CODE%' then
+                                    service_code_ref := p_property(j).[REF_VALUE];
+                                    &debug('Ссылка на сервис (service_code_ref) = ' || service_code_ref, 0)
+                                end if;
+                            end loop;
+                        hello end;
                     begin
                     end;
 
@@ -460,58 +600,135 @@ class test2Command(sublime_plugin.TextCommand):
                         /*информация об объекте*/
                     );
                     procedure CheckProp
-    /* Процедура осуществляет проверку значений параметров*/
-    (
-        p_property      tab_type,
-        p_object_srv    reference,
-        p_service_type  ref [SERVICE_DICT],
-        p_card_serv     ref [CARD_SERVICES] default null
-    ) is
-        isServCodePropsEq   boolean default false;
-        tempPropRef         ref [PROPERTY]; 
-        service_code_ref ref [UD_CODE_NAME];    
+                    /* Процедура осуществляет проверку значений параметров*/
+                    (
+                        p_property      tab_type,
+                        p_object_srv    reference,
+                        p_service_type  ref [SERVICE_DICT],
+                        p_card_serv     ref [CARD_SERVICES] default null
+                    ) is
+                        --isServCodePropsEq   boolean default false;
+                        tempPropRef         ref [PROPERTY]; 
+                        service_code_ref ref [UD_CODE_NAME];    
+                    begin
+
+                        &debug('Выполняется процедура CheckProp', 0)
+                        for i in 1..p_property.count
+                        loop
+                            if p_property(i).[PROPERTY_TYPE].[CODE] = 'UCS_ADDR_TYPE' then
+                                &debug('Передано свойство с кодом вида свойства "UCS_ADDR_TYPE"', 0)
+                                begin
+                                    -- Поиск ссылки на тип сервиса
+                                    &debug('Производится выборка переданной ссылки на сервис', 0)
+                                    for j in 1..p_property.count
+                                    loop    
+                                        if p_property(j).[PROPERTY_TYPE].[CODE] like '%SERVICE_CODE%' then
+                                            service_code_ref := p_property(j).[REF_VALUE];
+                                            &debug('Ссылка на сервис (service_code_ref) = ' || service_code_ref, 0)
+                                        end if;
+                                    end loop;
+                                end;
+                            end if;
+                        end loop;
+                    end;
+        '''
+
+
+        data = '''
+            function EDIT_AUTO(
+        P_NUM_DOG       IN      PRODUCT_NUM,            --1  Номер договора
+        P_DATE_BEGIN    IN      DATE,                   --2  Дата создания договора
+        P_DATE_BEGINING IN      DATE,                   --3  Дата начала действия договора
+        P_DATE_CLOSE    IN      DATE,                   --4  Дата закрытия договора
+        P_DATE_ENDING   IN      DATE,                   --5  Дата окончания действия договора
+        P_CREATE_USER   IN      USER_REF,               --6  Создано пользователем
+        P_NOTES         IN      MEMO,                   --7  Примечания
+        P_COM_STATUS    IN      COM_STATUS_P_REF,       --8  Обобщенный статус продукта
+        P_ARRAY_SUM_DOG IN      SUM_DOG_ARR,            --9  Суммы договора
+        P_ARRAY_DOG_ACC IN      HOZ_OP_ACC_ARR,         --10 Счета договора
+        P_FILIAL        IN      BRANCH_REF,             --11 Филиал
+        P_ARRAY_OPER_DOG IN      DOC_COM_JOUR_ARR,      --12 Операции договора
+        P_DEPART        IN      DEPART_REF,             --13 Подразделение
+        P_NUM_DOG_CLIENT IN      SHORT3,                --14 Порядковый номер договора клиента
+        P_PROD_INS_HISTORY IN      LOAN_INSPECT_ARR,    --15 История смены куратора договора
+        P_USER_TYPE     IN      USER_TYPE_RE_ARR,       --16 Пользовательский тип
+        P_INTERNAL_CODE IN      STRING_25,              --17 Внутренний код для импорта (служебный)
+        P_PER_COMISSIONS IN      PERIOD_COM_ARR,        --18 Периодические комиссии
+        P_REPS_PRZ      IN      REPS_PRZ_HIS_ARR,       --19 Признаки для отчётности
+        P_RES_OTHER_FIL IN      RES_OTHER_FI_ARR,       --20 Формировать доходы/расходы при урегулировании резерва в другом филиале
+        P_ADD_AGR_ARR   IN      ADD_AGR_ARR,            --21 Массив Дополнительных соглашений
+        P_CLIENT        IN      CL_PRIV_REF,            --22 Клиент
+        P_CARD          IN      VZ_CARDS_REF,           --23 Основная карта
+        P_DEPN_CARD     IN      DEPOSIT_PRIV_REF,       --24 Депозит карточный
+        P_DEPN_NAKOP    IN      DEPOSIT_PRIV_REF,       --25 Депозит до востребования (накопительный)
+        P_DEPN_SROCH    IN      DEPOSIT_PRIV_REF        --26 Депозит срочный
+    )return null
+    is
     begin
-        &debug('Выполняется процедура CheckProp', 0)
-        for i in 1..p_property.count
-        loop
-            if p_property(i).[PROPERTY_TYPE].[CODE] = 'UCS_ADDR_TYPE' then
-                &debug('Передано свойство с кодом вида свойства "UCS_ADDR_TYPE"', 0)
-                begin
-                    -- Поиск ссылки на тип сервиса
-                    &debug('Производится выборка переданной ссылки на сервис', 0)
-                    for j in 1..p_property.count
-                    loop    
-                        if p_property(j).[PROPERTY_TYPE].[CODE] like '%SERVICE_CODE%' then
-                            service_code_ref := p_property(j).[REF_VALUE];
-                            &debug('Ссылка на сервис (service_code_ref) = ' || service_code_ref, 0)
-                        end if;
-                    end loop;
-
+        -- Установка значения реквизита "Номер договора"
+        [NUM_DOG] := P_NUM_DOG;
+        -- Установка значения реквизита "Дата создания договора"
+        [DATE_BEGIN] := P_DATE_BEGIN;
+        -- Установка значения реквизита "Дата начала действия договора"
+        [DATE_BEGINING] := P_DATE_BEGINING;
+        -- Установка значения реквизита "Дата закрытия договора"
+        [DATE_CLOSE] := P_DATE_CLOSE;
+        -- Установка значения реквизита "Дата окончания действия договора"
+        [DATE_ENDING] := P_DATE_ENDING;
+        -- Установка значения реквизита "Создано пользователем"
+        [CREATE_USER] := P_CREATE_USER;
+        -- Установка значения реквизита "Примечания"
+        [NOTES] := P_NOTES;
+        -- Установка значения реквизита "Обобщенный статус продукта"
+        [COM_STATUS] := P_COM_STATUS;
+        -- Установка значения реквизита "Филиал"
+        [FILIAL] := P_FILIAL;
+        -- Установка значения реквизита "Подразделение"
+        [DEPART] := P_DEPART;
+        -- Установка значения реквизита "Порядковый номер договора клиента"
+        [NUM_DOG_CLIENT] := P_NUM_DOG_CLIENT;
+        -- Установка значения реквизита "Внутренний код для импорта (служебный)"
+        [INTERNAL_CODE] := P_INTERNAL_CODE;
+        -- Установка значения реквизита "Клиент"
+        [CLIENT] := P_CLIENT;
+        -- Установка значения реквизита "Основная карта"
+        [CARD] := P_CARD;
+        -- Установка значения реквизита "Депозит карточный"
+        [DEPN_CARD] := P_DEPN_CARD;
+        -- Установка значения реквизита "Депозит до востребования (накопительный)"
+        [DEPN_NAKOP] := P_DEPN_NAKOP;
+        -- Установка значения реквизита "Депозит срочный"
+        [DEPN_SROCH] := P_DEPN_SROCH;
     end;
-                '''
-
-
-        data2 = '''
-        procedure add_out_tag(res_out in out clob,tag_name varchar2,tag_value clob)
-        is
-        begin
-            --tag_value := DBMS_XMLGEN.convert(tag_value,0); --преобразуем ESC символы
-            res_out := case when res_out is not null then res_out || chr(10) else res_out end || chr(9) ||'<'||tag_name||'>'||tag_value||'</'||tag_name||'>';
-        end;
         '''
         #data = ''
         
         #data = text
+        # from oracle import dataView
+        # v = dataView(self.view)
+        # text = v.sections['EXECUTE'].body.text
+        # import re
+        # text = re.sub(r'\n\t',r'\n',text).lstrip('\t')  #Удалим служебный таб в начале каждой строки
+        # text = re.sub(r'\t',r'',text)                   #Удалим служебный таб в начале каждой строки
+        # text = re.sub(r' +$','',text,re.MULTILINE)      #Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
+        #print 'DATA=',text
 
-        lexer.input(data)
-        for tok in lexer:
-            print tok
+        text = data
+
+        lexer.input(text)
+        #for tok in lexer:
+        #    print tok
 
         p = yacc.yacc(debug=debug,
                   debugfile=debugfile,
-                  tabmodule=tabmodule).parse(data)
+                  tabmodule=tabmodule).parse(text)
         #print "p=",p
+        #print 'STACK=',lexer.stack
+        print "#"
         for a in p:
             print a
+        print "#"
+
+        print t.print_time('Разбор функций за')
 
         #print exprs

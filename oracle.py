@@ -1222,7 +1222,12 @@ class dataView(object):
 			class part:
 				def __init__(self,s,n):
 					self.name  = s.group(2)
-					self.text  = s.group(n)
+					
+					text = s.group(n)
+					#text = re.sub(r'\n\t',r'\n',text).lstrip('\t')	#Удалим служебный таб в начале каждой строки
+					#text = re.sub(r' +$','',text,re.MULTILINE) 		#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
+					self.text  = text
+
 					self.start = s.start(n)
 					self.end   = s.end(n)
 
@@ -1238,6 +1243,7 @@ class dataView(object):
 					text = re.sub(r' +$','',text,re.MULTILINE) 		#Удаляем все пробелы в конце строк, потому что цфт тоже их удаляет
 					
 					if self.name == "EXECUTE":
+						print "H",h
 						text = text[len(h.replace('\n','')):]
 
 					return text
