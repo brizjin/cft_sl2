@@ -1104,6 +1104,7 @@ class save_methodCommand(sublime_plugin.TextCommand):
 
 dataViews = dict()
 
+
 class dataView(object):
 	def __init__(self,view):
 		self.view = view
@@ -1527,6 +1528,7 @@ class dataView(object):
 			panel_name="git"
 		output_view = self.view.window().get_output_panel(panel_name)
 		output_view.set_name(panel_name)
+		output_view.text = text
 
 		def _output_to_view(output_file, output, clear=False, syntax=syntax):			
 		    output_file.set_syntax_file(syntax)
@@ -1569,7 +1571,37 @@ class dataView(object):
 
 	def show_plsql_b_panel(self):
 		if not hasattr(self,"plsql"):
+			#print "SELF=",self
 			self.plsql = self.show_panel("plsql",self.data.get_package_body_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")			
+			t = timer()
+			ss = {}
+			last_s = ''
+			last_n = ''
+			for m in re.finditer(r"(--#section .* \d*)\n|(--# (\d+),(\d+))\n|(.*\n)",self.plsql.text):
+
+
+				if m.group(1):
+					last_s = {}
+					ss[m.group(1)] = last_s
+				elif m.group(2):
+					#print 'G2=',m.group(2)
+					last_n = m.group(2)
+					last_s[last_n] = ''
+				elif m.group(5):
+					if not last_s:
+						continue
+				# print 'G1=',m.group(1)
+				# print 'G2=',m.group(2)
+				# print 'G3=',m.group(3)
+				# print 'G4=',m.group(4)
+				# print 'G5=',m.group(5)
+					#print 'LN=',last_n
+					#print 'G5',m.group(5)
+					last_s[last_n] += m.group(5)
+			#print 'ss=',ss
+			for s in ss.keys():
+				print "S=",s
+			t.print_time("groups")
 		v =	self.plsql
 		#if not v.window():
 		#	sublime.active_window().run_command("show_panel", {"panel": "output.plsql"})
@@ -1579,7 +1611,13 @@ class dataView(object):
 		if execute_region:
 			line_num = self.current_section_row
 			if line_num > 0:
+				#test = v.find_all('(--#section .* \d*)|(--# (\d+),(\d+))')
+				
+				
+
 				cur_regions = v.find_all('--#section %s( |\n)(\n|\t|(?!--#section).)*'%self.current_section.name)
+
+
 				#print "CUR=",cur_regions
 				#row, col = self.rowcol(self.sel()[0].a)
 				#print "s",self.sections
@@ -2623,7 +2661,7 @@ class el(sublime_plugin.EventListener):
 		if view.name() and view.name() != 'plsql': #если нет имени значит это панель
 			v = dataView.active()
 			if hasattr(v,"plsql"):
-				if v.plsql.window():
+				if v.plsql.window():#is visible
 					#print "ON select"
 					v.show_plsql_b_panel()
 
