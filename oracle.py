@@ -1104,24 +1104,88 @@ class save_methodCommand(sublime_plugin.TextCommand):
 
 dataViews = dict()
 
+class View(object):
+	@classmethod
+	def new(cls):
+		v = cls()
+		v.view = sublime.active_window().new_file()
+		return v
 
-class dataView(object):
-	def __init__(self,view):
+	@classmethod
+	def active(cls):
+		v = cls()
+		v.view = sublime.active_window().active_view()		
+		if not dataViews.has_key(v.view.id):
+			dataViews[v.view.id] = v
+		return dataViews[v.view.id]
+		#return a
+
+	@classmethod
+	def new_panel(cls,panel_name,syntax=None):
+		#output_view = self.view.window().get_output_panel(panel_name)
+		v = cls()
+		v.name = panel_name
+		v.view = sublime.active_window().get_output_panel(panel_name)		
+		v.view.set_name(panel_name)
+		v.view.set_syntax_file(syntax)		
+		return v
+
+	@property
+	def text(self):
+		return self.view.substr(sublime.Region(0, self.view.size()))
+
+	@text.setter
+	def text(self,value):
+		
+
+		is_read_only = self.view.is_read_only()
+		if is_read_only:
+			self.view.set_read_only(False)		
+		
+		edit = self.view.begin_edit()
+		if not value: #если значение пусто то отчистим представление
+			region = sublime.Region(0, self.view.size())
+			self.view.erase(edit, region)
+		else:
+			self.view.insert(edit, 0, value)			
+		self.view.end_edit(edit)
+
+		if is_read_only:
+			self.view.set_read_only(True)	
+
+	def __getattr__(self,name):
+		return getattr(self.view,name)
+
+class PanelView(View):
+	def __init__(self,name,text,syntax=None):
+		#self = PanelView.new_panel(name,syntax)
+		self.name = name
+		self.view = sublime.active_window().get_output_panel(name)		
+		self.view.set_name(name)
+		if syntax:
+			self.view.set_syntax_file(syntax)
+
+		self.text = text
+
+	def show_panel(self):
+		sublime.active_window().run_command("show_panel", {"panel": "output.%s"%self.name})
+
+
+class dataView(View):	
+	def __init__(self,view=None):
 		self.view = view
 		#self.view = sublime.active_window().new_file()
 		#self.view = sublime.active_window().active_view()
 
-	@staticmethod
-	def new():
-		return dataView(sublime.active_window().new_file())
-	@staticmethod
-	def active():
-		a = dataView(sublime.active_window().active_view())
-		if a.data:
-			if not dataViews.has_key(a.data.name):
-				dataViews[a.data.name] = a
-			return dataViews[a.data.name]
-		return a
+	
+	# @staticmethod
+	# def active():
+	# 	a = dataView(sublime.active_window().active_view())
+	# 	if a.data:
+	# 		if not dataViews.has_key(a.data.name):
+	# 			dataViews[a.data.name] = a
+	# 		return dataViews[a.data.name]
+	# 	return a
 
 	@property
 	def data(self):
@@ -1524,50 +1588,29 @@ class dataView(object):
 		self.view.end_edit(edit)
 
 	def show_panel(self,panel_name,text,syntax="Packages/Diff/Diff.tmLanguage"):
-		if not panel_name:
-			panel_name="git"
-		output_view = self.view.window().get_output_panel(panel_name)
-		output_view.set_name(panel_name)
-		output_view.text = text
-
-		def _output_to_view(output_file, output, clear=False, syntax=syntax):			
-		    output_file.set_syntax_file(syntax)
-		    edit = output_file.begin_edit()
-		    if clear:
-		        region = sublime.Region(0, output_view.size())
-		        output_file.erase(edit, region)
-		    output_file.insert(edit, 0, output)
-		    output_file.end_edit(edit)
-
-		output_view.set_read_only(False)
-		_output_to_view(output_view, text, clear=True)
-		output_view.set_read_only(True)
-		sublime.active_window().run_command("show_panel", {"panel": "output.%s"%panel_name})
-		return output_view
+		#if not panel_name:
+		#	panel_name="git"
+		#panel = View.new_panel(panel_name,syntax)
+		#panel = PanelView.new_panel(panel_name,syntax)		
+		panel = PanelView(panel_name,text,syntax).show_panel()
+		#panel.text = text
+		#sublime.active_window().run_command("show_panel", {"panel": "output.%s"%panel_name})
+		#panel.show_panel()
+		return panel
 
 
 	def show_errors_panel(self):
 		errs_text = ""
 		for row in self.data.errors():
 			errs_text += "%s: %-8s %-4s %-20s %s\n"%(row.list[6][1],row.type,row.line,row.text.split(":")[0],row.text.split(":")[1])
-		self.show_panel("",errs_text)
+		#self.show_panel("",errs_text)
+		PanelView("errors",errs_text,"Packages/Diff/Diff.tmLanguage").show_panel()
+
 	def show_diff_panel(self):
-		self.show_panel("",self.diff_text)
+		#print self.diff_text
+		self.show_panel("git",self.diff_text)
 	def show_plsql_panel(self):
 		self.show_panel("",self.data.get_package_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")
-	
-	class OutputPanel(object):
-		def __init__(self,name):
-			self.name = name
-			pass
-
-		def show(self):
-			sublime.active_window().run_command("show_panel", {"panel": "output.%"%self.name})
-
-
-
-
-
 
 	def show_plsql_b_panel(self):
 		if not hasattr(self,"plsql"):
