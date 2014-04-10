@@ -5,9 +5,9 @@ _tabversion = '3.2'
 
 _lr_method = 'LALR'
 
-_lr_signature = '-\x94\xb9c\x1a\xe0\x85\xb7\xb9\x8f\xee:Ti\xcd\xb2'
+_lr_signature = '\xe9W\x1eO\xe4\x08\xf4N\xca\x90-J5\x96n\xfb'
     
-_lr_action_items = {'BODY':([59,],[60,]),'EXCEPTION':([7,40,41,46,47,48,54,],[17,-5,17,-17,17,-16,-15,]),'RETURN':([8,27,45,],[-4,41,-13,]),'BFILE':([7,40,41,46,47,48,54,],[24,-5,24,-17,24,-16,-15,]),'CLOB':([7,40,41,46,47,48,54,],[11,-5,11,-17,11,-16,-15,]),'NUMBER':([7,40,41,46,47,48,54,],[16,-5,16,-17,16,-16,-15,]),'VARCHAR2':([7,40,41,46,47,48,54,],[20,-5,20,-17,20,-16,-15,]),'DATE':([7,40,41,46,47,48,54,],[22,-5,22,-17,22,-16,-15,]),'BEGIN':([3,4,5,9,31,55,57,62,],[-11,-10,-7,-9,-37,-2,59,-12,]),'RPAREN':([10,11,12,14,15,16,17,18,20,21,22,23,24,25,26,28,30,32,33,34,35,37,38,39,42,43,50,52,53,56,58,],[-30,-33,-6,-6,-6,-6,-31,-35,-6,-36,-29,-28,-34,-32,-3,-24,-20,-27,-26,-22,-25,-23,45,-8,50,50,-19,-14,-18,58,-21,]),'SEMICOLON':([10,11,12,13,14,15,16,17,18,20,21,22,23,24,25,28,30,32,33,34,35,37,50,58,61,],[-30,-33,-6,31,-6,-6,-6,-31,-35,-6,-36,-29,-28,-34,-32,-24,-20,-27,-26,-22,-25,-23,-19,-21,62,]),'LONG_RAW':([7,40,41,46,47,48,54,],[21,-5,21,-17,21,-16,-15,]),'INTERVAL':([7,40,41,46,47,48,54,],[15,-5,15,-17,15,-16,-15,]),'LONG':([7,40,41,46,47,48,54,],[18,-5,18,-17,18,-16,-15,]),'RAW':([7,40,41,46,47,48,54,],[19,-5,19,-17,19,-16,-15,]),'COMMA':([10,11,12,14,15,16,17,18,20,21,22,23,24,25,26,28,30,32,33,34,35,37,38,39,42,50,52,53,58,],[-30,-33,-6,-6,-6,-6,-31,-35,-6,-36,-29,-28,-34,-32,-3,-24,-20,-27,-26,-22,-25,-23,44,-8,51,-19,-14,-18,-21,]),'INTEGER':([7,40,41,46,47,48,54,],[23,-5,23,-17,23,-16,-15,]),'$end':([0,2,3,4,5,6,9,31,62,],[-2,-1,-11,-10,-7,0,-9,-37,-12,]),'FUNCTION':([0,2,3,4,5,9,31,55,57,62,],[1,1,-11,-10,-7,-9,-37,1,1,-12,]),'END':([60,],[61,]),'STRING':([7,40,41,46,47,48,54,],[12,-5,12,-17,12,-16,-15,]),'IS':([10,11,12,14,15,16,17,18,20,21,22,23,24,25,28,30,32,33,34,35,37,49,50,58,],[-30,-33,-6,-6,-6,-6,-31,-35,-6,-36,-29,-28,-34,-32,-24,-20,-27,-26,-22,-25,-23,55,-19,-21,]),'LPAREN':([8,12,14,15,16,19,20,],[26,29,29,29,29,36,29,]),'IN':([40,],[48,]),'ID':([0,1,2,3,4,5,9,26,31,44,55,57,62,],[7,8,7,-11,-10,-7,-9,40,-37,40,7,7,-12,]),'DIGIT':([29,36,51,],[42,43,56,]),'TIMESTAMP':([7,40,41,46,47,48,54,],[14,-5,14,-17,14,-16,-15,]),'BOOLEAN':([7,40,41,46,47,48,54,],[10,-5,10,-17,10,-16,-15,]),'BLOB':([7,40,41,46,47,48,54,],[25,-5,25,-17,25,-16,-15,]),'OUT':([40,48,],[46,54,]),}
+_lr_action_items = {'BODY':([75,82,],[80,84,]),'EXCEPTION':([8,51,52,61,62,63,71,],[12,-5,12,12,-21,-22,-20,]),'RETURN':([10,35,60,],[-4,52,-18,]),'BFILE':([8,51,52,61,62,63,71,],[13,-5,13,13,-21,-22,-20,]),'CLOB':([8,51,52,61,62,63,71,],[14,-5,14,14,-21,-22,-20,]),'DEFAULT':([12,13,14,15,17,18,19,21,22,23,25,26,27,28,30,31,32,36,38,40,42,43,45,47,54,65,67,70,79,],[-37,-40,-39,-6,-6,-35,-43,-42,-6,-41,-34,-6,-46,-47,-6,-36,-38,-28,-26,-29,-32,-31,-30,-33,-44,-25,-45,77,-27,]),'NUMBER':([8,51,52,61,62,63,71,],[15,-5,15,15,-21,-22,-20,]),'LBRACKET':([8,20,51,52,61,62,63,71,],[16,41,-5,16,16,-21,-22,-20,]),'VARCHAR2':([8,51,52,61,62,63,71,],[17,-5,17,17,-21,-22,-20,]),'DATE':([8,51,52,61,62,63,71,],[18,-5,18,18,-21,-22,-20,]),'NULL':([8,51,52,61,62,63,71,77,],[19,-5,19,19,-21,-22,-20,81,]),'REF':([8,51,52,61,62,63,71,],[20,-5,20,20,-21,-22,-20,]),'BEGIN':([3,4,5,6,11,46,57,58,68,72,73,78,85,87,],[-12,-11,-8,-13,-10,-48,-17,-2,75,-15,-2,82,-16,-14,]),'RPAREN':([12,13,14,15,17,18,19,21,22,23,25,26,27,28,30,31,32,34,36,38,40,42,43,45,47,49,50,53,54,56,65,67,69,70,74,76,79,81,],[-37,-40,-39,-6,-6,-35,-43,-42,-6,-41,-34,-6,-46,-47,-6,-36,-38,-3,-28,-26,-29,-32,-31,-30,-33,60,-9,65,-44,65,-25,-45,-19,-7,79,-24,-27,-23,]),'SEMI':([12,13,14,15,17,18,19,21,22,23,25,26,27,28,29,30,31,32,33,36,38,40,42,43,45,47,48,54,60,64,65,67,79,83,86,],[-37,-40,-39,-6,-6,-35,-43,-42,-6,-41,-34,-6,-46,-47,46,-6,-36,-38,-4,-28,-26,-29,-32,-31,-30,-33,57,-44,-18,72,-25,-45,-27,85,87,]),'LONG_RAW':([8,51,52,61,62,63,71,],[21,-5,21,21,-21,-22,-20,]),'INTERVAL':([8,51,52,61,62,63,71,],[22,-5,22,22,-21,-22,-20,]),'LONG':([8,51,52,61,62,63,71,],[23,-5,23,23,-21,-22,-20,]),'RAW':([8,51,52,61,62,63,71,],[24,-5,24,24,-21,-22,-20,]),'COMMA':([12,13,14,15,17,18,19,21,22,23,25,26,27,28,30,31,32,34,36,38,40,42,43,45,47,49,50,53,54,65,67,69,70,76,79,81,],[-37,-40,-39,-6,-6,-35,-43,-42,-6,-41,-34,-6,-46,-47,-6,-36,-38,-3,-28,-26,-29,-32,-31,-30,-33,59,-9,66,-44,-25,-45,-19,-7,-24,-27,-23,]),'INTEGER':([8,51,52,61,62,63,71,],[25,-5,25,25,-21,-22,-20,]),'$end':([0,2,3,4,5,6,7,11,46,57,72,85,87,],[-2,-1,-12,-11,-8,-13,0,-10,-48,-17,-15,-16,-14,]),'FUNCTION':([0,2,3,4,5,6,11,46,57,58,68,72,73,78,85,87,],[1,1,-12,-11,-8,-13,-10,-48,-17,1,1,-15,1,1,-16,-14,]),'END':([80,84,],[83,86,]),'STRING':([8,51,52,61,62,63,71,],[26,-5,26,26,-21,-22,-20,]),'IS':([12,13,14,15,17,18,19,21,22,23,25,26,27,28,30,31,32,33,36,38,40,42,43,45,47,48,54,60,64,65,67,79,],[-37,-40,-39,-6,-6,-35,-43,-42,-6,-41,-34,-6,-46,-47,-6,-36,-38,-4,-28,-26,-29,-32,-31,-30,-33,58,-44,-18,73,-25,-45,-27,]),'LPAREN':([10,15,17,22,24,26,30,33,],[34,37,37,37,44,37,37,34,]),'IN':([51,],[62,]),'ID':([0,1,2,3,4,5,6,8,9,11,16,34,41,46,51,52,57,58,59,61,62,63,68,71,72,73,78,85,87,],[8,10,8,-12,-11,-8,-13,28,33,-10,39,51,55,-48,-5,28,-17,8,51,28,-21,-22,8,-20,-15,8,8,-16,-14,]),'PROCEDURE':([0,2,3,4,5,6,11,46,57,58,68,72,73,78,85,87,],[9,9,-12,-11,-8,-13,-10,-48,-17,9,9,-15,9,9,-16,-14,]),'DIGIT':([37,44,66,],[53,56,74,]),'TIMESTAMP':([8,51,52,61,62,63,71,],[30,-5,30,30,-21,-22,-20,]),'BOOLEAN':([8,51,52,61,62,63,71,],[31,-5,31,31,-21,-22,-20,]),'BLOB':([8,51,52,61,62,63,71,],[32,-5,32,32,-21,-22,-20,]),'RBRACKET':([39,55,],[54,67,]),'OUT':([51,62,],[63,71,]),}
 
 _lr_action = { }
 for _k, _v in _lr_action_items.items():
@@ -16,7 +16,7 @@ for _k, _v in _lr_action_items.items():
       _lr_action[_x][_k] = _y
 del _lr_action_items
 
-_lr_goto_items = {'datatype':([7,41,47,],[13,49,53,]),'declarations':([0,55,],[2,57,]),'param':([26,44,],[39,52,]),'variable_def':([0,2,55,57,],[3,3,3,3,]),'declare_function':([0,2,55,57,],[4,4,4,4,]),'param_type':([40,],[47,]),'two_digit_list':([12,14,15,16,20,],[28,32,33,34,37,]),'param_list_paren':([8,],[27,]),'declare_element':([0,2,55,57,],[5,9,5,9,]),'one_digit_list':([12,14,15,16,19,20,],[30,30,30,30,35,30,]),'expression':([0,],[6,]),'param_list':([26,],[38,]),}
+_lr_goto_items = {'datatype':([8,52,61,],[29,64,70,]),'declarations':([0,58,73,],[2,68,78,]),'default_section':([70,],[76,]),'param':([34,59,],[50,69,]),'variable_def':([0,2,58,68,73,78,],[3,3,3,3,3,3,]),'declare_function':([0,2,58,68,73,78,],[4,4,4,4,4,4,]),'param_type':([51,],[61,]),'variable':([8,52,61,],[27,27,27,]),'two_digit_list':([15,17,22,26,30,],[36,40,42,45,47,]),'param_list_paren':([10,33,],[35,48,]),'declare_element':([0,2,58,68,73,78,],[5,11,5,11,5,11,]),'declare_procedure':([0,2,58,68,73,78,],[6,6,6,6,6,6,]),'one_digit_list':([15,17,22,24,26,30,],[38,38,38,43,38,38,]),'expression':([0,],[7,]),'param_list':([34,],[49,]),}
 
 _lr_goto = { }
 for _k, _v in _lr_goto_items.items():
@@ -26,41 +26,52 @@ for _k, _v in _lr_goto_items.items():
 del _lr_goto_items
 _lr_productions = [
   ("S' -> expression","S'",1,None,None,None),
-  ('expression -> declarations','expression',1,'p_expr','.\\ply_plugin.py',127),
-  ('declarations -> <empty>','declarations',0,'p_optional','.\\ply_plugin.py',132),
-  ('param_list -> <empty>','param_list',0,'p_optional','.\\ply_plugin.py',133),
-  ('param_list_paren -> <empty>','param_list_paren',0,'p_optional','.\\ply_plugin.py',134),
-  ('param_type -> <empty>','param_type',0,'p_optional','.\\ply_plugin.py',135),
-  ('two_digit_list -> <empty>','two_digit_list',0,'p_optional','.\\ply_plugin.py',136),
-  ('declarations -> declare_element','declarations',1,'p_declarations_declare_element','.\\ply_plugin.py',140),
-  ('param_list -> param','param_list',1,'p_declarations_declare_element','.\\ply_plugin.py',141),
-  ('declarations -> declarations declare_element','declarations',2,'p_declarations_declarations_declare_element','.\\ply_plugin.py',146),
-  ('declare_element -> declare_function','declare_element',1,'p_declare_element','.\\ply_plugin.py',168),
-  ('declare_element -> variable_def','declare_element',1,'p_declare_element','.\\ply_plugin.py',169),
-  ('declare_function -> FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMICOLON','declare_function',11,'p_f','.\\ply_plugin.py',176),
-  ('param_list_paren -> LPAREN param_list RPAREN','param_list_paren',3,'p_param_list_paren','.\\ply_plugin.py',187),
-  ('param_list -> param_list COMMA param','param_list',3,'p_param_list_param_list','.\\ply_plugin.py',193),
-  ('param_type -> IN OUT','param_type',2,'p_param_type_in_out','.\\ply_plugin.py',198),
-  ('param_type -> IN','param_type',1,'p_param_type','.\\ply_plugin.py',202),
-  ('param_type -> OUT','param_type',1,'p_param_type','.\\ply_plugin.py',203),
-  ('param -> ID param_type datatype','param',3,'p_param','.\\ply_plugin.py',209),
-  ('one_digit_list -> LPAREN DIGIT RPAREN','one_digit_list',3,'p_one_digit_list','.\\ply_plugin.py',218),
-  ('two_digit_list -> one_digit_list','two_digit_list',1,'p_two_digit_list_one','.\\ply_plugin.py',222),
-  ('two_digit_list -> LPAREN DIGIT COMMA DIGIT RPAREN','two_digit_list',5,'p_two_digit_list_two','.\\ply_plugin.py',226),
-  ('datatype -> NUMBER two_digit_list','datatype',2,'p_number_type','.\\ply_plugin.py',230),
-  ('datatype -> VARCHAR2 two_digit_list','datatype',2,'p_number_type','.\\ply_plugin.py',231),
-  ('datatype -> STRING two_digit_list','datatype',2,'p_number_type','.\\ply_plugin.py',232),
-  ('datatype -> RAW one_digit_list','datatype',2,'p_number_type','.\\ply_plugin.py',233),
-  ('datatype -> INTERVAL two_digit_list','datatype',2,'p_number_type','.\\ply_plugin.py',234),
-  ('datatype -> TIMESTAMP two_digit_list','datatype',2,'p_number_type','.\\ply_plugin.py',235),
-  ('datatype -> INTEGER','datatype',1,'p_oracle_type','.\\ply_plugin.py',246),
-  ('datatype -> DATE','datatype',1,'p_oracle_type','.\\ply_plugin.py',247),
-  ('datatype -> BOOLEAN','datatype',1,'p_oracle_type','.\\ply_plugin.py',248),
-  ('datatype -> EXCEPTION','datatype',1,'p_oracle_type','.\\ply_plugin.py',249),
-  ('datatype -> BLOB','datatype',1,'p_oracle_type','.\\ply_plugin.py',250),
-  ('datatype -> CLOB','datatype',1,'p_oracle_type','.\\ply_plugin.py',251),
-  ('datatype -> BFILE','datatype',1,'p_oracle_type','.\\ply_plugin.py',252),
-  ('datatype -> LONG','datatype',1,'p_oracle_type','.\\ply_plugin.py',253),
-  ('datatype -> LONG_RAW','datatype',1,'p_oracle_type','.\\ply_plugin.py',254),
-  ('variable_def -> ID datatype SEMICOLON','variable_def',3,'p_variable_defination','.\\ply_plugin.py',260),
+  ('expression -> declarations','expression',1,'p_expr','.\\ply_plugin.py',231),
+  ('declarations -> <empty>','declarations',0,'p_optional','.\\ply_plugin.py',236),
+  ('param_list -> <empty>','param_list',0,'p_optional','.\\ply_plugin.py',237),
+  ('param_list_paren -> <empty>','param_list_paren',0,'p_optional','.\\ply_plugin.py',238),
+  ('param_type -> <empty>','param_type',0,'p_optional','.\\ply_plugin.py',239),
+  ('two_digit_list -> <empty>','two_digit_list',0,'p_optional','.\\ply_plugin.py',240),
+  ('default_section -> <empty>','default_section',0,'p_optional','.\\ply_plugin.py',241),
+  ('declarations -> declare_element','declarations',1,'p_declarations_declare_element','.\\ply_plugin.py',245),
+  ('param_list -> param','param_list',1,'p_declarations_declare_element','.\\ply_plugin.py',246),
+  ('declarations -> declarations declare_element','declarations',2,'p_declarations_declarations_declare_element','.\\ply_plugin.py',251),
+  ('declare_element -> declare_function','declare_element',1,'p_declare_element','.\\ply_plugin.py',273),
+  ('declare_element -> variable_def','declare_element',1,'p_declare_element','.\\ply_plugin.py',274),
+  ('declare_element -> declare_procedure','declare_element',1,'p_declare_element','.\\ply_plugin.py',275),
+  ('declare_function -> FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMI','declare_function',11,'p_f','.\\ply_plugin.py',282),
+  ('declare_function -> FUNCTION ID param_list_paren RETURN datatype SEMI','declare_function',6,'p_f','.\\ply_plugin.py',283),
+  ('declare_procedure -> PROCEDURE ID param_list_paren IS declarations BEGIN BODY END SEMI','declare_procedure',9,'p_proc','.\\ply_plugin.py',295),
+  ('declare_procedure -> PROCEDURE ID param_list_paren SEMI','declare_procedure',4,'p_proc','.\\ply_plugin.py',296),
+  ('param_list_paren -> LPAREN param_list RPAREN','param_list_paren',3,'p_param_list_paren','.\\ply_plugin.py',307),
+  ('param_list -> param_list COMMA param','param_list',3,'p_param_list_param_list','.\\ply_plugin.py',313),
+  ('param_type -> IN OUT','param_type',2,'p_param_type_in_out','.\\ply_plugin.py',318),
+  ('param_type -> IN','param_type',1,'p_param_type','.\\ply_plugin.py',322),
+  ('param_type -> OUT','param_type',1,'p_param_type','.\\ply_plugin.py',323),
+  ('default_section -> DEFAULT NULL','default_section',2,'p_default_section','.\\ply_plugin.py',327),
+  ('param -> ID param_type datatype default_section','param',4,'p_param','.\\ply_plugin.py',331),
+  ('one_digit_list -> LPAREN DIGIT RPAREN','one_digit_list',3,'p_one_digit_list','.\\ply_plugin.py',340),
+  ('two_digit_list -> one_digit_list','two_digit_list',1,'p_two_digit_list_one','.\\ply_plugin.py',344),
+  ('two_digit_list -> LPAREN DIGIT COMMA DIGIT RPAREN','two_digit_list',5,'p_two_digit_list_two','.\\ply_plugin.py',348),
+  ('datatype -> NUMBER two_digit_list','datatype',2,'p_number_type','.\\ply_plugin.py',352),
+  ('datatype -> VARCHAR2 two_digit_list','datatype',2,'p_number_type','.\\ply_plugin.py',353),
+  ('datatype -> STRING two_digit_list','datatype',2,'p_number_type','.\\ply_plugin.py',354),
+  ('datatype -> RAW one_digit_list','datatype',2,'p_number_type','.\\ply_plugin.py',355),
+  ('datatype -> INTERVAL two_digit_list','datatype',2,'p_number_type','.\\ply_plugin.py',356),
+  ('datatype -> TIMESTAMP two_digit_list','datatype',2,'p_number_type','.\\ply_plugin.py',357),
+  ('datatype -> INTEGER','datatype',1,'p_oracle_type','.\\ply_plugin.py',367),
+  ('datatype -> DATE','datatype',1,'p_oracle_type','.\\ply_plugin.py',368),
+  ('datatype -> BOOLEAN','datatype',1,'p_oracle_type','.\\ply_plugin.py',369),
+  ('datatype -> EXCEPTION','datatype',1,'p_oracle_type','.\\ply_plugin.py',370),
+  ('datatype -> BLOB','datatype',1,'p_oracle_type','.\\ply_plugin.py',371),
+  ('datatype -> CLOB','datatype',1,'p_oracle_type','.\\ply_plugin.py',372),
+  ('datatype -> BFILE','datatype',1,'p_oracle_type','.\\ply_plugin.py',373),
+  ('datatype -> LONG','datatype',1,'p_oracle_type','.\\ply_plugin.py',374),
+  ('datatype -> LONG_RAW','datatype',1,'p_oracle_type','.\\ply_plugin.py',375),
+  ('datatype -> NULL','datatype',1,'p_oracle_type','.\\ply_plugin.py',376),
+  ('datatype -> LBRACKET ID RBRACKET','datatype',3,'p_user_data_type','.\\ply_plugin.py',381),
+  ('datatype -> REF LBRACKET ID RBRACKET','datatype',4,'p_user_data_type_ref','.\\ply_plugin.py',384),
+  ('datatype -> variable','datatype',1,'p_user_data_type_variable','.\\ply_plugin.py',387),
+  ('variable -> ID','variable',1,'p_variable','.\\ply_plugin.py',390),
+  ('variable_def -> ID datatype SEMI','variable_def',3,'p_variable_defination','.\\ply_plugin.py',396),
 ]

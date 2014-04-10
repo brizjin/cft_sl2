@@ -1113,22 +1113,31 @@ class View(object):
 
 	@classmethod
 	def active(cls):
-		v = cls()
-		v.view = sublime.active_window().active_view()		
-		if not dataViews.has_key(v.view.id):
-			dataViews[v.view.id] = v
-		return dataViews[v.view.id]
+		view = sublime.active_window().active_view()
+		view_id = view.id()		
+		
+		if not dataViews.has_key(view_id):
+			#print "NEW ACITVE"
+			v = cls()
+			v.view = view
+			dataViews[view_id] = v
+			#print "ACITVE2=",dataViews[view_id]
+			return v
+
+		#print "ACITVE=",dataViews[view_id]
+
+		return dataViews[view_id]
 		#return a
 
-	@classmethod
-	def new_panel(cls,panel_name,syntax=None):
-		#output_view = self.view.window().get_output_panel(panel_name)
-		v = cls()
-		v.name = panel_name
-		v.view = sublime.active_window().get_output_panel(panel_name)		
-		v.view.set_name(panel_name)
-		v.view.set_syntax_file(syntax)		
-		return v
+	# @classmethod
+	# def new_panel(cls,panel_name,syntax=None):
+	# 	#output_view = self.view.window().get_output_panel(panel_name)
+	# 	v = cls()
+	# 	v.name = panel_name
+	# 	v.view = sublime.active_window().get_output_panel(panel_name)		
+	# 	v.view.set_name(panel_name)
+	# 	v.view.set_syntax_file(syntax)		
+	# 	return v
 
 	@property
 	def text(self):
@@ -1140,6 +1149,7 @@ class View(object):
 
 		is_read_only = self.view.is_read_only()
 		if is_read_only:
+			#print 'READ only FALSE'
 			self.view.set_read_only(False)		
 		
 		edit = self.view.begin_edit()
@@ -1151,6 +1161,7 @@ class View(object):
 		self.view.end_edit(edit)
 
 		if is_read_only:
+			#print 'READ only True'
 			self.view.set_read_only(True)	
 
 	def __getattr__(self,name):
@@ -1162,6 +1173,7 @@ class PanelView(View):
 		self.name = name
 		self.view = sublime.active_window().get_output_panel(name)		
 		self.view.set_name(name)
+		self.view.set_read_only(True)
 		if syntax:
 			self.view.set_syntax_file(syntax)
 
@@ -1592,7 +1604,8 @@ class dataView(View):
 		#	panel_name="git"
 		#panel = View.new_panel(panel_name,syntax)
 		#panel = PanelView.new_panel(panel_name,syntax)		
-		panel = PanelView(panel_name,text,syntax).show_panel()
+		panel = PanelView(panel_name,text,syntax)
+		panel.show_panel()
 		#panel.text = text
 		#sublime.active_window().run_command("show_panel", {"panel": "output.%s"%panel_name})
 		#panel.show_panel()
@@ -1616,34 +1629,36 @@ class dataView(View):
 		if not hasattr(self,"plsql"):
 			#print "SELF=",self
 			self.plsql = self.show_panel("plsql",self.data.get_package_body_text(),"Packages/CFT/PL_SQL (Oracle).tmLanguage")			
+			#print "SELF.PLSQL=",self.plsql,self.id()
 			t = timer()
 			ss = {}
 			last_s = ''
 			last_n = ''
-			for m in re.finditer(r"(--#section .* \d*)\n|(--# (\d+),(\d+))\n|(.*\n)",self.plsql.text):
-
-
-				if m.group(1):
-					last_s = {}
-					ss[m.group(1)] = last_s
-				elif m.group(2):
-					#print 'G2=',m.group(2)
-					last_n = m.group(2)
+			for m in re.finditer(r"--#section (?P<section_name>.*) \d*\n|--# (?P<line_num>\d+),\d+\n|(?P<line>.*\n)",self.plsql.text):
+				section_name = m.group('section_name')
+				line_num 	 = m.group('line_num')
+				line		 = m.group('line')
+				if section_name:
+					print 'SNAME=',section_name
+					if ss.has_key(section_name):
+						last_s = ss[section_name]
+					else:
+						last_s = {}
+						ss[section_name] = last_s
+					
+				elif line_num:
+					last_n = line_num
 					last_s[last_n] = ''
-				elif m.group(5):
+					#last_s.insert(int(line_num),int(line_num))
+				elif line:
 					if not last_s:
-						continue
-				# print 'G1=',m.group(1)
-				# print 'G2=',m.group(2)
-				# print 'G3=',m.group(3)
-				# print 'G4=',m.group(4)
-				# print 'G5=',m.group(5)
-					#print 'LN=',last_n
-					#print 'G5',m.group(5)
-					last_s[last_n] += m.group(5)
+						continue				
+					#last_s[last_n] += line
 			#print 'ss=',ss
-			for s in ss.keys():
-				print "S=",s
+			#for s in ss.keys():
+			#	print "S=",s
+			print ss['PUBLIC']#.to_list().sort(key=lambda a: num(a))
+			#print ss
 			t.print_time("groups")
 		v =	self.plsql
 		#if not v.window():
@@ -2702,8 +2717,11 @@ class el(sublime_plugin.EventListener):
 		
 		#print "on_selection=%s"%view.data
 		if view.name() and view.name() != 'plsql': #если нет имени значит это панель
+			#print "VIEW.NAME=",view.name()
 			v = dataView.active()
+			#print "v=",v,view.id()
 			if hasattr(v,"plsql"):
+				#print "plsql=",v.plsql
 				if v.plsql.window():#is visible
 					#print "ON select"
 					v.show_plsql_b_panel()
