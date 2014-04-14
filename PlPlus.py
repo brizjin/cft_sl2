@@ -199,14 +199,21 @@ class PlPlus(Parser):
 
 
     class declare_function:
-        def __init__(self):
-            self.return_type = ''
-            pass
+       def __init__(self):
+           self.return_type = ''
+           self.params = ''
+       def __repr__(self):
+           return "%s%s return %s"%(self.name,self.params,self.return_type)
+    class D(dict):
+        def __init__(self,p,arr,repr):
+            for i,a in enumerate(arr):
+                self[arr[i]] = p[i+1]
+            self["repr"] = repr
+        def __getattr__(self,name):
+            return self[name] if self[name] is not None else ''
         def __repr__(self):
-            if self.params:
-                return "%s%s return %s"%(self.name,self.params,self.return_type)
-            else:
-                return "%s return %s"%(self.name,self.return_type)
+            return self["repr"] if not callable(self["repr"]) else self["repr"](self)
+
     class param_class:
         def __repr__(self):
             if self.param_type:
@@ -255,13 +262,9 @@ class PlPlus(Parser):
         declare_function : FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMI
                          | FUNCTION ID param_list_paren RETURN datatype SEMI
         '''
-        #print 'FUNC %s'%p[2]
-        f = self.declare_function()
-        f.name = p[2]
-        f.params = p[3]
-        f.return_type = p[5]
-        #p[0] = 'FUNCTION %s return %s is %s'%(p[2],p[4],p[6])
-        p[0] = f
+        def r(s):
+            return "function %s,%s return %s"%(s.name,s.params,s.return_type)
+        p[0] = self.D(p,["type","name","params","return","return_type"],r)
 
     def p_proc(self,p):
         '''
@@ -269,9 +272,10 @@ class PlPlus(Parser):
                           | PROCEDURE ID param_list_paren SEMI
         '''
         #print 'FUNC %s'%p[2]
-        f = declare_function()
+        f = self.declare_function()
         f.name = p[2]
-        f.params = p[3]
+        if p[3]:
+            f.params = p[3]
         #f.return_type = p[5]
         #p[0] = 'FUNCTION %s return %s is %s'%(p[2],p[4],p[6])
         p[0] = f
