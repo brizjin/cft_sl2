@@ -1,15 +1,17 @@
-from Parser import Parser
-
+# -*- coding: utf-8 -*-
+#from Parser import Parser
+import sublime, sublime_plugin, Parser
 import ply.lex  as lex
 import ply.yacc as yacc
 from ply.lex import TOKEN
 
 
-class PlPlusMacro(Parser):
+
+class pl_plus_include(Parser.Parser):
     def __init__(self,debug = 0):
-        super(PlPlusMacro,self).__init__(debug)
+        super(pl_plus_include,self).__init__(debug)
         
-    tokens = ('PRAGMA','MACRO','LPAREN','RPAREN','SEMI','COMMA','STRING','SUBSTITUTE')
+    tokens = ('PRAGMA','INCLUDE','LPAREN','RPAREN','SEMI','COMMA','STRING','SUBSTITUTE')
     t_ignore    = ' \n\t'
     t_LPAREN    = r'\('
     t_RPAREN    = r'\)'
@@ -31,13 +33,27 @@ class PlPlusMacro(Parser):
         state = t.lexer.current_state()
         value = t.value.upper()
         stack = self.stack
-        if value in ['PRAGMA','MACRO','SUBSTITUTE']:           
+        if value in ['PRAGMA','INCLUDE']:
             t.type = value
             return t
 
     def p_expr(self,p):
         'expression : pragmas'
         p[0] = p[1]
+
+    def t_error(self,t):    # For bad characters, we just skip over it
+        t.lexer.skip(1)
+    # def p_strings_string(self,p):
+    #     '''
+    #     strings : STRING
+    #     '''
+    #     p[0] = p[1]
+
+    # def p_strings(self,p):
+    #     '''
+    #     strings : strings STRING
+    #     '''
+    #     p[0] = p[1] + p[2]
 
     def p_options(self,p):
         '''
@@ -53,14 +69,32 @@ class PlPlusMacro(Parser):
         p[0] = p[1] + [p[2]]
 
     def p_pragma(self,p):
-        'pragma : PRAGMA MACRO LPAREN STRING COMMA STRING COMMA SUBSTITUTE RPAREN SEMI'
+        'pragma : PRAGMA INCLUDE LPAREN STRING RPAREN SEMI'
         class pragma:
             def __repr__(self):
                 return self.type + ":" + self.name + "=" + self.text
         pr = pragma()
         pr.name = p[4]
         pr.text = p[6]
-        pr.type = p[8]
+        pr.type = ''#p[8]
         p[0] = pr
 
+text1 = """
+pragma include('[EPL_REQUESTS]::[L]');
+pragma include('[EPL_REQUESTS]::[XML]');
+"""
 
+class includeCommand(sublime_plugin.TextCommand):
+    def run(self, edit):
+        from oracle import timer
+        t = timer()
+        print "include command..."
+        p = pl_plus_include(debug=1).parse(text1)
+
+        if p:
+            print "result:"
+            for a in p:
+                print a
+        
+
+        print t.print_time('Разбор функций за')
