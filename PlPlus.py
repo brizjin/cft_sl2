@@ -9,10 +9,11 @@ class D(dict):
         return self[name] if self[name] is not None else ''
     def __repr__(self):
         return self["repr"] if not callable(self["repr"]) else self["repr"](self)
-        
+
 class PlPlus(Parser):
 
-    keywords = ('FUNCTION','PROCEDURE','RETURN','BEGIN',
+    keywords = ('PRAGMA','MACRO','SUBSTITUTE',
+        'FUNCTION','PROCEDURE','RETURN','BEGIN',
         'END','IS','BODY','IN','OUT','REF','DEFAULT','NULL',
         )
 
@@ -46,11 +47,13 @@ class PlPlus(Parser):
     def t_ANY_COMMENT(self,t):
         r'--.*|\/\*(.|\n)*?\*\/'
 
-
-    def t_body_INLINE_STRING(self,t):
+    def t_ANY_INLINE_STRING(self,t):
         r'\'.*?\''
-    def t_is_INLINE_STRING(self,t):
-        r'\'.*?\''
+        return t
+    #def t_body_INLINE_STRING(self,t):
+    #    r'\'.*?\''
+    #def t_is_INLINE_STRING(self,t):
+    #    r'\'.*?\''
 
     t_body_ignore = " \t\n"
 
@@ -247,6 +250,7 @@ class PlPlus(Parser):
         declare_element : declare_function
                         | variable_def
                         | declare_procedure
+                        | pragma_macro
         '''
         #exprs.append(p[1])
         p[0] = p[1]
@@ -365,6 +369,11 @@ class PlPlus(Parser):
     def p_variable_defination(self,p):
         'variable_def : ID datatype SEMI'
         p[0] = 'variable %s of %s'%(p[1],p[2])
+
+    def p_pragma_macro(self,p):
+        'pragma_macro : PRAGMA MACRO LPAREN ID COMMA INLINE_STRING COMMA SUBSTITUTE RPAREN SEMI'
+        p[0] = D(p,["pragma","macro","LP","name","comma","string"],lambda self:"macros %s = %s"%(self.name,self.string))
+        #print "lexdata=",self.lexer.lexdata
 
     def p_error(self,p):
         print "Syntax error in input!"

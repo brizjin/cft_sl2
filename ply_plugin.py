@@ -3,6 +3,7 @@ import sublime, sublime_plugin
 import os
 
 test1 = '''
+    pragma macro(get_field,'stdio.put_line_pipe([1],[2])', substitute);
     function EDIT_AUTO(
         P_NUM_DOG       IN      PRODUCT_NUM,            --1  Номер договора
         P_DATE_ENDING   IN      DATE,                   --5  Дата окончания действия договора
@@ -54,7 +55,7 @@ class test2Command(sublime_plugin.TextCommand):
         
         print "test2 command is starting..."
         from PlPlus import PlPlus
-        p = PlPlus().parse(test1)
+        p = PlPlus(debug=1).parse(test1)
         #from PlPlusMacro import PlPlusMacro
         #p=PlPlusMacro(debug=1).parse(text)
 
