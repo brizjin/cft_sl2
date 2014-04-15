@@ -59,9 +59,11 @@ class test2Command(sublime_plugin.TextCommand):
         #from PlPlusMacro import PlPlusMacro
         #p=PlPlusMacro(debug=1).parse(text)
 
-        
-        for a in p:
-            print a
+        if p:
+            for a in p:
+                print a
+        else:
+            print "Нет текста для анализа..."
         print "finished"
 
         t.print_time('Разбор')

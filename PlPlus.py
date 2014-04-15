@@ -12,7 +12,7 @@ class D(dict):
 
 class PlPlus(Parser):
 
-    keywords = ('PRAGMA','MACRO','SUBSTITUTE',
+    keywords = (#'PRAGMA','MACRO','SUBSTITUTE',
         'FUNCTION','PROCEDURE','RETURN','BEGIN',
         'END','IS','BODY','IN','OUT','REF','DEFAULT','NULL',
         )
@@ -26,11 +26,13 @@ class PlPlus(Parser):
         #'NUMBER',
         'ID','LPAREN', 'RPAREN','LBRACKET', 'RBRACKET','COMMA', 
         'PERIOD', 'SEMI', 'COLON','DIGIT','COMMENT','INLINE_STRING',
+        'PRAGMA_MACRO',
     )
 
     states = (
-        ('body','exclusive'),
-        ('is','exclusive'),
+        ('preprocessing','exclusive'),
+        ('body'         ,'exclusive'),
+        ('is'           ,'exclusive'),
     )
 
     t_DIGIT     = r'\d+'
@@ -47,7 +49,7 @@ class PlPlus(Parser):
     def t_ANY_COMMENT(self,t):
         r'--.*|\/\*(.|\n)*?\*\/'
 
-    def t_ANY_INLINE_STRING(self,t):
+    def t_body_is_INLINE_STRING(self,t):
         r'\'.*?\''
         return t
     #def t_body_INLINE_STRING(self,t):
@@ -55,14 +57,15 @@ class PlPlus(Parser):
     #def t_is_INLINE_STRING(self,t):
     #    r'\'.*?\''
 
-    t_body_ignore = " \t\n"
+    def t_preprocessing_PRAGMA_MACRO(self,t):
+        r'(?i)PRAGMA\s+MACRO'
+        print 'MACRO!',t.value,t.type        
+        return t
 
-    def t_body_error(self,t):    # For bad characters, we just skip over it
+    t_ANY_ignore = " \t\n"
+    def t_ANY_error(self,t):    # For bad characters, we just skip over it
         t.lexer.skip(1)
-
-    t_is_ignore = " \t\n"
-    def t_is_error(self,t):
-        t.lexer.skip(1)
+        #print "ERROR! t=",t.value
 
     def begin_state(self,t,name):
         t.lexer.code_start = t.lexer.lexpos        # Record the starting position
@@ -71,61 +74,41 @@ class PlPlus(Parser):
         return t
 
     def next_state(self,t,state_name,type_name):
-        #print "end state",state_name
-        #t.lexer.level -=1
-        #print "!!!!!level=",t.lexer.level
-        #if t.lexer.level == 0:
         t.value = t.lexer.lexdata[t.lexer.code_start:t.lexer.lexpos-5]
         t.type = type_name
         t.lexer.lineno += t.value.count('\n')
         t.lexer.begin(state_name)
         t.lexer.lexpos -= 5
-        #t.value = ''
         return t
-
-    #stack = []
-
-    def t_ANY_ID(self,t):
+    macro_stack = ['ROOT']
+    def t_body_is_ID(self,t):
         r'[a-zA-Z_][a-zA-Z0-9_]*'
+        if t.lexer.current_state() == 'INITIAL':
+            t.lexer.begin('preprocessing')
+            return t
         state = t.lexer.current_state()
         value = t.value.upper()
         stack = self.stack
+        #print "ID",value
 
         if state in ['is','body']:
             if not value in ['FUNCTION','PROCEDURE','BEGIN','END','CASE','LOOP','IF' ]:
                 return
 
-
         if value in self.keywords or value in self.oracle_types:
             t.type = value
-        #print 'TYPE=',value,state
-        #print 'TYPE1=',t.type,value,state
         if state == 'INITIAL':
+            
             if value == 'IS':
-                #print "1"
-                
                 self.begin_state(t,'is')
-                #t.lexer.flevel = 0
-                #t.lexer.level = 0
                 return 
             elif value == 'BEGIN':
-                #print 'BEGIN BODY'
                 self.begin_state(t,'body')
-                #return
-
         elif state == 'body':
-            #if value == 'BEGIN':
-            #    t.lexer.level +=1
-            #    return
             if value == 'BEGIN':
                 if stack[-1] in ['FUNCTION','PROCEDURE']:
-                    #print 'FUNC'
                     return
-                #elif stack[-1] == 'ROOT':
-                    #print 'ROOT'
-                    #return next_state(t,'INITIAL','IS')
                 else:
-                    #print "ANON"
                     stack.append('ANANYMUS_BLOCK')
                     return
             elif value in ['CASE']:
@@ -142,36 +125,20 @@ class PlPlus(Parser):
                 stack.append(value)
                 return
             elif value =='END':
-                #print " ",value,stack
                 if stack[-1] in ['CASE','FUNCTION','PROCEDURE','ANANYMUS_BLOCK']:
                     stack.pop()
                 elif stack[-1] == 'ROOT':
-                    #return
                     return self.next_state(t,'INITIAL','BODY')
                 else:
-                    #print "ADD END"
                     stack.append(value)
-                #print "2",value,stack
                 return
-            # elif value == 'END':
-                
-            #     t.lexer.level -= 1
-            #     if t.lexer.level == 0:
-            #         #print "LEXER 0"
-            #         t.lexer.level += 1
-            #         return next_state(t,'INITIAL','BODY')
-            #     return
         elif state == 'is':
-            
             if value == 'BEGIN':
                 if stack[-1] in ['FUNCTION','PROCEDURE']:
-                    #print 'FUNC'
                     return
                 elif stack[-1] == 'ROOT':
-                    #print 'ROOT'
                     return self.next_state(t,'INITIAL','IS')
                 else:
-                    #print "ANON"
                     stack.append('ANANYMUS_BLOCK')
                     return
             elif value in ['CASE']:
@@ -194,23 +161,16 @@ class PlPlus(Parser):
                 elif stack[-1] == 'ROOT':
                     return
                 else:
-                    #print "ADD END"
                     stack.append(value)
-                #print "2",value,stack
                 return
-
+        elif state == 'preprocessing':
+            return
+        #print "T=",t.__dict__
         return t
-
-    # def t_NUMBER(t):
-    #     r'\d+'
-    #     t.value = int(t.value)    
-    #     return t
 
     def t_newline(self,t):
         r'\n+'
         t.lexer.lineno += len(t.value)
-
-
     class param_class(object):
         def __repr__(self):
             if self.param_type:
@@ -250,8 +210,8 @@ class PlPlus(Parser):
         declare_element : declare_function
                         | variable_def
                         | declare_procedure
-                        | pragma_macro
-        '''
+                        
+        '''#| pragma_macro
         #exprs.append(p[1])
         p[0] = p[1]
 
@@ -370,9 +330,9 @@ class PlPlus(Parser):
         'variable_def : ID datatype SEMI'
         p[0] = 'variable %s of %s'%(p[1],p[2])
 
-    def p_pragma_macro(self,p):
-        'pragma_macro : PRAGMA MACRO LPAREN ID COMMA INLINE_STRING COMMA SUBSTITUTE RPAREN SEMI'
-        p[0] = D(p,["pragma","macro","LP","name","comma","string"],lambda self:"macros %s = %s"%(self.name,self.string))
+    #def p_pragma_macro(self,p):
+    #    'pragma_macro : PRAGMA MACRO LPAREN ID COMMA INLINE_STRING COMMA SUBSTITUTE RPAREN SEMI'
+    #    p[0] = D(p,["pragma","macro","LP","name","comma","string"],lambda self:"macros %s = %s"%(self.name,self.string))
         #print "lexdata=",self.lexer.lexdata
 
     def p_error(self,p):
