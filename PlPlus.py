@@ -1,4 +1,15 @@
 from Parser import Parser
+class D(dict):
+    def __init__(self,p,arr,repr):
+        for i,a in enumerate(arr):
+            self[arr[i]] = p[i+1]
+        #self = self.append(zip(arr,p))
+        self["repr"] = repr
+    def __getattr__(self,name):
+        return self[name] if self[name] is not None else ''
+    def __repr__(self):
+        return self["repr"] if not callable(self["repr"]) else self["repr"](self)
+        
 class PlPlus(Parser):
 
     keywords = ('FUNCTION','PROCEDURE','RETURN','BEGIN',
@@ -197,24 +208,7 @@ class PlPlus(Parser):
         t.lexer.lineno += len(t.value)
 
 
-
-    class declare_function:
-       def __init__(self):
-           self.return_type = ''
-           self.params = ''
-       def __repr__(self):
-           return "%s%s return %s"%(self.name,self.params,self.return_type)
-    class D(dict):
-        def __init__(self,p,arr,repr):
-            for i,a in enumerate(arr):
-                self[arr[i]] = p[i+1]
-            self["repr"] = repr
-        def __getattr__(self,name):
-            return self[name] if self[name] is not None else ''
-        def __repr__(self):
-            return self["repr"] if not callable(self["repr"]) else self["repr"](self)
-
-    class param_class:
+    class param_class(object):
         def __repr__(self):
             if self.param_type:
                 return "%s %s %s"%(self.name,self.param_type,self.data_type)
@@ -257,28 +251,27 @@ class PlPlus(Parser):
         #exprs.append(p[1])
         p[0] = p[1]
 
+
     def p_f(self,p):
         '''
         declare_function : FUNCTION ID param_list_paren RETURN datatype IS declarations BEGIN BODY END SEMI
                          | FUNCTION ID param_list_paren RETURN datatype SEMI
         '''
-        def r(s):
-            return "function %s,%s return %s"%(s.name,s.params,s.return_type)
-        p[0] = self.D(p,["type","name","params","return","return_type"],r)
+        def repr(self):
+            params = "".join(["\n\t%s"%a for a in self.params])
+            #params = "\n\t".join("%s"%a for a in self.params)
+            return "function %s(%s) return %s"%(self.name,params,self.return_type)
+        p[0] = D(p,["type","name","params","return","return_type"],repr)
 
     def p_proc(self,p):
         '''
         declare_procedure : PROCEDURE ID param_list_paren IS declarations BEGIN BODY END SEMI
                           | PROCEDURE ID param_list_paren SEMI
         '''
-        #print 'FUNC %s'%p[2]
-        f = self.declare_function()
-        f.name = p[2]
-        if p[3]:
-            f.params = p[3]
-        #f.return_type = p[5]
-        #p[0] = 'FUNCTION %s return %s is %s'%(p[2],p[4],p[6])
-        p[0] = f
+        def repr(self):
+            params = "".join(["\n\t%s"%a for a in self.params])
+            return "procedure %s(%s)"%(self.name,params)
+        p[0] = D(p,["type","name","params"],repr)
 
     def p_param_list_paren(self,p):
         'param_list_paren : LPAREN param_list RPAREN'
@@ -375,3 +368,5 @@ class PlPlus(Parser):
 
     def p_error(self,p):
         print "Syntax error in input!"
+
+
