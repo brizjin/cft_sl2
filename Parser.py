@@ -39,3 +39,8 @@ class Parser(object):
                print tok
 
         return self.yacc.parse(text,lexer=self.lexer)
+
+import sublime, sublime_plugin
+class test3Command(sublime_plugin.TextCommand):
+    def run(self, edit):
+      pass

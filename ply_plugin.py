@@ -3,7 +3,7 @@ import sublime, sublime_plugin
 import os
 
 test1 = '''
-    pragma macro(get_field,'stdio.put_line_pipe([1],[2])', substitute);
+    pragma macro(stdio_print,'stdio.put_line_pipe([1],[2])', substitute);
     function EDIT_AUTO(
         P_NUM_DOG       IN      PRODUCT_NUM,            --1  Номер договора
         P_DATE_ENDING   IN      DATE,                   --5  Дата окончания действия договора
@@ -33,9 +33,10 @@ test1 = '''
 
     function FunctionName return ref [AC_FIN] is
     begin
+        &stdio_print('hello','DEBUG_PIPE');
         return null;
     exception when others then
-        return null;
+        return null;        
     end;
 
     procedure ProcName(a integer) is
@@ -63,6 +64,11 @@ class test2Command(sublime_plugin.TextCommand):
         #     print "!!!!!!!!!!"#,macro.lexer.token()
         #     for tok in macro.lexer.token():
         #        print tok
+        # while True:
+        #     print "&&&&&&&&&"
+        #     tok = macro.lexer.token()
+        #     if not tok: break
+        #     print tok
 
         if p:
             print "Parser="
