@@ -34,9 +34,8 @@ class Parser(object):
     def parse(self,text):
         #print 'PARSE'
         if self.debug:
-            #print 'DEBUG'
-            self.lexer.input(text)
-            for tok in self.lexer:
-                print tok
+           self.lexer.input(text)
+           for tok in self.lexer:
+               print tok
 
         return self.yacc.parse(text,lexer=self.lexer)
