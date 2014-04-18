@@ -45,6 +45,15 @@ test1 = '''
     exception when others then null;
     end;
 '''
+test2 = '''
+    pragma macro(stdio_print,'stdio.put_line_pipe([1],[2])', substitute);
+    procedure ProcName(a integer) is
+    begin
+        &stdio_print('hello','DEBUG_PIPE');
+        null;
+    exception when others then null;
+    end;
+'''
 
 
 
@@ -59,7 +68,7 @@ class test2Command(sublime_plugin.TextCommand):
         #p = PlPlus(debug=1).parse(test1)
         from PlPlusMacro import PlPlusMacro
         macro=PlPlusMacro(debug=1)        
-        p=macro.parse(test1)
+        p=macro.parse(test2)
         # if macro.debug:
         #     print "!!!!!!!!!!"#,macro.lexer.token()
         #     for tok in macro.lexer.token():

@@ -22,7 +22,7 @@ class Parser(object):
         self.yacc = yacc.yacc(module    = self,
                               debug     = debug,
                               debugfile = debugfile,
-                              tabmodule = tabmodule)
+                              tabmodule = tabmodule)        
         
     #def t_error(self,t):
     #    print "Illegal character '%s'" % t.value[0]
@@ -36,7 +36,7 @@ class Parser(object):
         if self.debug:
            self.lexer.input(text)
            for tok in self.lexer:
-               print tok
+               print 'LEX=',tok
 
         return self.yacc.parse(text,lexer=self.lexer)
 
