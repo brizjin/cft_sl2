@@ -4,33 +4,6 @@ import os
 
 test1 = '''
     pragma macro(stdio_print,'stdio.put_line_pipe([1],[2])', substitute);
-    function EDIT_AUTO(
-        P_NUM_DOG       IN      PRODUCT_NUM,            --1  Номер договора
-        P_DATE_ENDING   IN      DATE,                   --5  Дата окончания действия договора
-        P_CREATE_USER   IN      USER_REF               --6  Создано пользователем
-    )return integer
-    is
-        function FunctionName(params) return DataType is
-        begin
-            return null;
-        exception when others then
-            return null;
-        end;
-    begin
-        -- Установка значения реквизита "Номер договора"
-        [NUM_DOG] := P_NUM_DOG;
-        -- Установка значения реквизита "Дата создания договора"
-        [DATE_BEGIN] := P_DATE_BEGIN;
-        -- Установка значения реквизита "Дата начала действия договора"
-        [DATE_BEGINING] := P_DATE_BEGINING;
-        -- Установка значения реквизита "Дата закрытия договора"
-        [DATE_CLOSE] := P_DATE_CLOSE;
-        -- Установка значения реквизита "Дата окончания действия договора"
-        [DATE_ENDING] := P_DATE_ENDING;
-        -- Установка значения реквизита "Создано пользователем"
-        [CREATE_USER] := P_CREATE_USER;
-    end;
-
     function FunctionName return ref [AC_FIN] is
     begin
         &stdio_print('hello','DEBUG_PIPE');
