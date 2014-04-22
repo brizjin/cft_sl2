@@ -27,7 +27,6 @@ class PragmaParser(Parser):
         ('pragma','exclusive'),
     )
 
-
     def t_PRAGMA(self,t):
     	r'(?i)PRAGMA'
         lc = t.lexer.clone()
@@ -107,35 +106,26 @@ class PragmaParser(Parser):
         p[0] = p[1]
     def p_idorstring(self,p):
         '''idorstring : ID
-           idorstring : INLINE_STRING
-        '''
+           idorstring : INLINE_STRING'''
         p[0] = p[1]
     def p_pragma(self,p):
         ''' pragma_macro_substitute : PRAGMA MACRO LPAREN idorstring COMMA string pragma_params RPAREN SEMI'''
         def repr(s):            
-            return "@PRAGMA MACRO %s %s=%s"%(s.params,s.name,s.value)            
-        p[0] = name_dict(p,["pragma","macro","lparen","name","comma","value","params"],repr)
-    # def p_pragma(self,p):
-    #     ''' pragma_macro_substitute : PRAGMA MACRO LPAREN idorstring COMMA string COMMA options RPAREN SEMI
-    #         pragma_macro_substitute : PRAGMA MACRO LPAREN idorstring COMMA string COMMA options COMMA bool RPAREN SEMI
-    #     '''
-    #     def repr(s):            
-    #         return "@%sPRAGMA MACRO %s %s=%s"%(s.flag,s.options,s.name,s.value)
-            
-    #     p[0] = name_dict(p,["pragma","macro","lparen","name","comma","value","comma2","options","comma3",'flag'],repr)
-    #def p_pragma2(self,p):
-    #    ''' pragma_macro_substitute : PRAGMA MACRO LPAREN idorstring COMMA string RPAREN SEMI
-    #        pragma_macro_substitute : PRAGMA MACRO LPAREN idorstring COMMA string COMMA bool RPAREN SEMI
-    #    '''
-    #    def repr(s):
-    #        return "#%sPRAGMA MACRO %s=%s"%(s.flag,s.name,s.value)
-    #    p[0] = name_dict(p,["pragma","macro","lparen","name","comma","value",'comma2','flag'],repr)
+            return "@PRAGMA MACRO %s %s=%s"%(s.params,s.name,s.value)
+        #print "P=",p.stack[4]            
+        #p[0] = name_dict(p,["pragma","macro","lparen","name","comma","value","params"],repr)
+        p[0] = name_dict({
+            "name"  :p[4],
+            "value" :p[6],
+            "params":p[7]}).set_repr(repr)
+
     def p_pragma_params(self,p):
         '''pragma_params : COMMA options'''
         p[0] = p[2]
     def p_pragma_params2(self,p):
-        '''pragma_params : COMMA options COMMA bool'''        
-        p[0] = (p[2],p[4])
+        '''pragma_params : COMMA options COMMA bool'''
+        p[0] = name_dict({"options" : p[2],
+                          "flag"    : p[4]}).set_repr(lambda s: "Flag=%s Options=%s"%(s.flag,s.options))
     def p_pragma_params3(self,p):
         '''pragma_params : COMMA bool'''
         p[0] = p[2]

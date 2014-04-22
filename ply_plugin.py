@@ -89,24 +89,24 @@ class test2Command(sublime_plugin.TextCommand):
         #text = db["MON_EVENT"].meths["CLIENT_PRODUCTS"].get_sources()
         #text = db["MON_EVENT"].meths["L_CALL_METHODS"].get_sources()
         #text = db["RUNTIME"].meths["PROFILE_LIB"].get_sources()
-        #text = db["RUNTIME"].meths["MACRO_LIB"].get_sources()
+        text = db["RUNTIME"].meths["MACRO_LIB"].get_sources()
         #text = db["EPL_REQUESTS"].meths["L"].get_sources()
-        text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
+        #text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
         #text = test1
         t.print_time('Получение текста')
         t=timer()
-        p=PragmaParser(debug=1).parse(text,show_tokens=False)
+        p=PragmaParser(debug=0).parse(text,show_tokens=False)
         #p=PragmaParser(debug=1).parse(text,show_tokens=True)
 
 
 
-        if p:
-            print "Parser="
-            for a in p:
-                print unicode(a)
-        else:
-            print "Нет текста для анализа..."
-        print "finished"
+        # if p:
+        #     print "Parser="
+        #     for a in p:
+        #         print unicode(a)
+        # else:
+        #     print "Нет текста для анализа..."
+        # print "finished"
 
         t.print_time('Разбор')
 

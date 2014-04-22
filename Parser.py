@@ -17,12 +17,16 @@ class Parser(object):
         tabmodule = modname + "_" + "parsetab"
         
         self.lexer = lex.lex(module = self,
-                             debug  = debug)
+                             debug  = debug,
+                             #optimize=1
+                             )
 
         self.yacc = yacc.yacc(module    = self,
                               debug     = debug,
                               debugfile = debugfile,
-                              tabmodule = tabmodule)
+                              tabmodule = tabmodule,
+                              #optimize=1
+                              )
         
     #def t_error(self,t):
     #    print "Illegal character '%s'" % t.value[0]
