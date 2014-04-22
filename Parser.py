@@ -31,9 +31,9 @@ class Parser(object):
         print "Illegal character '%s'" % t.value[0]
         t.lexer.skip(1)
 
-    def parse(self,text):
+    def parse(self,text,show_tokens = True):
         #print 'PARSE'
-        if self.debug:
+        if show_tokens:
            self.lexer.input(text)
            for tok in self.lexer:
                print tok
