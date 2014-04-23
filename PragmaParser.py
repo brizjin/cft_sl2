@@ -1,4 +1,27 @@
 # -*- coding: utf-8 -*-
+import sublime, sublime_plugin
+import os
+#from PragmaParser import PragmaParser
+from oracle import db,timer
+
+
+test1 = '''
+    pragma macro(stdio_print,'stdio.put_line_pipe([1],[2])', substitute);
+    pragma macro(stdio_print2,'stdio.put_line_pipe([1],[2])');
+    function FunctionName return ref [AC_FIN] is
+    begin
+        &stdio_print('hello','DEBUG_PIPE');
+        return null;
+    exception when others then
+        return null;        
+    end;
+
+    procedure ProcName(a integer) is
+    begin
+        null;
+    exception when others then null;
+    end;
+'''
 from Parser import Parser
 
 import ply.lex  as lex
@@ -16,16 +39,27 @@ class PragmaParser(Parser):
         #"SUBSTITUTE",
         #"PROCESS"
         )
-    tokens = keywords + ('SEMI','PRAGMA','INLINE_STRING','ID',"LPAREN","RPAREN","COMMA")
+    tokens = keywords + ('SEMI','PRAGMA','INLINE_STRING','ID',"LPAREN","RPAREN","COMMA","SECTION_BEGIN","SECTION_END")
 
     t_ANY_ignore    = ' \n\t'
-    t_pragma_COMMA     = r','
-    t_pragma_LPAREN    = r'\('
-    t_pragma_RPAREN    = r'\)'
+    t_pragma_COMMA  = r','
+    t_pragma_LPAREN = r'\('
+    t_pragma_RPAREN = r'\)'
 
     states = (
         ('pragma','exclusive'),
     )
+    # def t_SECTION(self,t):
+    #     ur'╒═+╕\n│ +\w+ +│\n└─+┘'
+    #     return t
+    def t_SECTION_BEGIN(self,t):
+        ur'╒═+╕\n│\s(?P<section_name>\w+)\s+│\n'        
+        t.value = t.lexer.lexmatch.group('section_name')
+        return t
+    def t_SECTION_END(self,t):
+        ur'└─+┘'
+        t.value = ''
+        return t
 
     def t_PRAGMA(self,t):
     	r'(?i)PRAGMA'
@@ -64,6 +98,11 @@ class PragmaParser(Parser):
 
             return t
         #print 'SKIP ID =',t
+    
+        
+    #def t_SKIP_SYMBOLS(self,t):
+    #    ur'\[[a-zA-Z_][a-zA-Z0-9_]*\]|&|\(.*?\)|═|╒|│|╕|└|┘|─|\((.|\n)*?\)'
+        #print "SKIP_SYMBOLS=",t
 
 
     def t_error(self,t):
@@ -88,15 +127,27 @@ class PragmaParser(Parser):
     #     p[0] = p[1]
     def p_prog(self,p):
         'program : statements'
-        #print 'program'
         p[0] = p[1]
+    def p_prog2(self,p):
+        'program : sections'
+        p[0] = p[1]
+    def p_sections(self,p):
+        'sections : sections section'
+        p[0] = dict(p[1].items()+p[2].items())
+    def p_sections2(self,p):
+        'sections : section'
+        p[0] = p[1]
+    def p_section(self,p):
+        'section : SECTION_BEGIN statements SECTION_END'
+        p[0] = {p[1]:p[2]}
+
     def p_optional(self,p):
         ''' program :
             pragma_params :
+            statements :
             '''
     def p_statements(self,p):
        '''statements : statements statement'''
-       #p[1].update(p[2])
        p[0] = dict(p[1].items() + {p[2].name:p[2]}.items())
     def p_statements2(self,p):
         '''statements : statement'''
@@ -153,3 +204,45 @@ class PragmaParser(Parser):
     def p_error(self,p):
         print "SYNTAX ERROR on ", p
         #yacc.errok()
+
+class test2Command(sublime_plugin.TextCommand):
+    def run(self, edit):
+        
+        t = timer()        
+        print "test2 command is starting..."
+        #from PlPlus import PlPlus
+        #p = PlPlus(debug=1).parse(test1)
+        #from PlPlusMacro import PlPlusMacro
+        #macro=PlPlusMacro(debug=1)        
+
+
+        #text = db["LIABILITY_1417U"].meths["EPL_IMPORT"].get_sources()
+        #text = db["INSIDER"].meths["Z3267103821"].get_sources()
+        #text = db["PAYMENT"].meths["PROCESS#AUTO"].get_sources()
+        #text = db["SCAN_STATION"].meths["BEGIN_WORK"].get_sources()
+        #text = db["DEBT_PARAM"].meths["NEW#AUTO"].get_sources()
+        #text = db["MON_EVENT"].meths["CLIENT_PRODUCTS"].get_sources()
+        #text = db["MON_EVENT"].meths["L_CALL_METHODS"].get_sources()
+        #text = db["RUNTIME"].meths["PROFILE_LIB"].get_sources()
+        text = db["RUNTIME"].meths["MACRO_LIB"].get_sources()
+        #text = db["EPL_REQUESTS"].meths["L"].get_sources()
+        #text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
+        #text = test1
+        t.print_time('Получение текста')
+        t=timer()
+        #print 'TEXT=',text
+        p=PragmaParser(debug=0).parse(text,show_tokens=False)
+        #p=PragmaParser(debug=1).parse(text,show_tokens=True)
+
+
+
+        # if p:
+        #     print "Parser="
+        #     for a in p:
+        #         print unicode(a)
+        # else:
+        #     print "Нет текста для анализа..."
+        # print "finished"
+        print p
+
+        t.print_time('Разбор')
