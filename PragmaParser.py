@@ -101,8 +101,8 @@ class PragmaParser(Parser):
     
         
     #def t_SKIP_SYMBOLS(self,t):
-    #    ur'\[[a-zA-Z_][a-zA-Z0-9_]*\]|&|\(.*?\)|═|╒|│|╕|└|┘|─|\((.|\n)*?\)'
-        #print "SKIP_SYMBOLS=",t
+    #   ur'\[[a-zA-Z_][a-zA-Z0-9_]*\]|&|\(.*?\)|═|╒|│|╕|└|┘|─|\((.|\n)*?\)'
+    #   #print "SKIP_SYMBOLS=",t
 
 
     def t_error(self,t):

@@ -36,7 +36,7 @@ class Parser(object):
         t.lexer.skip(1)
 
     def parse(self,text,show_tokens = True):
-        #print 'PARSE'
+        #self.text = text
         if show_tokens:
            self.lexer.input(text)
            for tok in self.lexer:
