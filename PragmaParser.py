@@ -96,11 +96,11 @@ class PragmaParser(Parser):
             '''
     def p_statements(self,p):
        '''statements : statements statement'''
-       p[1].append(p[2])
-       p[0] = p[1]
+       #p[1].update(p[2])
+       p[0] = dict(p[1].items() + {p[2].name:p[2]}.items())
     def p_statements2(self,p):
         '''statements : statement'''
-        p[0] = [p[1]]
+        p[0] = {p[1].name:p[1]}
     def p_statement(self,p):
         '''statement : pragma_macro_substitute'''
         p[0] = p[1]
@@ -111,7 +111,7 @@ class PragmaParser(Parser):
     def p_pragma(self,p):
         ''' pragma_macro_substitute : PRAGMA MACRO LPAREN idorstring COMMA string pragma_params RPAREN SEMI'''
         def repr(s):            
-            return "@PRAGMA MACRO %s %s=%s"%(s.params,s.name,s.value)
+            return (u"@PRAGMA MACRO %s %s=%s"%(s.params,s.name,s.value)).encode('utf8')
         #print "P=",p.stack[4]            
         #p[0] = name_dict(p,["pragma","macro","lparen","name","comma","value","params"],repr)
         p[0] = name_dict({
@@ -125,7 +125,7 @@ class PragmaParser(Parser):
     def p_pragma_params2(self,p):
         '''pragma_params : COMMA options COMMA bool'''
         p[0] = name_dict({"options" : p[2],
-                          "flag"    : p[4]}).set_repr(lambda s: "Flag=%s Options=%s"%(s.flag,s.options))
+                          "flag"    : p[4]}).set_repr(lambda s: (u"Flag=%s Options=%s"%(s.flag,s.options)).encode('utf8') )
     def p_pragma_params3(self,p):
         '''pragma_params : COMMA bool'''
         p[0] = p[2]
@@ -139,8 +139,7 @@ class PragmaParser(Parser):
 
     def p_bool(self,p):
         ''' bool : TRUE
-            bool : FALSE
-        '''
+            bool : FALSE'''
         p[0] = p[1]
 
     def p_opts(self,p):

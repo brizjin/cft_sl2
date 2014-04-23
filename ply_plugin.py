@@ -107,6 +107,7 @@ class test2Command(sublime_plugin.TextCommand):
         # else:
         #     print "Нет текста для анализа..."
         # print "finished"
+        print p
 
         t.print_time('Разбор')
 
