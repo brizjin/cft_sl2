@@ -6,12 +6,13 @@ from oracle import db,timer
 
 
 test1 = '''
-    pragma macro(stdio_print,'stdio.put_line_pipe([1],[2])', substitute);
-    pragma macro(stdio_print2,'#stdio.put_line_pipe#');
+    pragma macro(stdio_print,'stdio.put_line_pipe([1]||[1],[2])', substitute);
+    pragma macro(abc,'stdio.put_line_pipe');
     function FunctionName return ref [AC_FIN] is
     begin
         &stdio_print('hello','DEBUG_PIPE');
-        &stdio_print2('test','world');
+        &abc('test','world');
+        &stdio_print('new','line');
         return null;
     exception when others then
         return null;        
@@ -139,11 +140,13 @@ class PragmaCallParser(Parser):
 
     def p_statements(self,p):
         "statements : statements statement"
-        p[0] = dict(p[1].items()+p[2].items())
+        #p[0] = dict(p[1].items()+p[2].items())
+        p[1].append(p[2])
+        p[0] = p[1]
 
     def p_statements2(self,p):
         "statements : statement"
-        p[0] = p[1]
+        p[0] = [p[1]]
 
     def p_statement(self,p):
         """ statement : pragma_macro_call_substitute
@@ -151,17 +154,36 @@ class PragmaCallParser(Parser):
         """
         #print "P2=",p.lexspan(1)
         #p[0] = {p[1].name:(p[1],p.lexspan(1))}
-        p[1]["position"] = p.lexspan(1)
-        p[0] = {p[1].name:p[1]}
+        #p[1]["position"] = p.lexspan(1)
+
+        #print "LEXSPAN=",p.lexspan(1)#,p
+        v,correction = p[1]
+        beg,end = p.lexspan(1)
+        p[0] = (v,(beg,end + correction))
 
     def p_pragma_macro_call_substitute(self,p):
         "pragma_macro_call_substitute : AMP ID LPAREN params RPAREN"
-        p[0] = name_dict({"name":p[2],"params":p[4]}).set_repr(lambda s:u"MACRO_CALL_SUBSTITUTE %s%s"%(s.name,s.params))
+        
+        name        = p[2]
+        params      = p[4]
+        pragma_def  = self.pragmas[name].value
+        for i,param_value in enumerate(params): #Делаем подстановку параметров
+            pragma_def = pragma_def.replace('[%i]'%(i+1),param_value)
+
+
+        #print "SUBST=",pragma_def
+
+        #p[0] = name_dict({"name":p[2],"params":p[4]}).set_repr(lambda s:u"MACRO_CALL_SUBSTITUTE %s%s"%(s.name,s.params))
+        p[0] = (pragma_def,1)
+
+
     def p_pragma_macro_call(self,p):
         "pragma_macro_call : AMP ID"
-        #print "ID=",p.slice[2].pragma_def
-        #print "DEF=",self.pragmas[p[2]]
-        p[0] = name_dict({"name":p[2]}).set_repr(lambda s:u"MACRO_CALL %s"%(s.name))
+        name = p[2]
+        name_len = len(p.slice[2].value)
+        p[0] = (self.pragmas[name].value,name_len)
+
+        #p[0] = name_dict({"name":p[2]}).set_repr(lambda s:u"MACRO_CALL %s"%(s.name))
 
     def p_params(self,p):
         "params : params COMMA idorstring"
@@ -203,22 +225,31 @@ class test3Command(sublime_plugin.TextCommand):
         #from PragmaParser import PragmaParser
         #p1=PragmaParser(debug=0).parse(text,show_tokens=True)
         #print "PARSER1=",p1
-        parser = PragmaCallParser(debug=0)
-        p2 = parser.parse(text,show_tokens=True)
-        #new_text = ""
-        #print "p2=",p2
-        for k in p2:
-            print "k=",k
-            p = p2[k]
-            beg,end = p["position"]        
-            p_def = parser.pragmas[k]
-            p_def_value = p_def.value
-            if 'substitute' in p_def.params:
-                for i,param_value in enumerate(p.params):
-                    p_def_value = p_def_value.replace('[%i]'%(i+1),param_value)
-            text = text[:beg] + p_def_value[1:-1] + text[end+1:]
-        print text
-
-        #print p2["stdio_print"]["position"]
+        
+        pragmas_call = PragmaCallParser(debug=0).parse(text,show_tokens=True)
+        #pragmas_def  = parser.pragmas
+        # for k in p2:
+        #     print "k=",k
+        #     p = p2[k]
+        #     beg,end = p["position"]        
+        #     p_def = parser.pragmas[k]
+        #     p_def_value = p_def.value
+        #     if 'substitute' in p_def.params:
+        #         for i,param_value in enumerate(p.params):
+        #             p_def_value = p_def_value.replace('[%i]'%(i+1),param_value)
+        #     text = text[:beg] + p_def_value[1:-1] + text[end+1:]
+        # print text
+        text_arr = []
+        #print "PRAGMA_CALL=", pragmas_call
+        prev_end = 0
+        text_len = len(text)
+        for v,(beg,end) in pragmas_call:
+            text_arr.append(text[prev_end:beg])
+            #text_arr.append(text[beg:end])
+            text_arr.append(v[1:-1])
+            prev_end = end
+        text_arr.append(text[prev_end:text_len])
+        text_new = "".join(text_arr)
+        print "TEXT=",text,"MACROTEXT=",text_new
 
         t.print_time('Разбор')
