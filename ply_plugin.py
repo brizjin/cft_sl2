@@ -219,28 +219,11 @@ class test3Command(sublime_plugin.TextCommand):
 
     def run(self, edit):
         t = timer()  
-        text = test1
+        #text = test1
+        text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
 
-
-        #from PragmaParser import PragmaParser
-        #p1=PragmaParser(debug=0).parse(text,show_tokens=True)
-        #print "PARSER1=",p1
-        
         pragmas_call = PragmaCallParser(debug=0).parse(text,show_tokens=True)
-        #pragmas_def  = parser.pragmas
-        # for k in p2:
-        #     print "k=",k
-        #     p = p2[k]
-        #     beg,end = p["position"]        
-        #     p_def = parser.pragmas[k]
-        #     p_def_value = p_def.value
-        #     if 'substitute' in p_def.params:
-        #         for i,param_value in enumerate(p.params):
-        #             p_def_value = p_def_value.replace('[%i]'%(i+1),param_value)
-        #     text = text[:beg] + p_def_value[1:-1] + text[end+1:]
-        # print text
         text_arr = []
-        #print "PRAGMA_CALL=", pragmas_call
         prev_end = 0
         text_len = len(text)
         for v,(beg,end) in pragmas_call:

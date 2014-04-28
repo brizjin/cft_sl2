@@ -224,9 +224,9 @@ class test2Command(sublime_plugin.TextCommand):
         #text = db["MON_EVENT"].meths["CLIENT_PRODUCTS"].get_sources()
         #text = db["MON_EVENT"].meths["L_CALL_METHODS"].get_sources()
         #text = db["RUNTIME"].meths["PROFILE_LIB"].get_sources()
-        text = db["RUNTIME"].meths["MACRO_LIB"].get_sources()
+        #text = db["RUNTIME"].meths["MACRO_LIB"].get_sources()
         #text = db["EPL_REQUESTS"].meths["L"].get_sources()
-        #text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
+        text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
         #text = test1
         t.print_time('Получение текста')
         t=timer()
