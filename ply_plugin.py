@@ -3,6 +3,8 @@ import sublime, sublime_plugin
 import os
 #from PragmaParser import PragmaParser
 from oracle import db,timer
+import re
+sections_regex = re.compile(r'(?P<head>╒═+╕\n│ (?P<name>[A-Z]+) +│\n)(?P<body>.*?\n?)(?P<bottom>└─+┘\n)'.decode('utf-8'),re.S) #поиск секций
 
 
 test1 = '''
@@ -69,7 +71,86 @@ test2 = '''
     pragma macro(get_field,'&get_field0([1],[2])', substitute);
 
 '''
+test3 = '''╒══════════════════════════════════════════════════════════════════════════════╕
+│ EXECUTE                                                                      │
+    function NEW_AUTO(
+        P_XML_IN        IN      MEMO_BIG                --1  XML IN
+    )return null
+    is
+    pragma macro(a,'stdio.put_line_pipe([1],''DEBUG_PIPEa'');',substitute);
+    pragma macro(a2,'stdio.put_line_pipe');
+    
+    begin
+        &a('TEST')
+        &b('TEST')
+        &c('TEST')
+        &d('TEST')
 
+        &a2('TEST','DEBUG_PIPE_TEST');
+        -- Установка значения реквизита "Дата запроса"
+        --[DATE_BEG] := P_DATE_BEG;
+        -- Установка значения реквизита "Дата ответа"
+        --[DATE_END] := P_DATE_END;
+        -- Установка значения реквизита "XML IN"
+        --[XML_IN] := P_XML_IN;
+        -- Установка значения реквизита "XML OUT"
+        --[XML_OUT] := P_XML_OUT;
+        -- Установка значения реквизита "Пользователь"
+        --[USER] := P_USER;
+        
+        ::[EPL_REQUESTS].[L].request(P_XML_IN);
+    end;
+└──────────────────────────────────────────────────────────────────────────────┘
+╒══════════════════════════════════════════════════════════════════════════════╕
+│ VALIDATE                                                                     │
+    pragma macro(b,'stdio.put_line_pipe([1],''DEBUG_PIPEb'');',substitute);
+    begin
+        --if P_MESSAGE = 'DEFAULT' then
+            --P_XML_IN  := [XML_IN];
+            --P_XML_OUT := [XML_OUT];
+            --P_DATE_BEG := sysdate;
+        --end if;
+        
+        &b('TEST')  
+        &c('TEST')
+        &d('TEST')
+        if P_MESSAGE = 'VALIDATE' then
+            if P_INFO = 'FORMAT_XML_IN' then
+                P_XML_IN := regexp_replace(P_XML_IN,'(<.*?>)','\1'||chr(10));
+            end if;
+        end if;
+        
+        --stdio.put_line_pipe('P_INFO='||P_INFO,'DEBUG_PIPE');
+    end;
+└──────────────────────────────────────────────────────────────────────────────┘
+╒══════════════════════════════════════════════════════════════════════════════╕
+│ PUBLIC                                                                       │
+    pragma macro(c,'stdio.put_line_pipe([1],''DEBUG_PIPEc'');',substitute);
+    
+    function f(a integer)return boolean
+    is
+    begin
+        
+        &c('TEST')
+        
+    end;
+└──────────────────────────────────────────────────────────────────────────────┘
+╒══════════════════════════════════════════════════════════════════════════════╕
+│ PRIVATE                                                                      │
+    pragma macro(d,'stdio.put_line_pipe([1],''DEBUG_PIPEd'');',substitute);
+    function f2(a integer)return boolean
+    is
+    begin
+    
+        &c('TEST')
+        &d('TEST')
+        
+    end;
+└──────────────────────────────────────────────────────────────────────────────┘
+╒══════════════════════════════════════════════════════════════════════════════╕
+│ VBSCRIPT                                                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+'''
 
 
 
@@ -91,7 +172,7 @@ class PragmaCallParser(Parser):
         'ID',"LPAREN","RPAREN","COMMA",'INLINE_STRING')
     t_pragma_COMMA      = r','
     t_pragma_LPAREN     = r'\('
-    t_pragma_RPAREN     = r'\)'
+    #t_pragma_RPAREN     = r'\)'
     t_ANY_ignore            = ' \n\t'
     #t_AMP               = r'&'
 
@@ -121,18 +202,24 @@ class PragmaCallParser(Parser):
         r';'
         if t.lexer.current_state() == 'pragma':
             t.lexer.begin('INITIAL')
-            #return t
         return
+
+    def t_pragma_RPAREN(self,t):
+        r'\)'
+        if t.lexer.current_state() == 'pragma':
+            t.lexer.begin('INITIAL')
+        return t
 
     def t_ANY_ID(self,t):
         r'[a-zA-Z_][a-zA-Z0-9_]*'
         value = t.value.upper()
         if t.lexer.current_state() == 'pragma':
-            if not "substitute" in self.pragmas[t.value].params:
-                t.lexer.begin('INITIAL')
-            #t.pragma_def = self.pragmas[t.value]
-                #print "substitute=",self.pragmas[t.value].params
-            return t
+            if t.value in self.pragmas:
+                if not "substitute" in self.pragmas[t.value].params:
+                    t.lexer.begin('INITIAL')
+                #t.pragma_def = self.pragmas[t.value]
+                    #print "substitute=",self.pragmas[t.value].params
+                return t
 
     def p_program(self,p):
         "program : statements"
@@ -205,7 +292,7 @@ class PragmaCallParser(Parser):
     def parse(self,text,show_tokens = True):
         #self.text = text        
         self.pragmas=PragmaParser(debug=0).parse(text,show_tokens=False)
-        #print "Pragmas=",pragmas
+        print "Pragmas=",self.pragmas
 
         if show_tokens:
            self.lexer.input(text)
@@ -214,25 +301,80 @@ class PragmaCallParser(Parser):
 
         return self.yacc.parse(text,lexer=self.lexer,tracking=True)
 
+    def parse_sections(self,sections_text):
+        def pragma_macro_replace(text,pragmas_call):
+            text_arr = []
+            prev_end = 0
+            text_len = len(text)
+            for v,(beg,end) in pragmas_call:
+                text_arr.append(text[prev_end:beg])
+                #text_arr.append(text[beg:end])
+                text_arr.append(v[1:-1])
+                prev_end = end
+            text_arr.append(text[prev_end:text_len])
+            text_new = "".join(text_arr)
+            return text_new
+
+        pragmas_def = PragmaParser(debug=0).parse(sections_text,show_tokens=False)
+        sections = {}
+        heads    = {}
+        bottoms  = {}
+        for s in sections_regex.finditer(sections_text):            
+            name = s.group('name')
+            sections[name]  = s.group('body')
+            heads[name]     = s.group('head')
+            bottoms[name]   = s.group('bottom')
+
+        def new_section_text(pragmas_def_add):
+            section_name = pragmas_def_add[0]
+            self.pragmas = {}
+            for p in pragmas_def_add:
+                self.pragmas.update(pragmas_def[p])
+            section_text = sections[section_name]
+            pragmas_call = self.yacc.parse(section_text,lexer=self.lexer,tracking=True)
+            return heads[section_name] + pragma_macro_replace(section_text,pragmas_call) + bottoms[section_name]
+
+        return     new_section_text(['EXECUTE','VALIDATE','PUBLIC','PRIVATE']) \
+                 + new_section_text([          'VALIDATE','PUBLIC','PRIVATE']) \
+                 + new_section_text([                     'PUBLIC'          ]) \
+                 + new_section_text([          'PRIVATE', 'PUBLIC'          ]) \
+
+
+
+
 class test3Command(sublime_plugin.TextCommand):    
    
 
     def run(self, edit):
         t = timer()  
-        #text = test1
-        text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
+        text = test3.decode('utf-8')
+        #text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
+        #print text
+        #print 't=',text
+        #print text
+        #pragmas=PragmaParser(debug=0).parse(text,show_tokens=False)
+        #pragmas_call = PragmaCallParser(debug=0).parse(text,show_tokens=True)
+        #print "PRAGMAS=",pragmas
+        new_text = PragmaCallParser(debug=0).parse_sections(text)
+        print "NEW_TEXT=",new_text
 
-        pragmas_call = PragmaCallParser(debug=0).parse(text,show_tokens=True)
-        text_arr = []
-        prev_end = 0
-        text_len = len(text)
-        for v,(beg,end) in pragmas_call:
-            text_arr.append(text[prev_end:beg])
-            #text_arr.append(text[beg:end])
-            text_arr.append(v[1:-1])
-            prev_end = end
-        text_arr.append(text[prev_end:text_len])
-        text_new = "".join(text_arr)
-        print "TEXT=",text,"MACROTEXT=",text_new
+
+
+            #sections_dict[s.group(1)] = section(self,s.start(2),s.end(2),s.group(1),text)
+
+
+        # text_arr = []
+        # prev_end = 0
+        # text_len = len(text)
+        # for v,(beg,end) in pragmas_call:
+        #     text_arr.append(text[prev_end:beg])
+        #     #text_arr.append(text[beg:end])
+        #     text_arr.append(v[1:-1])
+        #     prev_end = end
+        # text_arr.append(text[prev_end:text_len])
+        # text_new = "".join(text_arr)
+
+
+        # print "TEXT=",text,"MACROTEXT=",text_new
 
         t.print_time('Разбор')
