@@ -33,18 +33,29 @@ class PragmaParser(Parser):
     def __init__(self,debug = 0):
         super(PragmaParser,self).__init__(debug)
 
-    keywords = ("MACRO",
+    keywords = (
         "TRUE",
         "FALSE",
         #"SUBSTITUTE",
         #"PROCESS"
         )
-    tokens = keywords + ('SEMI','PRAGMA','INLINE_STRING','ID',"LPAREN","RPAREN","COMMA","SECTION_BEGIN","SECTION_END")
 
-    t_ANY_ignore    = ' \n\t'
-    t_pragma_COMMA  = r','
-    t_pragma_LPAREN = r'\('
-    t_pragma_RPAREN = r'\)'
+    pragmas = ("MACRO","INCLUDE")
+
+    tokens = keywords + pragmas + ('SEMI','PRAGMA',
+        'INLINE_STRING','ID',
+        "LPAREN","RPAREN",
+        "COMMA","SECTION_BEGIN","SECTION_END",
+        'COLON','LBRACKET', 'RBRACKET','PERIOD',)
+
+    t_ANY_ignore      = ' \n\t'
+    t_pragma_COMMA    = r','
+    t_pragma_LPAREN   = r'\('
+    t_pragma_RPAREN   = r'\)'
+    t_pragma_COLON    = r':'
+    t_pragma_LBRACKET = r'\['
+    t_pragma_RBRACKET = r'\]'
+    t_pragma_PERIOD   = r'\.'
 
     states = (
         ('pragma','exclusive'),
@@ -66,8 +77,9 @@ class PragmaParser(Parser):
         lc = t.lexer.clone()
 
         lc.begin('pragma')        
-        tc = lc.token()        
-        if tc and tc.type not in ["MACRO"]: #Если не обрабатываемая прагма, то пропускаем
+        tc = lc.token()
+        #print 'TYPE=',tc.type
+        if tc and tc.type not in ["MACRO","INCLUDE"]: #Если не обрабатываемая прагма, то пропускаем
             #print "NOT PRAGMA MACRO",t,tc
             print 'SKIP PRAGMA',tc.value.upper()
             return
@@ -89,7 +101,7 @@ class PragmaParser(Parser):
         #if value in self.keywords:
         #    t.type = value
         if t.lexer.current_state() == 'pragma':
-            if value in self.keywords:
+            if value in self.keywords or value in self.pragmas:
                 t.type = value
             #elif value not in ["MACRO"]: #Если не обрабатываемая прагма, то пропускаем
             #    t.lexer.begin('INITIAL')
@@ -147,14 +159,18 @@ class PragmaParser(Parser):
             statements :
             '''
     def p_statements(self,p):
-       '''statements : statements statement'''
-       p[0] = dict(p[1].items() + {p[2].name:p[2]}.items())
+        '''statements : statements statement'''
+        p[1].update(p[2])        
+        p[0] = p[1]
     def p_statements2(self,p):
         '''statements : statement'''
-        p[0] = {p[1].name:p[1]}
-    def p_statement(self,p):
-        '''statement : pragma_macro_substitute'''
         p[0] = p[1]
+    def p_statement(self,p):
+        '''statement : pragma_macro_substitute
+           statement : pragma_include
+        '''
+        p[0] = p[1]
+
     def p_idorstring(self,p):
         '''idorstring : ID
            idorstring : INLINE_STRING'''
@@ -162,13 +178,30 @@ class PragmaParser(Parser):
     def p_pragma(self,p):
         ''' pragma_macro_substitute : PRAGMA MACRO LPAREN idorstring COMMA string pragma_params RPAREN SEMI'''
         def repr(s):            
-            return (u"@PRAGMA MACRO %s %s=%s"%(s.params,s.name,s.value)).encode('utf8')
-        #print "P=",p.stack[4]            
-        #p[0] = name_dict(p,["pragma","macro","lparen","name","comma","value","params"],repr)
-        p[0] = name_dict({
+            #return (u"@PRAGMA MACRO %s %s=%s"%(s.params,s.name,s.value)).encode('utf8')
+            return (u"MACRO %s"%s.name).encode('utf8')
+        macro = name_dict({
             "name"  :p[4],
             "value" :p[6],
             "params":p[7]}).set_repr(repr)
+        p[0] = {macro.name:macro}
+
+
+
+    def p_pragma_include(self,p):
+        ''' pragma_include : PRAGMA INCLUDE LPAREN method RPAREN SEMI'''
+        def repr(s):            
+            return (u"INCLUDE ::[%s].[%s]"%(s.class_name,s.name)).encode('utf8')
+        include = name_dict({
+            "class_name"  :p[4][0],
+            "name" :p[4][1]}).set_repr(repr)
+        text = db[include.class_name].meths[include.name].get_sources()
+        pragmas=PragmaParser(debug=0).parse(text,show_tokens=False)
+        p[0] = pragmas['PUBLIC']
+
+    def p_pragma_method(self,p):
+        ''' method : COLON COLON LBRACKET ID RBRACKET PERIOD LBRACKET ID RBRACKET'''
+        p[0] = (p[4],p[8])
 
     def p_pragma_params(self,p):
         '''pragma_params : COMMA options'''
@@ -209,7 +242,7 @@ class test2Command(sublime_plugin.TextCommand):
     def run(self, edit):
         
         t = timer()        
-        print "test2 command is starting..."
+        #print "test2 command is starting..."
         #from PlPlus import PlPlus
         #p = PlPlus(debug=1).parse(test1)
         #from PlPlusMacro import PlPlusMacro
@@ -226,15 +259,19 @@ class test2Command(sublime_plugin.TextCommand):
         #text = db["RUNTIME"].meths["PROFILE_LIB"].get_sources()
         #text = db["RUNTIME"].meths["MACRO_LIB"].get_sources()
         #text = db["EPL_REQUESTS"].meths["L"].get_sources()
-        text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
+        #text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
         #text = test1
-        t.print_time('Получение текста')
-        t=timer()
+        #t.print_time('Получение текста')
+        #t=timer()
         #print 'TEXT=',text
-        p=PragmaParser(debug=0).parse(text,show_tokens=False)
+        #p=PragmaParser(debug=0).parse(text,show_tokens=False)
         #p=PragmaParser(debug=1).parse(text,show_tokens=True)
-
-
+  
+        #text = test3.decode('utf-8')
+        text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
+        print text
+        pragmas=PragmaParser(debug=0).parse(text,show_tokens=False)
+        print pragmas
 
         # if p:
         #     print "Parser="
@@ -243,6 +280,5 @@ class test2Command(sublime_plugin.TextCommand):
         # else:
         #     print "Нет текста для анализа..."
         # print "finished"
-        print p
 
         t.print_time('Разбор')
