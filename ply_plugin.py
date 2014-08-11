@@ -329,15 +329,16 @@ class PragmaCallParser(Parser):
             section_name = pragmas_def_add[0]
             self.pragmas = {}
             for p in pragmas_def_add:
-                self.pragmas.update(pragmas_def[p])
+                print "DEF=",pragmas_def[p]
+                self.pragmas.update(pragmas_def[p]) #добавляем определения из других секций
             section_text = sections[section_name]
             pragmas_call = self.yacc.parse(section_text,lexer=self.lexer,tracking=True)
             return heads[section_name] + pragma_macro_replace(section_text,pragmas_call) + bottoms[section_name]
 
-        return     new_section_text(['EXECUTE','VALIDATE','PUBLIC','PRIVATE']) \
-                 + new_section_text([          'VALIDATE','PUBLIC','PRIVATE']) \
-                 + new_section_text([                     'PUBLIC'          ]) \
-                 + new_section_text([          'PRIVATE', 'PUBLIC'          ]) \
+        return new_section_text(['EXECUTE','VALIDATE','PUBLIC','PRIVATE']) \
+             + new_section_text([          'VALIDATE','PUBLIC','PRIVATE']) \
+             + new_section_text([                     'PUBLIC'          ]) \
+             + new_section_text([          'PRIVATE', 'PUBLIC'          ]) \
 
 
 
@@ -346,19 +347,66 @@ class test3Command(sublime_plugin.TextCommand):
    
 
     def run(self, edit):
-        t = timer()  
-        text = test3.decode('utf-8')
-        #text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
-        #print text
+        t    = timer()  
+        #text = test3.decode('utf-8')
+        # text = db["EPL_REQUESTS"].meths["NEW_AUTO"].get_sources()
+        # print text
+        # pragmas=PragmaParser(debug=0).parse(text,show_tokens=False)
+        # print pragmas
         #print 't=',text
         #print text
         #pragmas=PragmaParser(debug=0).parse(text,show_tokens=False)
         #pragmas_call = PragmaCallParser(debug=0).parse(text,show_tokens=True)
         #print "PRAGMAS=",pragmas
-        new_text = PragmaCallParser(debug=0).parse_sections(text)
-        print "NEW_TEXT=",new_text
+        #new_text = PragmaCallParser(debug=0).parse_sections(text)
+        #print "NEW_TEXT=",new_text
+        #text    = db["DEBUG_TRIGGER"].meths["MACRO_LIB"].get_sources()
+        #pragmas = PragmaParser(debug=0).parse(text)
+        #print 'PR=',pragmas
 
+        # text = db["EPL_HIST_SRV_D"].meths["FILL_HIST"].get_sources()
+        # pragmas = PragmaParser(debug=0).parse(text)
+        # print pragmas
 
+        # import xmltodict
+        # file_path = 'C:\\Users\\isb5\\AppData\\Roaming\\Sublime Text 2\\Packages\\CFT\\cache\\classes.xml'
+        # f = open(file_path,"r")
+        # text = f.read()
+        # f.close()
+
+        #o = xmltodict.parse(text.decode('1251'))
+        # from bson import BSON
+        # print 'TEXT=',o['CLASSES'].keys()
+        # b = BSON.encode(o)
+        # print "BSON=",len(b)
+
+        #import pickle
+        import cPickle as pickle
+        import gzip
+
+        #favorite_color = { "lion": "yellow", "kitty": "red" }
+        fname = "C:\\Users\\isb5\\AppData\\Roaming\\Sublime Text 2\\Packages\\CFT\\cache\\save.p"
+        #file = gzip.GzipFile(fname, 'wb')
+        #file.write(pickle.dumps(o, 1))
+        #file.close()
+
+        def save(object, filename, bin = 1):
+            file = gzip.GzipFile(filename, 'wb')
+            file.write(pickle.dumps(object, bin))
+            file.close()
+
+        def load(filename):
+            file = gzip.GzipFile(filename, 'rb')
+            object = pickle.loads(file.read())
+            file.close()
+            return object
+
+        o = load(fname)
+        #print o
+        #pickle.dump( o, open( fname,"wb"))
+        #new_o = pickle.load( open( fname, "rb" ))
+
+        #new_text = PragmaCallParser(debug=0).parse_sections(text)
 
             #sections_dict[s.group(1)] = section(self,s.start(2),s.end(2),s.group(1),text)
 
@@ -378,3 +426,5 @@ class test3Command(sublime_plugin.TextCommand):
         # print "TEXT=",text,"MACROTEXT=",text_new
 
         t.print_time('Разбор')
+        # text2 = b.decode()
+        # t.print_time('Декодирование')
