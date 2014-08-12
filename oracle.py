@@ -213,29 +213,16 @@ class cft_settings_class(dict):
 		used_classes.insert(0,class_id)		
 		cft_settings.save()
 cft_settings = cft_settings_class()
+
 class timer(object):
 	def __init__(self):
 		self.begin = datetime.datetime.now()
-		self.last  = datetime.datetime.now()
-	def get_time_delta_str(self,begin,end):
-		delta 		= end - begin
-		delta_str 	= (datetime.datetime.min + delta).time().strftime("%H:%M:%S.%f").strip("0:") 
-		return delta_str
-	def get_time(self):
-		#delta 		= datetime.datetime.now() - self.begin
-		#delta_str 	= (datetime.datetime.min + delta).time().strftime("%H:%M:%S.%f").strip("0:") 
-		#return delta_str
-		return self.get_time_delta_str(self.begin,datetime.datetime.now())
-	def get_now(self):
-		return datetime.datetime.now().strftime("%H:%M:%S")
-	def print_time(self,text):
-		if TIMER_DEBUG:
-			print text,"за",self.get_time(),"сек."
-			self.last = datetime.datetime.now()	
-	def print_interval(self,text):
-		if TIMER_DEBUG:
-			print "%-6s"%self.get_time(),"%-6s"%self.get_time_delta_str(self.last,datetime.datetime.now()),text
-			self.last = datetime.datetime.now()
+	def interval(self):
+		#return (datetime.datetime.now() - self.begin).seconds
+		delta = datetime.datetime.now() - self.begin
+		delta = float(delta.seconds) + float(delta.microseconds)/1000000
+		return delta
+		
 class EventHook(object):
 
     def __init__(self):
@@ -888,10 +875,8 @@ class cftDB(object):
 		cl.update()
 		return cl
 
-#try:
-db = cftDB()
-#except Exception,e:
-#db = ""
+
+db = ''# cftDB()
 
 
 class connectCommand(sublime_plugin.WindowCommand):
@@ -1774,7 +1759,7 @@ class el(sublime_plugin.EventListener):
 		pass
 		#print "on_activated"
 	def on_load(self,view):
-		#print "ON_LOAD"
+		#return
 		view = dataView.active()
 		fileName, fileExtension = os.path.splitext(view.file_name())
 		if fileExtension == ".METHOD":
@@ -2024,4 +2009,95 @@ class my_auto_completeCommand(sublime_plugin.TextCommand):
 			}
 		)
 
+class db_class(object):
+	def __init__(self):
+		pass
+	def connect(self,connection_string):		
+		r = re.search('(?P<user>.+)/(?P<pass>.+)@(?P<dbname>.+)',connection_string)
+		self.connection_string 	= connection_string	
+		self.pool 				= cx_Oracle.SessionPool(user = r.group('user'),password = r.group('pass'),dsn = r.group('dbname'),min = 1,max = 5,increment = 1,threaded = False)
+		return self
+	def select(self,sql,*args):
+		class db_select(object):
+			def __init__(self,desc,rows):
+				self.desc = desc
+				self.rows = rows
+			def __repr__(self,line_max = None,columns = None):
+				rows_arr = [['N'] + [d for d in self.desc]] #Первая строка заголовки
+				for i,row in enumerate(self.rows):			#Конвертируем значения в строки в зависимости от типа. Добавим как массив колонок
+					rows_arr.append([u"%i"%(i+1)] + [{
+						int   			  : lambda v: u"%i"%v,
+						datetime.datetime : lambda v: v.strftime(u"%d.%m.%Y"),
+						}.get(v.__class__,  lambda v: v)(v) for v in row])
 
+				format_str = u''.join("%%-%is|"%max([len(r[i]) for r in rows_arr]) for i,d in enumerate(rows_arr[0]))
+				s 		   = u'\n'.join([(format_str%tuple(r))[0:line_max] for r in rows_arr])
+				return s.encode('utf-8')			
+			
+			def print_data(self,line_max = None,columns = None):
+				if not columns:
+					columns = self.desc
+				columns_idx = [self.desc.index(c) for c in columns]
+				
+				rows_arr = [['N'] + [self.desc[i] for i in columns_idx]] #Первая строка заголовки
+				for i,row in enumerate(self.rows):			#Конвертируем значения в строки в зависимости от типа. Добавим как массив колонок
+					data = [row[i] for i in columns_idx]
+					rows_arr.append([u"%i"%(i+1)] + [{
+						int   			  : lambda v: u"%i"%v,
+						datetime.datetime : lambda v: v.strftime(u"%d.%m.%Y"),
+						}.get(v.__class__,  lambda v: v)(v) for v in data])
+
+				format_str = u''.join("%%-%is|"%max([len(r[i]) for r in rows_arr]) for i,d in enumerate(rows_arr[0]))
+				s 		   = u'\n'.join([(format_str%tuple(r))[0:line_max] for r in rows_arr])
+				return s.encode('utf-8')
+
+			def __iter__(self):
+				for i,r in enumerate(self.rows):
+					yield self[i]
+
+			def __getitem__(self,index):
+				return dict(zip(self.desc,self.rows[index]))
+		try:
+			conn = self.pool.acquire()
+			cursor = conn.cursor()
+			cursor.arraysize = 50
+			cursor.execute(sql,args)
+
+			desc = [d[0].lower() for d in cursor.description]
+			rows = [[{type(None)	: lambda v: '',
+					  str  		 	: lambda v: unicode(v,'1251'),
+					  cx_Oracle.LOB : lambda v: unicode(v.read(),'1251'),
+					  }.get(v.__class__,lambda v:v)(v) for v in row] for row in cursor.fetchall()]
+
+			self.pool.release(conn)
+			value = db_select(desc,rows)#desc
+
+		except Exception,e:
+			print "*** Ошибка выполнения select:",e
+			if sys != None:
+				exc_type, exc_value, exc_traceback = sys.exc_info()
+				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)
+		return value
+
+class cache_fileCommand(sublime_plugin.TextCommand):
+	def run(self, edit):
+		t = timer()
+
+		d = db_class().connect("ibs/ibs@cftstage")
+		#print d.select("select * from classes where rownum < 15").__repr__(150)
+		s = d.select("select * from classes where rownum < 15")
+		#print s.__repr__(150)
+		print s.print_data(150,["name","id","has_instances","modified"])
+		#print s.print_data()
+		#print s[1]["name"]
+
+		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id
+																				,cl.name as name
+																				,cl.target_class_id as target_class_id
+																				,cl.base_class_id as base_class_id
+																				,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
+				 """
+		#s = d.select(sql)
+		#print s[0]["c"]
+		#print s.__repr__(150,["c"])
+		print "загрузка за %s сек"%t.interval()
