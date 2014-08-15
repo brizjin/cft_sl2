@@ -2025,18 +2025,23 @@ class db_class(object):
 			def __repr__(self,line_max = None,columns = None):
 				return self.text_table()
 
-			def text_table(self,columns = None,columns_widths = {},max_len = None,part = 1,first = 20,hide_nulls=True,trim_desc=False):
+			def text_table(self,columns = None,columns_widths = {},max_len = None,part = 1,first = None,hide_nulls=True,trim_desc=False):
 				if not columns:
 				 	columns = self.desc
 				def part_max_len(arr,part):
 					return sorted(arr)[int(len(arr)*part)-1]
 					
-					
-				widths   = dict((c,columns_widths.get(c,part_max_len([len(row[c]) for row in self],part))) for c in columns) #максимальная длина
+				widths = {}
+				for c in columns:
+					m = part_max_len([len(row[c]) for row in self],part)
+					if not trim_desc and(not hide_nulls and m==0 or m>0):
+						m = max(len(c),m)
+					m = columns_widths.get(c,m)
+					widths[c] = m
+
 				if hide_nulls:
 					columns  = [c for c in columns if widths.get(c) != 0]									#исключаем нулевые
-				if not trim_desc:
-					widths = dict((c,max(len(c),widths[c])) for c in columns)
+
 				
 
 				def join_line(cfunc,separator,fill,align):
@@ -2090,19 +2095,8 @@ class cache_fileCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		t = timer()
 		global d
-		#d = db_class().connect("ibs/ibs@cftstage")
-		#d = db_class()
-		#print d.select("select rownum n,v.* from classes v where rownum < 15") \
-		#	   .print_data2(None,{"name":30,"id":10,"has_instances":1,"entity_id":4,"parent_id":2,"interface":6})
-		print d.select("select rownum n,v.* from classes v where rownum < 250").text_table(max_len=149,part=0.8,first=None)
+		print d.select("select rownum n,v.* from classes v where rownum < 250").text_table(columns_widths = {"entity_id": 4,"short_name":0,"name":20},part=0.8,trim_desc=True)
 		print d.select("select * from dual").text_table(part=1)
-			   #.print_data2(["n","name","id","has_instances","modified"],{"name":30,"id":10,"has_instances":1}) #.__repr__(150)
-		#s = d.select("select * from classes where rownum < 15 order by modified desc nulls last")
-		#print s.__repr__(150)
-		#print s.print_data2(150,["name","id","has_instances","modified"])
-		#print s.print_data()
-		#print s[1]["name"]
-
 		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id
 																				,cl.name as name
 																				,cl.target_class_id as target_class_id
@@ -2110,9 +2104,4 @@ class cache_fileCommand(sublime_plugin.TextCommand):
 																				,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
 				 """
 		print d.select(sql)[0]["c"][0:1000]
-
-		#print s[0]["c"]
-		#print s.__repr__(150,["c"])
-		#print  '|{name:^5}|'.format(**{'name':"Hesssllo"})
-
 		print "загрузка за %s сек"%t.interval()
