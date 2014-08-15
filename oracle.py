@@ -2052,60 +2052,23 @@ class db_class(object):
 				s 		   = u'\n'.join((format_str%tuple(r))[0:line_max] for r in rows_arr)
 				return s.encode('utf-8')
 
-			@property
-			def cols(self):
-				class cols_collection(object):
-					def __getitem__(cols_collection_self,index):
-						class col_class(object):
-							@property
-							def max_len(col_class_self):
-								return max(len(v) for v in col_class_self.values)
-							@property
-							def values(col_class_self):									
-								return [c for c in col_class_self]
-							def __getitem__(col_class_self,index):
-								v = self.rows[index][col_class_self.index]
-								return {int   			   : lambda v: u"%i"%v,
-								 		datetime.datetime  : lambda v: v.strftime(u"%d.%m.%Y"),
-									   }.get(v.__class__,    lambda v: v)(v)
 
-						c = col_class()
-						c.name = index
-						c.index = self.desc.index(index)
-						return c
-					def add(cols_collection_self,col_name,insert_index,col_values):
-						for i,r in enumerate(self.rows):
-							r.insert(insert_index,col_values[i])
-						self.desc.insert(insert_index,col_name)
-
-				if not hasattr(self,'cols_'):
-					self.cols_ = cols_collection()			
-
-				return self.cols_
-
-			def print_data2(self,line_max = None,columns = None):
-				width_max = {}
+			def print_data2(self,columns = None,columns_widths = {},max_len = None):
 				if not columns:
-					columns = self.desc
-				else:
-					for c in columns:
-						if c.__class__ == tuple:
-							width_max[c[0]] = c[1]
-							columns[columns.index(c)] = c[0]
+				 	columns = self.desc
+				rows_arr = [dict((c,row[c][0:columns_widths.get(c)]) for c in columns) for row in self] # Объеденим колонку номеров и остальные выбранные колонки
+				widths   = dict((c,max(len(row[c]) for row in rows_arr)) for c in columns)
 
-				columns.insert(0,'N')
-				header   = [c for c in columns]
-				self.cols.add('N',0,[u"%i"%(i+1) for i,r in enumerate(self.rows)]) 						 # Колонка номеров строк
-				rows_arr = zip(*[[v[0:width_max.get(c)] for v in self.cols[c].values] for c in columns]) # Объеденим колонку номеров и остальные выбранные колонки
-				#widths2   = [ for i,c in enumerate(columns)]
-				#print "W2=",widths2
-				widths   = [max(len(header[i]),self.cols[c].max_len) if not width_max.get(c) else width_max.get(c) for i,c in enumerate(columns)]
-				#widths   = [max_width.get(c) in columns]
-				print "W=",widths
 				template = u"{0:{fill}{align}{width}}{1}"
-				s = u''
-				for r in rows_arr:
-					s += u''.join(template.format(c,u'│',fill=u' ',align=u'<',width=widths[i]) for i,c in enumerate(r)) + u'\n'
+				#s = u' '.join(columns)
+
+				s  = u''.join(template.format(u'',u'┬',fill=u'─',align=u'>',width=widths[c]) for c in columns)[0:max_len] + u'\n'
+				s += u''.join(template.format(c[0:widths[c]],u'│',fill=u' ',align=u'^',width=widths[c]) for c in columns)[0:max_len] + u'\n'
+				s += u''.join(template.format(u'',u'┼',fill=u'─',align=u'>',width=widths[c]) for c in columns)[0:max_len] + u'\n'
+
+				for row in rows_arr:
+					s += u''.join(template.format(row[c],u'│',fill=u' ',align=u'<',width=widths[c]) for c in columns)[0:max_len] + u'\n'
+				s += u''.join(template.format(u'',u'┴',fill=u'─',align=u'>',width=widths[c]) for c in columns)[0:max_len] + u'\n'
 				# format_str  = u''.join(u"%%-%is│"%m for m in maxs).strip(u'│')
 				# format_str2 = u''.join((u"{0:{fill}{align}%i}"%(m+1)).format(u'┬',fill=u'─',align=u'>') for m in maxs)
 				# print format_str2
@@ -2130,14 +2093,18 @@ class db_class(object):
 					yield self[i]
 
 			def __getitem__(self,index):
-				return dict(zip(self.desc,self.rows[index]))
+				row = [{int   			   : lambda v: u"%i"%v,
+						datetime.datetime  : lambda v: v.strftime(u"%d.%m.%Y"),
+						}.get(v.__class__,   lambda v: v)(v) for v in self.rows[index]]
+				return dict(zip(self.desc,row))
 		try:
 			conn = self.pool.acquire()
 			cursor = conn.cursor()
 			cursor.arraysize = 50
+			#print "SQL=",sql
 			cursor.execute(sql,args)
 
-			desc = [d[0].lower() for d in cursor.description]
+			desc = [unicode(d[0].lower(),'1251') for d in cursor.description]
 			rows = [[{type(None)	: lambda v: '',
 					  str  		 	: lambda v: unicode(v,'1251'),
 					  cx_Oracle.LOB : lambda v: unicode(v.read(),'1251'),
@@ -2160,7 +2127,11 @@ class cache_fileCommand(sublime_plugin.TextCommand):
 		global d
 		#d = db_class().connect("ibs/ibs@cftstage")
 		#d = db_class()
-		print d.select("select * from classes where rownum < 150").print_data2(150,[("name",30),("id",3),("has_instances",1),"modified"]) #.__repr__(150)
+		#print d.select("select rownum n,v.* from classes v where rownum < 15") \
+		#	   .print_data2(None,{"name":30,"id":10,"has_instances":1,"entity_id":4,"parent_id":2,"interface":6})
+		print d.select("select rownum n,v.* from classes v where rownum < 15") \
+			   .print_data2(columns_widths = {"name":25},max_len=150)
+			   #.print_data2(["n","name","id","has_instances","modified"],{"name":30,"id":10,"has_instances":1}) #.__repr__(150)
 		#s = d.select("select * from classes where rownum < 15 order by modified desc nulls last")
 		#print s.__repr__(150)
 		#print s.print_data2(150,["name","id","has_instances","modified"])
