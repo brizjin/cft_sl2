@@ -7,6 +7,8 @@ import pyPEG
 from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
 from xml.sax.saxutils import escape
 
+import cPickle as pickle
+import gzip
 
 plugin_name = "CFT"
 plugin_path 			= os.path.join(sublime.packages_path(),plugin_name)
@@ -2008,7 +2010,73 @@ class my_auto_completeCommand(sublime_plugin.TextCommand):
 				'next_completion_if_showing': False
 			}
 		)
+class db_select(object):
+			
+	def save(object, filename, bin = 1):
+		file = gzip.GzipFile(filename, 'wb')
+		file.write(pickle.dumps(object, bin))
+		file.close()
 
+	def load(object,filename):
+		file = gzip.GzipFile(filename, 'rb')
+		object = pickle.loads(file.read())
+		file.close()
+		return object
+
+	def __init__(self,desc,rows):
+		self.desc = desc
+		self.rows = rows
+	def __repr__(self,line_max = None,columns = None):
+		return self.text_table()
+
+	def text_table(self,columns = None,columns_widths = {},max_len = None,part = 1,first = None,hide_nulls=True,trim_desc=False):
+		if not columns:
+		 	columns = self.desc
+		def part_max_len(arr,part):
+			return sorted(arr)[int(len(arr)*part)-1]
+
+		widths = {}
+		for c in columns:
+			m = part_max_len([len(row[c]) for row in self[0:first]],part)
+			if not trim_desc and(not hide_nulls and m==0 or m>0):
+				m = max(len(c),m)
+			m = columns_widths.get(c,m)
+			widths[c] = m
+
+		if hide_nulls:
+			columns  = [c for c in columns if widths.get(c) != 0]		#исключаем нулевые	
+
+		def join_line(cfunc,separator,fill,align):
+			return separator + u''.join(u"{0:{fill}{align}{width}}{1}".format(cfunc(c),separator,fill=fill,align=align,width=widths[c]) for c in columns)[0:max_len] + u'\n'
+
+		s  = join_line(lambda c : u''					,u'┬',u'─',u'>')
+		s += join_line(lambda c : c[0:widths[c]].upper(),u'│',u' ',u'^')
+		s += join_line(lambda c : u''					,u'┼',u'─',u'>')
+		for i,row in enumerate(self):
+			if first and not first>i+1:
+				break;
+			s += join_line(lambda c : row[c][0:widths[c]]	,u'│',u' ',u'<')
+		s += join_line(lambda c : u''			,u'┴',u'─',u'>')
+
+		return s.encode('utf-8')
+
+	def __iter__(self):
+		for i,r in enumerate(self.rows):
+			yield self[i]
+
+	def __getitem__(self,index):
+		def get_row(i):
+			row = [{int   			   : lambda v: u"%i"%v,
+					datetime.datetime  : lambda v: v.strftime(u"%d.%m.%Y"),
+					}.get(v.__class__,   lambda v: v)(v) for v in self.rows[i]]
+			return dict(zip(self.desc,row))
+		if index.__class__ == slice:
+			return [get_row(i) for i in range(len(self.rows))[index]]
+		else:
+			return get_row(index)
+
+	def __getstate__(self):
+		return self.__dict__
 class db_class(object):
 	def __init__(self):
 		pass
@@ -2018,55 +2086,8 @@ class db_class(object):
 		self.pool 				= cx_Oracle.SessionPool(user = r.group('user'),password = r.group('pass'),dsn = r.group('dbname'),min = 1,max = 5,increment = 1,threaded = False)
 		return self
 	def select(self,sql,*args):
-		class db_select(object):
-			def __init__(self,desc,rows):
-				self.desc = desc
-				self.rows = rows
-			def __repr__(self,line_max = None,columns = None):
-				return self.text_table()
 
-			def text_table(self,columns = None,columns_widths = {},max_len = None,part = 1,first = None,hide_nulls=True,trim_desc=False):
-				if not columns:
-				 	columns = self.desc
-				def part_max_len(arr,part):
-					return sorted(arr)[int(len(arr)*part)-1]
-					
-				widths = {}
-				for c in columns:
-					m = part_max_len([len(row[c]) for row in self],part)
-					if not trim_desc and(not hide_nulls and m==0 or m>0):
-						m = max(len(c),m)
-					m = columns_widths.get(c,m)
-					widths[c] = m
-
-				if hide_nulls:
-					columns  = [c for c in columns if widths.get(c) != 0]									#исключаем нулевые
-
-				
-
-				def join_line(cfunc,separator,fill,align):
-					return separator + u''.join(u"{0:{fill}{align}{width}}{1}".format(cfunc(c),separator,fill=fill,align=align,width=widths[c]) for c in columns)[0:max_len] + u'\n'
-
-				s  = join_line(lambda c : u''			,u'┬',u'─',u'>')
-				s += join_line(lambda c : c[0:widths[c]],u'│',u' ',u'^')
-				s += join_line(lambda c : u''			,u'┼',u'─',u'>')
-				for i,row in enumerate(self):
-					if first and not first>i+1:
-						break;
-					s += join_line(lambda c : row[c][0:widths[c]]	,u'│',u' ',u'<')
-				s += join_line(lambda c : u''			,u'┴',u'─',u'>')
-
-				return s.encode('utf-8')
-
-			def __iter__(self):
-				for i,r in enumerate(self.rows):
-					yield self[i]
-
-			def __getitem__(self,index):
-				row = [{int   			   : lambda v: u"%i"%v,
-						datetime.datetime  : lambda v: v.strftime(u"%d.%m.%Y"),
-						}.get(v.__class__,   lambda v: v)(v) for v in self.rows[index]]
-				return dict(zip(self.desc,row))
+			
 		try:
 			conn = self.pool.acquire()
 			cursor = conn.cursor()
@@ -2095,13 +2116,25 @@ class cache_fileCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		t = timer()
 		global d
-		print d.select("select rownum n,v.* from classes v where rownum < 250").text_table(columns_widths = {"entity_id": 4,"short_name":0,"name":20},part=0.8,trim_desc=True)
-		print d.select("select * from dual").text_table(part=1)
-		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id
-																				,cl.name as name
-																				,cl.target_class_id as target_class_id
-																				,cl.base_class_id as base_class_id
-																				,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
-				 """
-		print d.select(sql)[0]["c"][0:1000]
+		sql = "select rownum n,v.* from classes v /*where rownum < 250*/"
+		import md5
+		print md5.md5(sql).hexdigest()
+		#s = d.select("select rownum n,v.* from classes v /*where rownum < 250*/")#.text_table(columns_widths = {"entity_id": 4,"short_name":0,"name":20},part=0.8,trim_desc=True)
+		fname = "C:\\Users\\isb5\\AppData\\Roaming\\Sublime Text 2\\Packages\\CFT\\cache\\select_classes.p"
+		#print s.__dict__
+		s = db_select('','')
+		#s.save(fname)
+		s = s.load(fname)
+		print s.text_table(columns_widths = {"entity_id": 4,"short_name":0,"name":20,"interface":10},part=0.8,trim_desc=True,first=10)
+
+		
+
+		#print d.select("select * from dual").text_table(part=1)
+		#sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id
+					# 															,cl.name as name
+					# 															,cl.target_class_id as target_class_id
+					# 															,cl.base_class_id as base_class_id
+					# 															,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
+				 # """
+		#print d.select(sql)[0]["c"][0:1000]
 		print "загрузка за %s сек"%t.interval()
