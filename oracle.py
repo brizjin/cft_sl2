@@ -2023,69 +2023,34 @@ class db_class(object):
 				self.desc = desc
 				self.rows = rows
 			def __repr__(self,line_max = None,columns = None):
-				rows_arr = [['N'] + [d for d in self.desc]] #Первая строка заголовки
-				for i,row in enumerate(self.rows):			#Конвертируем значения в строки в зависимости от типа. Добавим как массив колонок
-					rows_arr.append([u"%i"%(i+1)] + [{
-						int   			  : lambda v: u"%i"%v,
-						datetime.datetime : lambda v: v.strftime(u"%d.%m.%Y"),
-						}.get(v.__class__,  lambda v: v)(v) for v in row])
+				return self.text_table()
 
-				format_str = u'|'.join("%%-%is|"%max([len(r[i]) for r in rows_arr]) for i,d in enumerate(rows_arr[0]))
-				s 		   = u'\n'.join([(format_str%tuple(r))[0:line_max] for r in rows_arr])
-				return s.encode('utf-8')			
-			
-			def print_data(self,line_max = None,columns = None):
-				if not columns:
-					columns = self.desc
-				columns_idx = [self.desc.index(c) for c in columns]
-				
-				rows_arr = [['N'] + [self.desc[i] for i in columns_idx]] #Первая строка заголовки
-				for i,row in enumerate(self.rows):			#Конвертируем значения в строки в зависимости от типа. Добавим как массив колонок
-					data = [row[j] for j in columns_idx]
-					rows_arr.append([u"%i"%(i+1)] + [{
-						int   			  : lambda v: u"%i"%v,
-						datetime.datetime : lambda v: v.strftime(u"%d.%m.%Y"),
-						}.get(v.__class__,  lambda v: v)(v) for v in data])
-				maxs	   = [max(len(r[i]) for r in rows_arr) for i,d in enumerate(rows_arr[0])]
-				format_str = u''.join(u"%%-%is│"%m for m in maxs).strip(u'│')
-				#└─+┘
-				s 		   = u'\n'.join((format_str%tuple(r))[0:line_max] for r in rows_arr)
-				return s.encode('utf-8')
-
-
-			def print_data2(self,columns = None,columns_widths = {},max_len = None):
+			def text_table(self,columns = None,columns_widths = {},max_len = None,part = 1,first = 20,hide_nulls=True,trim_desc=False):
 				if not columns:
 				 	columns = self.desc
-				rows_arr = [dict((c,row[c][0:columns_widths.get(c)]) for c in columns) for row in self] # Объеденим колонку номеров и остальные выбранные колонки
-				widths   = dict((c,max(len(row[c]) for row in rows_arr)) for c in columns)
-
-				template = u"{0:{fill}{align}{width}}{1}"
-				#s = u' '.join(columns)
-
-				s  = u''.join(template.format(u'',u'┬',fill=u'─',align=u'>',width=widths[c]) for c in columns)[0:max_len] + u'\n'
-				s += u''.join(template.format(c[0:widths[c]],u'│',fill=u' ',align=u'^',width=widths[c]) for c in columns)[0:max_len] + u'\n'
-				s += u''.join(template.format(u'',u'┼',fill=u'─',align=u'>',width=widths[c]) for c in columns)[0:max_len] + u'\n'
-
-				for row in rows_arr:
-					s += u''.join(template.format(row[c],u'│',fill=u' ',align=u'<',width=widths[c]) for c in columns)[0:max_len] + u'\n'
-				s += u''.join(template.format(u'',u'┴',fill=u'─',align=u'>',width=widths[c]) for c in columns)[0:max_len] + u'\n'
-				# format_str  = u''.join(u"%%-%is│"%m for m in maxs).strip(u'│')
-				# format_str2 = u''.join((u"{0:{fill}{align}%i}"%(m+1)).format(u'┬',fill=u'─',align=u'>') for m in maxs)
-				# print format_str2
-				# format_str3 = u''.join((u"{0:{fill}{align}{width}}{1}").format(header[i].upper(),u'│',fill=u'',align=u'^',width=m) for i,m in enumerate(maxs))
-				# print format_str3
-				# format_str3 = u''.join((u"{0:{fill}{align}{width}}┼").format(u'',fill=u'─',align=u'>',width=m) for m in maxs)
-				# print format_str3
-				#└─+┘
-				#s 		    = u'\n'.join((format_str%tuple(r))[0:line_max] for r in rows_arr)
-
-
+				def part_max_len(arr,part):
+					return sorted(arr)[int(len(arr)*part)-1]
+					
+					
+				widths   = dict((c,columns_widths.get(c,part_max_len([len(row[c]) for row in self],part))) for c in columns) #максимальная длина
+				if hide_nulls:
+					columns  = [c for c in columns if widths.get(c) != 0]									#исключаем нулевые
+				if not trim_desc:
+					widths = dict((c,max(len(c),widths[c])) for c in columns)
 				
-				#maxs = [max(len(r[i]) for r in rows_arr) for i,d in enumerate(rows_arr[0])]
-				#print "MAX=",maxs
-				#s = u''.join(desc)
-				#print [c for c in self.cols["name"]]
-				#s = ''
+
+				def join_line(cfunc,separator,fill,align):
+					return separator + u''.join(u"{0:{fill}{align}{width}}{1}".format(cfunc(c),separator,fill=fill,align=align,width=widths[c]) for c in columns)[0:max_len] + u'\n'
+
+				s  = join_line(lambda c : u''			,u'┬',u'─',u'>')
+				s += join_line(lambda c : c[0:widths[c]],u'│',u' ',u'^')
+				s += join_line(lambda c : u''			,u'┼',u'─',u'>')
+				for i,row in enumerate(self):
+					if first and not first>i+1:
+						break;
+					s += join_line(lambda c : row[c][0:widths[c]]	,u'│',u' ',u'<')
+				s += join_line(lambda c : u''			,u'┴',u'─',u'>')
+
 				return s.encode('utf-8')
 
 			def __iter__(self):
@@ -2129,8 +2094,8 @@ class cache_fileCommand(sublime_plugin.TextCommand):
 		#d = db_class()
 		#print d.select("select rownum n,v.* from classes v where rownum < 15") \
 		#	   .print_data2(None,{"name":30,"id":10,"has_instances":1,"entity_id":4,"parent_id":2,"interface":6})
-		print d.select("select rownum n,v.* from classes v where rownum < 15") \
-			   .print_data2(columns_widths = {"name":25},max_len=150)
+		print d.select("select rownum n,v.* from classes v where rownum < 250").text_table(max_len=149,part=0.8,first=None)
+		print d.select("select * from dual").text_table(part=1)
 			   #.print_data2(["n","name","id","has_instances","modified"],{"name":30,"id":10,"has_instances":1}) #.__repr__(150)
 		#s = d.select("select * from classes where rownum < 15 order by modified desc nulls last")
 		#print s.__repr__(150)
@@ -2138,13 +2103,14 @@ class cache_fileCommand(sublime_plugin.TextCommand):
 		#print s.print_data()
 		#print s[1]["name"]
 
-		# sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id
-		# 																		,cl.name as name
-		# 																		,cl.target_class_id as target_class_id
-		# 																		,cl.base_class_id as base_class_id
-		# 																		,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
-		# 		 """
-		#s = d.select(sql)
+		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id
+																				,cl.name as name
+																				,cl.target_class_id as target_class_id
+																				,cl.base_class_id as base_class_id
+																				,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
+				 """
+		print d.select(sql)[0]["c"][0:1000]
+
 		#print s[0]["c"]
 		#print s.__repr__(150,["c"])
 		#print  '|{name:^5}|'.format(**{'name':"Hesssllo"})
