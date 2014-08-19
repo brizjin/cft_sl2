@@ -6,9 +6,10 @@ import os,sys,traceback,datetime,time,threading,thread
 import pyPEG
 from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
 from xml.sax.saxutils import escape
+import pickfile
 
-import cPickle as pickle
-import gzip
+
+from md5 import md5
 
 plugin_name = "CFT"
 plugin_path 			= os.path.join(sublime.packages_path(),plugin_name)
@@ -74,7 +75,7 @@ def call_async(call_func,on_complete=None,msg=None,async_callback=False):
 	            delta = datetime.datetime.now() - self.d_begin
 	            delta_str = (datetime.datetime.min + delta).time().strftime("%H:%M:%S.%f").strip("0:")            
 	            how_long = unicode("Выполненно за %s сек" % delta_str,'utf-8')
-	            how_long = unicode(self.message + ". ",'utf-8') + how_long if self.message else how_long
+	            how_long = self.message + u". " + how_long if self.message else how_long
 	            sublime.status_message(how_long)
 	            return
 
@@ -82,7 +83,8 @@ def call_async(call_func,on_complete=None,msg=None,async_callback=False):
 	        after = (self.size - 1) - before
 
 	        sublime.status_message('%s [%s=%s]' % \
-	            (unicode(self.message,'utf-8'), ' ' * before, ' ' * after))
+	        	(self.message, u' ' * before, ' ' * after))
+	            #(unicode(self.message,'utf-8'), ' ' * before, ' ' * after))
 
 	        if not after:
 	            self.addend = -1
@@ -96,9 +98,12 @@ def call_async(call_func,on_complete=None,msg=None,async_callback=False):
 			try:
 				if msg:
 					ThreadProgress(self,msg)
-				#t = timer()
+				t = timer()
 				self.result = call_func()
-				#t.print_time(msg + ' ' if msg else '' + "call_async func:" + call_func.__name__)
+				# def prn():
+				# 	import inspect
+				# 	print u'%s за %s,%s'%(msg,t.interval(),inspect.getsource(call_func))
+				# sublime.set_timeout(prn, 0)
 				if on_complete:
 					def on_done():
 						#t = timer()
@@ -214,7 +219,7 @@ class cft_settings_class(dict):
 			used_classes.remove(class_id)				
 		used_classes.insert(0,class_id)		
 		cft_settings.save()
-cft_settings = cft_settings_class()
+#cft_settings = cft_settings_class()
 
 class timer(object):
 	def __init__(self):
@@ -1011,7 +1016,8 @@ class save_methodCommand(sublime_plugin.TextCommand):
 			file_name	= obj.class_ref.id + "." + obj.short_name + "." + db.name.upper()  + ".METHOD"
 			file_path	= os.path.join(work_folder,file_name)
 			#self.t.print_time("Подготовка")
-			import subprocess			
+			import subprocess
+
 			if not os.path.exists(os.path.join(work_folder,".git")):
 				print "INIT"
 				subprocess.call([git_path.encode('windows-1251'),"init",work_folder.encode('windows-1251')], stdout=subprocess.PIPE  , stderr=subprocess.STDOUT, stdin =subprocess.PIPE)
@@ -1785,7 +1791,10 @@ class el(sublime_plugin.EventListener):
 				set_view_data()
 	def on_pre_save(self,view):
 		#print "on_pre_save_"
+		
 		pass
+	def on_close(self,view):
+		d.save()
 	def on_post_save(self,view):		
 		pass
 		#print "on_post_save"
@@ -2010,19 +2019,7 @@ class my_auto_completeCommand(sublime_plugin.TextCommand):
 				'next_completion_if_showing': False
 			}
 		)
-class db_select(object):
-			
-	def save(object, filename, bin = 1):
-		file = gzip.GzipFile(filename, 'wb')
-		file.write(pickle.dumps(object, bin))
-		file.close()
-
-	def load(object,filename):
-		file = gzip.GzipFile(filename, 'rb')
-		object = pickle.loads(file.read())
-		file.close()
-		return object
-
+class db_select(object):					
 	def __init__(self,desc,rows):
 		self.desc = desc
 		self.rows = rows
@@ -2075,66 +2072,128 @@ class db_select(object):
 		else:
 			return get_row(index)
 
-	def __getstate__(self):
-		return self.__dict__
+	#def __getstate__(self):
+	#	return self.__dict__
 class db_class(object):
-	def __init__(self):
-		pass
-	def connect(self,connection_string):		
+
+	cache = {}
+	def __init__(self,connection_string):
 		r = re.search('(?P<user>.+)/(?P<pass>.+)@(?P<dbname>.+)',connection_string)
-		self.connection_string 	= connection_string	
-		self.pool 				= cx_Oracle.SessionPool(user = r.group('user'),password = r.group('pass'),dsn = r.group('dbname'),min = 1,max = 5,increment = 1,threaded = False)
+		self.connection_string 	= connection_string
+		self.user, self.pswd, self.name = r.group('user') ,r.group('pass') ,r.group('dbname')
+		self.dbcache_filename = os.path.join(cache_path,"db." + self.name + '.cache')
+		if os.path.exists(self.dbcache_filename):
+			t = timer()
+			self.cache = pickfile.load(self.cache,self.dbcache_filename)
+			print "Загрузка кэша базы %s за %s "%(self.name,t.interval())
+
+	def save(self):
+		t = timer()
+		pickfile.save(self.cache,self.dbcache_filename)
+		print "Сохранение кэша базы %s за %s "%(self.name,t.interval())
+	def connect(self):
+		t = timer()
+		cx_Oracle.client_identifier = "TEST"
+		self.pool = cx_Oracle.SessionPool(user = self.user
+			,password = self.pswd
+			,dsn = self.name
+			,min = 2
+			,max = 4
+			,increment = 1
+			,threaded = True
+			,getmode=cx_Oracle.SPOOL_ATTRVAL_WAIT#,getmode=cx_Oracle.SPOOL_ATTRVAL_FORCEGET#cx_Oracle.SPOOL_ATTRVAL_NOWAIT
+			)
+		print "Соединение c базой %s за %s "%(self.name,t.interval())
 		return self
 	def select(self,sql,*args):
-
-			
 		try:
-			conn = self.pool.acquire()
-			cursor = conn.cursor()
-			cursor.arraysize = 50
-			#print "SQL=",sql
-			cursor.execute(sql,args)
+			t = timer()
+			
+			conn = self.pool.acquire()#print "N=",self.pool.busy
+			delta_wait = t.interval()
+			t = timer()
 
+			cursor = conn.cursor()
+			cursor.execute(sql,args)
 			desc = [unicode(d[0].lower(),'1251') for d in cursor.description]
 			rows = [[{type(None)	: lambda v: '',
 					  str  		 	: lambda v: unicode(v,'1251'),
 					  cx_Oracle.LOB : lambda v: unicode(v.read(),'1251'),
 					  }.get(v.__class__,lambda v:v)(v) for v in row] for row in cursor.fetchall()]
-
+			cursor.close()
 			self.pool.release(conn)
+			
 			value = db_select(desc,rows)#desc
 
+			self.cache[md5(sql).hexdigest()] = value
+			
+			s = re.sub(u'(\s|\n)+',u' ',sql)
+			s = re.sub(u'(.{1,100})',r'\t\1\n',s).strip('\t').strip('\n')
+			print u"%s ожидание%s,выборка %s\n\t[%s]\n"%(self.name.upper(),delta_wait,t.interval(),s)
+
+			#self.lock.release()
+			
+			return value
 		except Exception,e:
+		#except cx_Oracle.DatabaseError, exc:
 			print "*** Ошибка выполнения select:",e
 			if sys != None:
 				exc_type, exc_value, exc_traceback = sys.exc_info()
-				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)
+				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)				
+	def select_cache(self,sql,*args):
+		value = None
+		value = self.cache.get(md5(sql).hexdigest())
+		#if not value:
+		s = re.sub(u'(\s|\n)+',u' ',sql)
+		s = re.sub(u'(.{1,100})',r'\t\t\t\t\t\1\n',s).strip('\t').strip('\n')
+		call_async(lambda: self.select(sql,*args))
 		return value
+		
 
-d = db_class().connect("ibs/ibs@cftstage")
+d = db_class("ibs/ibs@cftstage").connect()
 class cache_fileCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		t = timer()
 		global d
-		sql = "select rownum n,v.* from classes v /*where rownum < 250*/"
-		import md5
-		print md5.md5(sql).hexdigest()
-		#s = d.select("select rownum n,v.* from classes v /*where rownum < 250*/")#.text_table(columns_widths = {"entity_id": 4,"short_name":0,"name":20},part=0.8,trim_desc=True)
-		fname = "C:\\Users\\isb5\\AppData\\Roaming\\Sublime Text 2\\Packages\\CFT\\cache\\select_classes.p"
-		#print s.__dict__
-		s = db_select('','')
-		#s.save(fname)
-		s = s.load(fname)
-		print s.text_table(columns_widths = {"entity_id": 4,"short_name":0,"name":20,"interface":10},part=0.8,trim_desc=True,first=10)
+		# sql = "select rownum n,v.* from classes v /*where rownum < 250*/"
+		# print md5(sql).hexdigest()
+		s = ''
+		a = """select rownum n,v.id  id
+	                ,v.name  name
+	                ,v.target_class_id  target_class_id
+	                ,v.base_class_id  base_class_id
+	                ,rpad(v.name,40,' ') || lpad(v.id,30,' ') text from classes v /*where rownum < 250*/"""#.text_table(columns_widths = {"entity_id": 4,"short_name":0,"name":20},part=0.8,trim_desc=True)
+		b = "select * from dual"
+		# call_async(a,msg='text0')
+		# call_async(b,msg='text1')
+		# call_async(b,msg='text2')
+		# call_async(b,msg='text3')
+		# call_async(b,msg='text4')
+		# call_async(a,msg='text5')
 
-		
+		#d.select_cache(a)
+		print d.select_cache(b)
+		d.select_cache(b)
+		d.select_cache(b)
+		d.select_cache(b)
+		d.select_cache(b)
+		d.select_cache(b)
+		d.select_cache(a)
+		d.select_cache(b)
+		d.select_cache(b)
+		d.select_cache(b)
+		d.select_cache(b)
+		d.select_cache(b)
+		d.select_cache(b)
+		d.select_cache(a)
+		#print d.select_cache(a)[1:10]
 
-		#print d.select("select * from dual").text_table(part=1)
-		#sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id
-					# 															,cl.name as name
-					# 															,cl.target_class_id as target_class_id
-					# 															,cl.base_class_id as base_class_id
-					# 															,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
-				 # """
-		#print d.select(sql)[0]["c"][0:1000]
-		print "загрузка за %s сек"%t.interval()
+		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id
+																				,cl.name as name
+																				,cl.target_class_id as target_class_id
+																				,cl.base_class_id as base_class_id
+																				,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
+				 """
+		print "Загрузка за %s"%t.interval()
+		print d.cache.keys()
+
