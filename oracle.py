@@ -120,12 +120,12 @@ def call_async(call_func,on_complete=None,msg=None,async_callback=False):
 						sublime.set_timeout(on_done, 0)
 			except Exception,e:
 				print "*** Ошибка асинхронного вызова:",e
-				print "*** При вызове ",call_func.im_class if hasattr(call_func,"im_class") else "",call_func.__name__
-				if sys != None:
-					exc_type, exc_value, exc_traceback = sys.exc_info()
+				# print "*** При вызове ",call_func.im_class if hasattr(call_func,"im_class") else "",call_func.__name__
+				# if sys != None:
+				# 	exc_type, exc_value, exc_traceback = sys.exc_info()
 					
-					traceback.print_exception(exc_type, exc_value, exc_traceback,
-						                          limit=10, file=sys.stdout)
+				# 	traceback.print_exception(exc_type, exc_value, exc_traceback,
+				# 		                          limit=10, file=sys.stdout)
 				
 				
 	RunInThread(on_complete).start()
@@ -1794,7 +1794,8 @@ class el(sublime_plugin.EventListener):
 		
 		pass
 	def on_close(self,view):
-		d.save()
+		#d.save()
+		pass
 	def on_post_save(self,view):		
 		pass
 		#print "on_post_save"
@@ -2025,7 +2026,6 @@ class db_select(object):
 		self.rows = rows
 	def __repr__(self,line_max = None,columns = None):
 		return self.text_table()
-
 	def text_table(self,columns = None,columns_widths = {},max_len = None,part = 1,first = None,hide_nulls=True,trim_desc=False):
 		if not columns:
 		 	columns = self.desc
@@ -2056,11 +2056,9 @@ class db_select(object):
 		s += join_line(lambda c : u''			,u'┴',u'─',u'>')
 
 		return s.encode('utf-8')
-
 	def __iter__(self):
 		for i,r in enumerate(self.rows):
 			yield self[i]
-
 	def __getitem__(self,index):
 		def get_row(i):
 			row = [{int   			   : lambda v: u"%i"%v,
@@ -2072,8 +2070,6 @@ class db_select(object):
 		else:
 			return get_row(index)
 
-	#def __getstate__(self):
-	#	return self.__dict__
 class db_class(object):
 
 	cache = {}
@@ -2084,9 +2080,19 @@ class db_class(object):
 		self.dbcache_filename = os.path.join(cache_path,"db." + self.name + '.cache')
 		if os.path.exists(self.dbcache_filename):
 			t = timer()
-			self.cache = pickfile.load(self.cache,self.dbcache_filename)
-			print "Загрузка кэша базы %s за %s "%(self.name,t.interval())
+			def cache_is_ready(value):				
+				self.cache = value
+				print "Загрузка кэша базы %s за %s "%(self.name,t.interval())
+			def load_cache():				
+				return pickfile.load(self.cache,self.dbcache_filename)
+			
+			#call_async(load_cache,cache_is_ready,msg = u"Загрузка кэша базы")
+			
+			cache_is_ready(load_cache())
+			
 
+			
+			
 	def save(self):
 		t = timer()
 		pickfile.save(self.cache,self.dbcache_filename)
@@ -2094,16 +2100,25 @@ class db_class(object):
 	def connect(self):
 		t = timer()
 		cx_Oracle.client_identifier = "TEST"
-		self.pool = cx_Oracle.SessionPool(user = self.user
-			,password = self.pswd
-			,dsn = self.name
-			,min = 2
-			,max = 4
-			,increment = 1
-			,threaded = True
-			,getmode=cx_Oracle.SPOOL_ATTRVAL_WAIT#,getmode=cx_Oracle.SPOOL_ATTRVAL_FORCEGET#cx_Oracle.SPOOL_ATTRVAL_NOWAIT
-			)
-		print "Соединение c базой %s за %s "%(self.name,t.interval())
+		def call_connect():			
+			self.pool = cx_Oracle.SessionPool(user = self.user
+				,password = self.pswd
+				,dsn = self.name
+				,min = 2
+				,max = 4
+				,increment = 1
+				,threaded = True
+				,getmode=cx_Oracle.SPOOL_ATTRVAL_WAIT#,getmode=cx_Oracle.SPOOL_ATTRVAL_FORCEGET#cx_Oracle.SPOOL_ATTRVAL_NOWAIT
+				)
+		def connected():
+			print "Соединение c базой %s за %s "%(self.name,t.interval())	
+
+		#call_async(call_connect,connected)
+		call_connect()
+		connected()
+
+		
+		
 		return self
 	def select(self,sql,*args):
 		try:
@@ -2130,8 +2145,6 @@ class db_class(object):
 			s = re.sub(u'(\s|\n)+',u' ',sql)
 			s = re.sub(u'(.{1,100})',r'\t\1\n',s).strip('\t').strip('\n')
 			print u"%s ожидание%s,выборка %s\n\t[%s]\n"%(self.name.upper(),delta_wait,t.interval(),s)
-
-			#self.lock.release()
 			
 			return value
 		except Exception,e:
@@ -2140,13 +2153,16 @@ class db_class(object):
 			if sys != None:
 				exc_type, exc_value, exc_traceback = sys.exc_info()
 				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)				
-	def select_cache(self,sql,*args):
+	def select_cache(self,sql,callback,*args):
+		t = timer()
 		value = None
 		value = self.cache.get(md5(sql).hexdigest())
-		#if not value:
-		s = re.sub(u'(\s|\n)+',u' ',sql)
-		s = re.sub(u'(.{1,100})',r'\t\t\t\t\t\1\n',s).strip('\t').strip('\n')
-		call_async(lambda: self.select(sql,*args))
+		if not value:
+			s = re.sub(u'(\s|\n)+',u' ',sql)
+			s = re.sub(u'(.{1,100})',r'\t\t\t\t\t\1\n',s).strip('\t').strip('\n')
+			call_async(lambda: self.select(sql,*args),callback)
+		elif callback:			
+			callback(value)		
 		return value
 		
 
@@ -2197,3 +2213,56 @@ class cache_fileCommand(sublime_plugin.TextCommand):
 		print "Загрузка за %s"%t.interval()
 		print d.cache.keys()
 
+class open_classCommand(sublime_plugin.WindowCommand):
+	def run(self):
+		sql = """
+			select rownum n,
+		    	v.id id,
+		    	v.name name,
+		    	v.target_class_id target_class_id,
+		    	v.base_class_id base_class_id,
+		    	rpad(v.name, 40, ' ') || lpad(v.id, 30, ' ') text
+			from classes v
+			/*order by date_modifedwhere rownum < 250*/"""#.text_table(columns_widths = {"entity_id": 4,"short_name":0,"name":20},part=0.8,trim_desc=True)
+
+		def show(classes):
+			c = d.cache.get("classes")
+			if not c:
+				c = [clv["text"] for clv in classes]
+				d.cache["classes"] = c
+			self.window.show_quick_panel(c,self.open_methods,sublime.MONOSPACE_FONT)
+
+		d.select_cache(sql,show)
+
+	def open_methods(self, selected_class):
+		print "CLASS index=",selected_class
+
+class save_cacheCommand(sublime_plugin.TextCommand):
+	def run(self,edit):
+		global d
+		call_async(d.save,msg=u"Сохранение кэша")
+
+class zip_writeCommand(sublime_plugin.TextCommand):
+	def run(self,edit):
+		import zipfile
+		#import StringIO
+		#f = StringIO.StringIO()
+		#f.write('test')
+		z = zipfile.ZipFile(os.path.join(cache_path,"test2.zip"), "a")
+		z.printdir()
+		z.writestr('file1.txt', "hi1")
+		z.writestr('file2.txt', "hi2")
+		z.close()
+class zip_printCommand(sublime_plugin.TextCommand):
+	def run(self,edit):
+		t = timer()
+		import zipfile
+		#import StringIO
+		#f = StringIO.StringIO()
+		#f.write('test')
+		z = zipfile.ZipFile(os.path.join(cache_path,"test2.zip"), "a")
+		z.printdir()
+		print t.interval()
+		print z.read('file1.txt')
+		print t.interval()
+		z.close()
