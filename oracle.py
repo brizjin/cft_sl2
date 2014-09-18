@@ -2265,6 +2265,20 @@ class zip_printCommand(sublime_plugin.TextCommand):
 		print t.interval()
 		z.close()
 
+class dynmenuCommand(sublime_plugin.TextCommand):
+	def run(self,edit):
+		fr = open(os.path.join(sublime.packages_path(),plugin_name,'Main.sublime-menu.template'),'r')
+		menu_json = fr.read()
+		#print "MENU=",menu_json
+		fr.close()
+		fw = open(os.path.join(sublime.packages_path(),plugin_name,'Main.sublime-menu'),'w')
+		menu = json.loads(menu_json)
+		#print "M1=",menu[0]["children"]
+		menu[0]["children"].append({u'caption':u'Проверка',u'command':u''})
+		fw.write(json.dumps(menu, ensure_ascii=False).encode('utf8'))
+		fw.close()
+
+
 
 
 d = db_class("ibs/ibs@cfttest").connect()

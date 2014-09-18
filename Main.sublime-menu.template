@@ -1,0 +1,18 @@
+[
+    {
+        "id"        : "preferences2",
+        "caption"   : "ЦФТ",
+        "children"  :
+        [
+            {"command": "open_class","caption": "Открыть классы"},
+            {"caption": "-" },
+            {"command": "save_cache","caption": "Сохранить кэш"},
+            {"command": "zip_write","caption": "Записать в zip"},
+            {"command": "side_bar","caption": "Test SIDE"},
+            {"command": "test_cache","caption": "Тестирование КЭША"},
+            {"command": "dynmenu","caption": "Динамическое меню"},
+            {"command": "zip_print","caption": "Распечатать zip"}
+
+        ]
+    }
+]

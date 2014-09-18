@@ -1,17 +1,1 @@
-[
-    {
-        "id"        : "preferences2",
-        "caption"   : "ЦФТ",
-        "children"  :
-        [
-            {"command": "open_class","caption": "Открыть классы"},
-            {"caption": "-" },
-            {"command": "save_cache","caption": "Сохранить кэш"},
-            {"command": "zip_write","caption": "Записать в zip"},
-            {"command": "side_bar","caption": "Test SIDE"},
-            {"command": "test_cache","caption": "Тестирование КЭША"},
-            {"command": "zip_print","caption": "Распечатать zip"}
-
-        ]
-    }
-]
+[{"caption": "ЦФТ", "id": "preferences2", "children": [{"caption": "Открыть классы", "command": "open_class"}, {"caption": "-"}, {"caption": "Сохранить кэш", "command": "save_cache"}, {"caption": "Записать в zip", "command": "zip_write"}, {"caption": "Test SIDE", "command": "side_bar"}, {"caption": "Тестирование КЭША", "command": "test_cache"}, {"caption": "Динамическое меню", "command": "dynmenu"}, {"caption": "Распечатать zip", "command": "zip_print"}, {"caption": "Проверка", "command": ""}]}]
