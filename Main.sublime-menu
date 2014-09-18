@@ -8,7 +8,10 @@
             {"caption": "-" },
             {"command": "save_cache","caption": "Сохранить кэш"},
             {"command": "zip_write","caption": "Записать в zip"},
+            {"command": "side_bar","caption": "Test SIDE"},
+            {"command": "test_cache","caption": "Тестирование КЭША"},
             {"command": "zip_print","caption": "Распечатать zip"}
+
         ]
     }
 ]

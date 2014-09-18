@@ -7,6 +7,7 @@ import pyPEG
 from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
 from xml.sax.saxutils import escape
 import pickfile
+import traceback
 
 
 from md5 import md5
@@ -120,6 +121,8 @@ def call_async(call_func,on_complete=None,msg=None,async_callback=False):
 						sublime.set_timeout(on_done, 0)
 			except Exception,e:
 				print "*** Ошибка асинхронного вызова:",e
+				import inspect
+				print "*** CALLBACK STACK:",traceback.format_stack(),'\n',inspect.getsource(call_func)
 				# print "*** При вызове ",call_func.im_class if hasattr(call_func,"im_class") else "",call_func.__name__
 				# if sys != None:
 				# 	exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -2020,6 +2023,9 @@ class my_auto_completeCommand(sublime_plugin.TextCommand):
 				'next_completion_if_showing': False
 			}
 		)
+
+
+
 class db_select(object):					
 	def __init__(self,desc,rows):
 		self.desc = desc
@@ -2088,11 +2094,7 @@ class db_class(object):
 			
 			#call_async(load_cache,cache_is_ready,msg = u"Загрузка кэша базы")
 			
-			cache_is_ready(load_cache())
-			
-
-			
-			
+			cache_is_ready(load_cache())	
 	def save(self):
 		t = timer()
 		pickfile.save(self.cache,self.dbcache_filename)
@@ -2100,25 +2102,23 @@ class db_class(object):
 	def connect(self):
 		t = timer()
 		cx_Oracle.client_identifier = "TEST"
-		def call_connect():			
-			self.pool = cx_Oracle.SessionPool(user = self.user
-				,password = self.pswd
-				,dsn = self.name
-				,min = 2
-				,max = 4
-				,increment = 1
-				,threaded = True
-				,getmode=cx_Oracle.SPOOL_ATTRVAL_WAIT#,getmode=cx_Oracle.SPOOL_ATTRVAL_FORCEGET#cx_Oracle.SPOOL_ATTRVAL_NOWAIT
-				)
-		def connected():
-			print "Соединение c базой %s за %s "%(self.name,t.interval())	
-
-		#call_async(call_connect,connected)
-		call_connect()
-		connected()
-
-		
-		
+		def make_connection():
+			try:
+				self.pool = cx_Oracle.SessionPool(
+					 user = self.user
+					,password = self.pswd
+					,dsn = self.name
+					,min = 2
+					,max = 4
+					,increment = 1
+					,threaded = True
+					,getmode=cx_Oracle.SPOOL_ATTRVAL_WAIT#,getmode=cx_Oracle.SPOOL_ATTRVAL_FORCEGET#cx_Oracle.SPOOL_ATTRVAL_NOWAIT
+					)
+				print "Соединение c базой %s за %s "%(self.name,t.interval())
+			except cx_Oracle.DatabaseError, e:
+				self.pool = None	
+				print u"Ошибка соеденения с базой %s за %s. %s"%(self.name.upper(), t.interval(),e.args[0].message.decode('1251'))
+		call_async(make_connection)
 		return self
 	def select(self,sql,*args):
 		try:
@@ -2158,15 +2158,13 @@ class db_class(object):
 		value = None
 		value = self.cache.get(md5(sql).hexdigest())
 		if not value:
-			s = re.sub(u'(\s|\n)+',u' ',sql)
-			s = re.sub(u'(.{1,100})',r'\t\t\t\t\t\1\n',s).strip('\t').strip('\n')
+			#s = re.sub(u'(\s|\n)+',u' ',sql)
+			#s = re.sub(u'(.{1,100})',r'\t\t\t\t\t\1\n',s).strip('\t').strip('\n')
 			call_async(lambda: self.select(sql,*args),callback)
 		elif callback:			
 			callback(value)		
 		return value
-		
 
-d = db_class("ibs/ibs@cftstage").connect()
 class cache_fileCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
 		t = timer()
@@ -2266,3 +2264,7 @@ class zip_printCommand(sublime_plugin.TextCommand):
 		print z.read('file1.txt')
 		print t.interval()
 		z.close()
+
+
+
+d = db_class("ibs/ibs@cfttest").connect()
