@@ -2082,7 +2082,9 @@ class db_class(object):
 	def __init__(self,connection_string):
 		r = re.search('(?P<user>.+)/(?P<pass>.+)@(?P<dbname>.+)',connection_string)
 		self.connection_string 	= connection_string
-		self.user, self.pswd, self.name = r.group('user') ,r.group('pass') ,r.group('dbname')
+		self.user = r.group('user')
+		self.pswd = r.group('pass')
+		self.name = r.group('dbname')
 		self.dbcache_filename = os.path.join(cache_path,"db." + self.name + '.cache')
 		if os.path.exists(self.dbcache_filename):
 			t = timer()
@@ -2092,9 +2094,9 @@ class db_class(object):
 			def load_cache():				
 				return pickfile.load(self.cache,self.dbcache_filename)
 			
-			#call_async(load_cache,cache_is_ready,msg = u"Загрузка кэша базы")
+			call_async(load_cache,cache_is_ready,msg = u"Загрузка кэша базы")
+			#cache_is_ready(load_cache())
 			
-			cache_is_ready(load_cache())	
 	def save(self):
 		t = timer()
 		pickfile.save(self.cache,self.dbcache_filename)
