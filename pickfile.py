@@ -45,28 +45,44 @@ class cache(dict):
 		if key in super(cache,self).keys():
 			return super(cache,self).__getitem__(key)
 		else:
-			t = timer()						
-			z = zipfile.ZipFile(self.file_name, "r")
-			obj_bin  = z.read(key)			
-			z.close()
-			obj = pickle.loads(obj_bin)
-			super(cache,self).__setitem__(key,obj)
-			print "Чтение кэша %s с диска за %s"%(key,t.interval())
-			return obj
+			if os.path.isfile(self.file_name):						
+				t = timer()
+				z = zipfile.ZipFile(self.file_name, "r")
+				obj_bin  = z.read(key)			
+				z.close()
+				obj = pickle.loads(obj_bin)
+				super(cache,self).__setitem__(key,obj)
+				print u"Чтение кэша %s с диска за %s"%(key,t.interval())
+				return obj
+			return None
 	def get(self,key,default = ''):
 		try:
 			return self[key]
-		except IOError as e:
+		except KeyError as e:
 			params, = e.args
 			#print "ERR=",params
 			return default
 
-	def save(self):
-		z = zipfile.ZipFile(self.file_name, "a",zipfile.ZIP_DEFLATED)
+	def save_cache(self):
+		z = zipfile.ZipFile(self.file_name,"a",zipfile.ZIP_DEFLATED)
 		for k,v in self.items():
 			#z.writestr(k,json.dumps(v, ensure_ascii=False).encode('utf8'))
 			z.writestr(k,pickle.dumps(v, 1))
 		z.close()
+	def save(self):
+		old_filename = self.file_name
+		new_filename = self.file_name + ".new"
+		zold = zipfile.ZipFile(old_filename,"r",zipfile.ZIP_DEFLATED)
+		znew = zipfile.ZipFile(new_filename,"w",zipfile.ZIP_DEFLATED)
+		for k,v in self.items():							#сохранили обновления
+			znew.writestr(k,pickle.dumps(v, 1))
+		for k in set(zold.namelist()) - set(self.keys()) :	#перезаписываем на диске
+			znew.writestr(k,pickle.dumps(zold.read(k), 1))
+		zold.close()			
+		znew.close()
+		os.remove(old_filename)
+		os.rename(new_filename,old_filename)
+
 	def load(self,file_in_zip):
 		z = zipfile.ZipFile(self.file_name,  "r")
 		obj_json = z.read(file_in_zip)
@@ -100,7 +116,14 @@ class test_cacheCommand(sublime_plugin.WindowCommand):
 				
 		
 		#c['classes'] = dict({u"hello":u'ПРИВЕТ!'})#'TEST STRING'
-		print c['classes2']
+		#print c['classes2']
+		z = zipfile.ZipFile(os.path.join(cache_path,"db.cfttest.cache"), "r")
+		#obj_bin  = z.read(u'methods/PR_CRED')
+		k = ['classes']
+		print "K=",k
+		print "Z=",z.namelist() - k
+		z.close()
+		#print len(obj_bin)
 		#c.load()
 		#c["classes_bin2"] = {u"hello":u'ПРИВЕТ!'}
 		#c.save()

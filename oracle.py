@@ -1141,8 +1141,6 @@ class View(object):
 
 	@text.setter
 	def text(self,value):
-		
-
 		is_read_only = self.view.is_read_only()
 		if is_read_only:
 			#print 'READ only FALSE'
@@ -2033,11 +2031,12 @@ class db_select(object):
 	def __repr__(self,line_max = None,columns = None):
 		return self.text_table()
 	def text_table(self,columns = None,columns_widths = {},max_len = None,part = 1,first = None,hide_nulls=True,trim_desc=False):
+		if len(self.rows) == 0:
+			return u''
 		if not columns:
 		 	columns = self.desc
 		def part_max_len(arr,part):
 			return sorted(arr)[int(len(arr)*part)-1]
-
 		widths = {}
 		for c in columns:
 			m = part_max_len([len(row[c]) for row in self[0:first]],part)
@@ -2070,37 +2069,27 @@ class db_select(object):
 			row = [{int   			   : lambda v: u"%i"%v,
 					datetime.datetime  : lambda v: v.strftime(u"%d.%m.%Y"),
 					}.get(v.__class__,   lambda v: v)(v) for v in self.rows[i]]
-			return dict(zip(self.desc,row))
+			class row_dict(dict):								
+				def __init__(self,obj):
+					super(row_dict,self).__init__(obj)
+				def __getattr__(self,name):
+					return self[name]
+			return row_dict(zip(self.desc,row))
 		if index.__class__ == slice:
-			return [get_row(i) for i in range(len(self.rows))[index]]
+			#return [get_row(i) for i in range(len(self.rows))[index]]
+			return db_select(self.desc,self.rows[index])
 		else:
 			return get_row(index)
 
 class db_class(object):
-
-	cache = {}
 	def __init__(self,connection_string):
 		r = re.search('(?P<user>.+)/(?P<pass>.+)@(?P<dbname>.+)',connection_string)
 		self.connection_string 	= connection_string
 		self.user = r.group('user')
 		self.pswd = r.group('pass')
 		self.name = r.group('dbname')
-		self.dbcache_filename = os.path.join(cache_path,"db." + self.name + '.cache')
-		if os.path.exists(self.dbcache_filename):
-			t = timer()
-			def cache_is_ready(value):				
-				self.cache = value
-				print "Загрузка кэша базы %s за %s "%(self.name,t.interval())
-			def load_cache():				
-				return pickfile.load(self.cache,self.dbcache_filename)
-			
-			call_async(load_cache,cache_is_ready,msg = u"Загрузка кэша базы")
-			#cache_is_ready(load_cache())
-			
-	def save(self):
-		t = timer()
-		pickfile.save(self.cache,self.dbcache_filename)
-		print "Сохранение кэша базы %s за %s "%(self.name,t.interval())
+		self.cache = pickfile.cache(os.path.join(cache_path,"db." + self.name + '.cache'))
+
 	def connect(self):
 		t = timer()
 		cx_Oracle.client_identifier = "TEST"
@@ -2110,8 +2099,8 @@ class db_class(object):
 					 user = self.user
 					,password = self.pswd
 					,dsn = self.name
-					,min = 2
-					,max = 4
+					,min = 2   #2
+					,max = 4 #4
 					,increment = 1
 					,threaded = True
 					,getmode=cx_Oracle.SPOOL_ATTRVAL_WAIT#,getmode=cx_Oracle.SPOOL_ATTRVAL_FORCEGET#cx_Oracle.SPOOL_ATTRVAL_NOWAIT
@@ -2142,7 +2131,7 @@ class db_class(object):
 			
 			value = db_select(desc,rows)#desc
 
-			self.cache[md5(sql).hexdigest()] = value
+			#self.cache[md5(sql).hexdigest()] = value
 			
 			s = re.sub(u'(\s|\n)+',u' ',sql)
 			s = re.sub(u'(.{1,100})',r'\t\1\n',s).strip('\t').strip('\n')
@@ -2155,17 +2144,81 @@ class db_class(object):
 			if sys != None:
 				exc_type, exc_value, exc_traceback = sys.exc_info()
 				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)				
-	def select_cache(self,sql,callback,*args):
-		t = timer()
-		value = None
-		value = self.cache.get(md5(sql).hexdigest())
-		if not value:
-			#s = re.sub(u'(\s|\n)+',u' ',sql)
-			#s = re.sub(u'(.{1,100})',r'\t\t\t\t\t\1\n',s).strip('\t').strip('\n')
-			call_async(lambda: self.select(sql,*args),callback)
-		elif callback:			
-			callback(value)		
-		return value
+	# def select_cache(self,sql,callback,*args):
+	# 	value = None
+	# 	value = self.cache.get(md5(sql).hexdigest())
+	# 	if not value:
+	# 		call_async(lambda: self.select(sql,*args),callback)
+	# 	elif callback:			
+	# 		callback(value)		
+	# 	return value
+
+	def cached(fn):
+		def wrapped(*args,**kwargs):
+			print "KEY1=",fn.__name__
+			key = fn.__name__
+			for arg in args[1:]:
+				key += '/' + arg
+			print "key2=",key
+			key = key.replace('\\','/')
+			print "KEY=",key
+			c = args[0].cache.get(key)
+			if c:
+				return c
+			c = fn(*args, **kwargs)
+			args[0].cache[key] = c
+			return c
+		return wrapped
+
+	@property
+	@cached
+	def classes(self):		
+		return self.select("""
+			select
+				rownum 											n,
+		    	v.id 											id,
+		    	v.name 											name,
+		    	v.target_class_id 								target_class_id,
+		    	v.base_class_id 								base_class_id,
+		    	rpad(v.name, 40, ' ') || lpad(v.id, 30, ' ') 	text
+			from classes v /*order by date_modifedwhere rownum < 250*/""")
+
+	@property
+	@cached
+	def classes_list(self):
+		return [clv["text"] for clv in self.classes]
+
+	#@property
+	@cached
+	def methods(self,id):
+		return self.select("""
+			select m.id          as id
+			  ,m.short_name  as short_name
+			  ,m.name        as name
+			  ,rpad(m.name ,40,' ') || lpad(m.short_name ,30,' ') as text
+			from METHODS m
+			where m.class_id = :class_id""",id)
+
+	@cached
+	def methods2(self,id):
+		r =  [r for r in self.cache["methods_all"] if r.id == id]
+		print "R=",r
+		return r
+
+
+	def methods_all(self):
+		self.cache["methods_all"] = self.select("""
+			select m.id          as id
+			  ,m.short_name  as short_name
+			  ,m.name        as name
+			  ,rpad(m.name ,40,' ') || lpad(m.short_name ,30,' ') as text
+			from METHODS m
+			""")
+		for c in self.classes:
+			self.methods2(c.id)
+
+		return s
+
 
 class cache_fileCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
@@ -2215,32 +2268,33 @@ class cache_fileCommand(sublime_plugin.TextCommand):
 
 class open_classCommand(sublime_plugin.WindowCommand):
 	def run(self):
-		sql = """
-			select rownum n,
-		    	v.id id,
-		    	v.name name,
-		    	v.target_class_id target_class_id,
-		    	v.base_class_id base_class_id,
-		    	rpad(v.name, 40, ' ') || lpad(v.id, 30, ' ') text
-			from classes v
-			/*order by date_modifedwhere rownum < 250*/"""#.text_table(columns_widths = {"entity_id": 4,"short_name":0,"name":20},part=0.8,trim_desc=True)
+		def async_methods_load():
+			def chunks(l, n):
+			    """ Yield successive n-sized chunks from l."""
+			    for i in xrange(0, len(l.rows), n):
+			        yield l[i:i+n]
+			
+			for ch in list(chunks(d.classes,10000)):
+				def load():				
+					for i,c in enumerate(ch):
+						d.methods(c.id)
+						sublime.status_message(u"%i Загрузка класса %s"%(i,c.name))
+				call_async(load)
 
-		def show(classes):
-			c = d.cache.get("classes")
-			if not c:
-				c = [clv["text"] for clv in classes]
-				d.cache["classes"] = c
-			self.window.show_quick_panel(c,self.open_methods,sublime.MONOSPACE_FONT)
+		d.methods_all()
+		
 
-		d.select_cache(sql,show)
+		self.window.show_quick_panel(d.classes_list,self.open_methods,sublime.MONOSPACE_FONT)
 
 	def open_methods(self, selected_class):
-		print "CLASS index=",selected_class
+		#print "CLASS index=",selected_class
+		#class_id = 
+		print d.methods(d.classes[selected_class].id)[1:10]
 
 class save_cacheCommand(sublime_plugin.TextCommand):
 	def run(self,edit):
 		global d
-		call_async(d.save,msg=u"Сохранение кэша")
+		call_async(d.cache.save,msg=u"Сохранение кэша")
 
 class zip_writeCommand(sublime_plugin.TextCommand):
 	def run(self,edit):
