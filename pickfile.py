@@ -7,6 +7,7 @@ import zipfile
 import sublime_plugin
 import hashlib
 import json
+import datetime
 
 plugin_name = "CFT"
 cache_path  = os.path.join(sublime.packages_path(),plugin_name,"cache")
@@ -23,6 +24,15 @@ def load(object,filename):
 	file.close()
 	return object
 
+class timer(object):
+	def __init__(self):
+		self.begin = datetime.datetime.now()
+	def interval(self):
+		#return (datetime.datetime.now() - self.begin).seconds
+		delta = datetime.datetime.now() - self.begin
+		delta = float(delta.seconds) + float(delta.microseconds)/1000000
+		return delta
+
 class cache(dict):
 	def __init__(self,file_name):
 		super(cache,self).__init__()
@@ -35,15 +45,24 @@ class cache(dict):
 		if key in super(cache,self).keys():
 			return super(cache,self).__getitem__(key)
 		else:
+			t = timer()						
 			z = zipfile.ZipFile(self.file_name, "r")
 			obj_bin  = z.read(key)			
-			z.close()			
+			z.close()
 			obj = pickle.loads(obj_bin)
 			super(cache,self).__setitem__(key,obj)
+			print "Чтение кэша %s с диска за %s"%(key,t.interval())
 			return obj
+	def get(self,key,default = ''):
+		try:
+			return self[key]
+		except IOError as e:
+			params, = e.args
+			#print "ERR=",params
+			return default
 
 	def save(self):
-		z = zipfile.ZipFile(self.file_name, "a")
+		z = zipfile.ZipFile(self.file_name, "a",zipfile.ZIP_DEFLATED)
 		for k,v in self.items():
 			#z.writestr(k,json.dumps(v, ensure_ascii=False).encode('utf8'))
 			z.writestr(k,pickle.dumps(v, 1))
@@ -81,7 +100,7 @@ class test_cacheCommand(sublime_plugin.WindowCommand):
 				
 		
 		#c['classes'] = dict({u"hello":u'ПРИВЕТ!'})#'TEST STRING'
-		print c['classes']
+		print c['classes2']
 		#c.load()
 		#c["classes_bin2"] = {u"hello":u'ПРИВЕТ!'}
 		#c.save()
