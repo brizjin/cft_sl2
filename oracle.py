@@ -2080,6 +2080,8 @@ class db_select(object):
 			return db_select(self.desc,self.rows[index])
 		else:
 			return get_row(index)
+	def __len__(self):
+		return len(self.rows)
 
 class db_class(object):
 	def __init__(self,connection_string):
@@ -2140,7 +2142,7 @@ class db_class(object):
 			return value
 		except Exception,e:
 		#except cx_Oracle.DatabaseError, exc:
-			print "*** Ошибка выполнения select:",e
+			print "*** Ошибка выполнения select:",sql,e
 			if sys != None:
 				exc_type, exc_value, exc_traceback = sys.exc_info()
 				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)				
@@ -2152,15 +2154,19 @@ class db_class(object):
 	# 	elif callback:			
 	# 		callback(value)		
 	# 	return value
+	def get_key(self,name,*args):
+		key = name
+		for arg in args:
+			key += '/' + arg
+		return key.replace('\\','/')
 
 	def cached(fn):
 		def wrapped(*args,**kwargs):
-			print "KEY1=",fn.__name__
-			key = fn.__name__
-			for arg in args[1:]:
-				key += '/' + arg
-			print "key2=",key
-			key = key.replace('\\','/')
+			#key = fn.__name__
+			#for arg in args[1:]:
+			#	key += '/' + arg
+			#key = key.replace('\\','/')
+			key = args[0].get_key(fn.__name__,*args[1:])
 			print "KEY=",key
 			c = args[0].cache.get(key)
 			if c:
@@ -2195,27 +2201,53 @@ class db_class(object):
 			select m.id          as id
 			  ,m.short_name  as short_name
 			  ,m.name        as name
-			  ,rpad(m.name ,40,' ') || lpad(m.short_name ,30,' ') as text
+			  ,rpad(m.name ,40,' ') || lpad(m.short_name ,30,' ') as text			  
 			from METHODS m
 			where m.class_id = :class_id""",id)
 
-	@cached
-	def methods2(self,id):
-		r =  [r for r in self.cache["methods_all"] if r.id == id]
-		print "R=",r
-		return r
+	# @cached
+	# def methods2(self,id):
+	# 	r =  [r for r in self.cache["methods_all"] if r.id == id]
+	# 	print "R=",r
+	# 	return r
 
 
 	def methods_all(self):
-		self.cache["methods_all"] = self.select("""
+		#print "1"
+		s = self.select("""
 			select m.id          as id
 			  ,m.short_name  as short_name
 			  ,m.name        as name
 			  ,rpad(m.name ,40,' ') || lpad(m.short_name ,30,' ') as text
+			  ,class_id class_id
 			from METHODS m
+			--where rownum < 25
+			order by m.class_id
+			
 			""")
-		for c in self.classes:
-			self.methods2(c.id)
+		#print "2"
+		#self.cache["methods_all"] = s
+		#print "3"
+		def group(arr,field):			
+			if not arr or len(arr) == 0:				
+				return
+			cur_i  = 0
+			prev_i = 0
+			for a in arr[1:]:
+				if arr[cur_i][field] != a[field]:
+					yield arr[prev_i:cur_i+1]
+					prev_i = cur_i+1
+				cur_i += 1
+			yield arr[prev_i:cur_i+1]
+
+
+
+		#s.rows.sort(key = lambda a: a[2])
+		#print s
+		for p in group(s,"class_id"):
+			#print p[0].class_id,p
+			#print p
+			self.cache[self.get_key("methods",p[0].class_id)] = p
 
 		return s
 
@@ -2281,7 +2313,7 @@ class open_classCommand(sublime_plugin.WindowCommand):
 						sublime.status_message(u"%i Загрузка класса %s"%(i,c.name))
 				call_async(load)
 
-		d.methods_all()
+		#call_async(d.methods_all,msg=u'Загрузка всех методов классов в кэш')
 		
 
 		self.window.show_quick_panel(d.classes_list,self.open_methods,sublime.MONOSPACE_FONT)
@@ -2289,7 +2321,9 @@ class open_classCommand(sublime_plugin.WindowCommand):
 	def open_methods(self, selected_class):
 		#print "CLASS index=",selected_class
 		#class_id = 
-		print d.methods(d.classes[selected_class].id)[1:10]
+		#print "ID=",d.classes[selected_class]
+		print d.methods(d.classes[selected_class].id)[0:10]
+		#print d.classes.__class__
 
 class save_cacheCommand(sublime_plugin.TextCommand):
 	def run(self,edit):

@@ -70,17 +70,21 @@ class cache(dict):
 			z.writestr(k,pickle.dumps(v, 1))
 		z.close()
 	def save(self):
-		old_filename = self.file_name
-		new_filename = self.file_name + ".new"
-		zold = zipfile.ZipFile(old_filename,"r",zipfile.ZIP_DEFLATED)
+		
+		new_filename = self.file_name + ".new"		
+		old_filename = self.file_name	
+
 		znew = zipfile.ZipFile(new_filename,"w",zipfile.ZIP_DEFLATED)
 		for k,v in self.items():							#сохранили обновления
 			znew.writestr(k,pickle.dumps(v, 1))
-		for k in set(zold.namelist()) - set(self.keys()) :	#перезаписываем на диске
-			znew.writestr(k,pickle.dumps(zold.read(k), 1))
-		zold.close()			
-		znew.close()
-		os.remove(old_filename)
+
+		if os.path.isfile(old_filename):
+			zold = zipfile.ZipFile(old_filename,"r",zipfile.ZIP_DEFLATED)
+			for k in set(zold.namelist()) - set(self.keys()) :	#перезаписываем на диске
+				znew.writestr(k,pickle.dumps(zold.read(k), 1))
+			zold.close()
+			os.remove(old_filename)			
+		znew.close()		
 		os.rename(new_filename,old_filename)
 
 	def load(self,file_in_zip):
