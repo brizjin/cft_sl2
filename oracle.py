@@ -2083,6 +2083,18 @@ class db_select(object):
 	def __len__(self):
 		return len(self.rows)
 
+	def group(arr,field):			
+			if not arr or len(arr) == 0:				
+				return
+			cur_i  = 0
+			prev_i = 0
+			for a in arr[1:]:
+				if arr[cur_i][field] != a[field]:
+					yield arr[prev_i:cur_i+1]
+					prev_i = cur_i+1
+				cur_i += 1
+			yield arr[prev_i:cur_i+1]
+
 class db_class(object):
 	def __init__(self,connection_string):
 		r = re.search('(?P<user>.+)/(?P<pass>.+)@(?P<dbname>.+)',connection_string)
@@ -2154,20 +2166,15 @@ class db_class(object):
 	# 	elif callback:			
 	# 		callback(value)		
 	# 	return value
-	def get_key(self,name,*args):
-		key = name
-		for arg in args:
-			key += '/' + arg
-		return key.replace('\\','/')
+	# def get_key(self,name,*args):
+	# 	key = name
+	# 	for arg in args:
+	# 		key += '/' + arg
+	# 	return key.replace('\\','/')
 
 	def cached(fn):
 		def wrapped(*args,**kwargs):
-			#key = fn.__name__
-			#for arg in args[1:]:
-			#	key += '/' + arg
-			#key = key.replace('\\','/')
-			key = args[0].get_key(fn.__name__,*args[1:])
-			print "KEY=",key
+			key = tuple([fn.__name__])+args[1:]
 			c = args[0].cache.get(key)
 			if c:
 				return c
@@ -2205,13 +2212,6 @@ class db_class(object):
 			from METHODS m
 			where m.class_id = :class_id""",id)
 
-	# @cached
-	# def methods2(self,id):
-	# 	r =  [r for r in self.cache["methods_all"] if r.id == id]
-	# 	print "R=",r
-	# 	return r
-
-
 	def methods_all(self):
 		#print "1"
 		s = self.select("""
@@ -2221,33 +2221,12 @@ class db_class(object):
 			  ,rpad(m.name ,40,' ') || lpad(m.short_name ,30,' ') as text
 			  ,class_id class_id
 			from METHODS m
-			--where rownum < 25
+			--where rownum < 1000000
 			order by m.class_id
-			
 			""")
-		#print "2"
-		#self.cache["methods_all"] = s
-		#print "3"
-		def group(arr,field):			
-			if not arr or len(arr) == 0:				
-				return
-			cur_i  = 0
-			prev_i = 0
-			for a in arr[1:]:
-				if arr[cur_i][field] != a[field]:
-					yield arr[prev_i:cur_i+1]
-					prev_i = cur_i+1
-				cur_i += 1
-			yield arr[prev_i:cur_i+1]
 
-
-
-		#s.rows.sort(key = lambda a: a[2])
-		#print s
-		for p in group(s,"class_id"):
-			#print p[0].class_id,p
-			#print p
-			self.cache[self.get_key("methods",p[0].class_id)] = p
+		for p in s.group("class_id"):
+			self.cache["methods",p[0].class_id] = p
 
 		return s
 
@@ -2300,35 +2279,20 @@ class cache_fileCommand(sublime_plugin.TextCommand):
 
 class open_classCommand(sublime_plugin.WindowCommand):
 	def run(self):
-		def async_methods_load():
-			def chunks(l, n):
-			    """ Yield successive n-sized chunks from l."""
-			    for i in xrange(0, len(l.rows), n):
-			        yield l[i:i+n]
-			
-			for ch in list(chunks(d.classes,10000)):
-				def load():				
-					for i,c in enumerate(ch):
-						d.methods(c.id)
-						sublime.status_message(u"%i Загрузка класса %s"%(i,c.name))
-				call_async(load)
-
-		#call_async(d.methods_all,msg=u'Загрузка всех методов классов в кэш')
-		
-
+		#
 		self.window.show_quick_panel(d.classes_list,self.open_methods,sublime.MONOSPACE_FONT)
 
 	def open_methods(self, selected_class):
-		#print "CLASS index=",selected_class
-		#class_id = 
-		#print "ID=",d.classes[selected_class]
+		#print "S=",d.classes.__class__
+		t = timer()
 		print d.methods(d.classes[selected_class].id)[0:10]
-		#print d.classes.__class__
+		a = [a.text for a in d.methods(d.classes[selected_class].id)]
+		print u"Загрузка списка методов за",t.interval()
+		self.window.show_quick_panel(a,self.method,sublime.MONOSPACE_FONT)
 
-class save_cacheCommand(sublime_plugin.TextCommand):
-	def run(self,edit):
-		global d
-		call_async(d.cache.save,msg=u"Сохранение кэша")
+
+	def method(self,selected_method):
+		print "METHOD=",selected_method
 
 class zip_writeCommand(sublime_plugin.TextCommand):
 	def run(self,edit):
@@ -2368,7 +2332,14 @@ class dynmenuCommand(sublime_plugin.TextCommand):
 		fw.write(json.dumps(menu, ensure_ascii=False).encode('utf8'))
 		fw.close()
 
-
+#КЭШ
+class get_cache(sublime_plugin.WindowCommand):
+	def run(self):
+		call_async(d.methods_all,msg=u'Загрузка всех методов классов в кэш')
+class save_cacheCommand(sublime_plugin.WindowCommand):
+	def run(self):
+		#global d
+		call_async(d.cache.save,msg=u"Сохранение кэша")
 
 
 d = db_class("ibs/ibs@cfttest").connect()

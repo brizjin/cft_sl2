@@ -37,11 +37,25 @@ class cache(dict):
 	def __init__(self,file_name):
 		super(cache,self).__init__()
 		self.file_name = file_name
-		
+	
+	def get_key(self,key):
+		val = ''
+		if type(key) == tuple:
+			val = key[0]		
+			for arg in key[1:]:
+				val += '/' + arg
+			return val.replace('\\','/')
+		else:
+			return key
+
 	def __setitem__(self,key,value):
+		key = self.get_key(key)
 		super(cache,self).__setitem__(key,value)
 
 	def __getitem__(self,key):
+		#print "key=",key
+		key = self.get_key(key)
+		#print "key2=",key
 		if key in super(cache,self).keys():
 			return super(cache,self).__getitem__(key)
 		else:

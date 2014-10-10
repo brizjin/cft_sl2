@@ -4,9 +4,16 @@
         "caption"   : "ЦФТ",
         "children"  :
         [
-            {"command": "open_class","caption": "Открыть классы"},
-            {"caption": "-" },
-            {"command": "save_cache","caption": "Сохранить кэш"},
+            {"command"  : "open_class","caption": "Открыть классы"},
+            {"caption"  : "-" },
+            {"caption"  : "КЭШ",
+             "children" :
+                [
+                    {"command": "save_cache","caption": "Сохранить"},
+                    {"command": "get_cache","caption": "Прогрузить"}
+                ]
+            },
+            
             {"command": "zip_write","caption": "Записать в zip"},
             {"command": "side_bar","caption": "Test SIDE"},
             {"command": "test_cache","caption": "Тестирование КЭША"},
