@@ -1,1 +1,26 @@
-[{"caption": "ЦФТ", "id": "preferences2", "children": [{"caption": "Открыть классы", "command": "open_class"}, {"caption": "-"}, {"caption": "КЭШ", "children": [{"caption": "Сохранить", "command": "save_cache"}, {"caption": "Прогрузить", "command": "get_cache"}]}, {"caption": "Записать в zip", "command": "zip_write"}, {"caption": "Test SIDE", "command": "side_bar"}, {"caption": "Тестирование КЭША", "command": "test_cache"}, {"caption": "Динамическое меню", "command": "dynmenu"}, {"caption": "Распечатать zip", "command": "zip_print"}, {"caption": "Проверка", "command": ""}]}]
+[
+    {
+        "id"        : "preferences2",
+        "caption"   : "ЦФТ",
+        "children"  :
+        [
+            {"command"  : "open_class","caption": "Открыть классы"},
+            {"caption"  : "-" },
+            {"caption"  : "КЭШ",
+             "children" :
+                [
+                    {"command": "save_cache","caption": "Сохранить"},
+                    {"command": "get_cache","caption": "Прогрузить"}
+                ]
+            },
+            
+            {"command": "zip_write","caption": "Записать в zip"},
+            {"command": "side_bar","caption": "Test SIDE"},
+            {"command": "test_cache","caption": "Тестирование КЭША"},
+            {"command": "dynmenu","caption": "Динамическое меню"},
+            {"command": "zip_print","caption": "Распечатать zip"},
+            {"command": "get_source","caption": "Загрузить текст метода"}
+
+        ]
+    }
+]

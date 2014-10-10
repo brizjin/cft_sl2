@@ -2157,7 +2157,45 @@ class db_class(object):
 			print "*** Ошибка выполнения select:",sql,e
 			if sys != None:
 				exc_type, exc_value, exc_traceback = sys.exc_info()
-				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)				
+				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)
+
+	def execute(self,sql,*args,**kwargs):
+		try:
+			t = timer()
+			
+			conn = self.pool.acquire()#print "N=",self.pool.busy
+			delta_wait = t.interval()
+			t = timer()
+
+			cursor = conn.cursor()
+			#print "KWARGS1=",kwargs
+			kwargs = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in kwargs.items() )
+			#print "KWARGS2=",kwargs
+			
+			cursor.execute(sql,*args,**kwargs)
+			def read_clob(clob_val):
+				clob_val = clob_val.getvalue()
+				if clob_val:	clob_val = clob_val.read().decode('1251')
+				else:			clob_val = ""
+				return clob_val
+
+			kwargs = dict((k,read_clob(v)) for k,v in kwargs.items() if type(v) == cx_Oracle.CLOB)
+			
+			cursor.close()
+			self.pool.release(conn)
+						
+			s = re.sub(u'(\s|\n)+',u' ',sql)
+			s = re.sub(u'(.{1,100})',r'\t\1\n',s).strip('\t').strip('\n')
+			print u"%s ожидание%s,выполнение процедуры %s\n\t[%s]\n"%(self.name.upper(),delta_wait,t.interval(),s)
+			
+			return kwargs
+			
+		except Exception,e:
+		#except cx_Oracle.DatabaseError, exc:
+			print "*** Ошибка выполнения select:",sql,e
+			if sys != None:
+				exc_type, exc_value, exc_traceback = sys.exc_info()
+				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)					
 	# def select_cache(self,sql,callback,*args):
 	# 	value = None
 	# 	value = self.cache.get(md5(sql).hexdigest())
@@ -2229,7 +2267,57 @@ class db_class(object):
 			self.cache["methods",p[0].class_id] = p
 
 		return s
+	def method_source(self):
+		s = self.execute("""
+			declare 
+			  c clob;
+			  class_name varchar2(200);
+			  method_name varchar2(200);
 
+			  function get_part(class_name varchar2,method_name varchar2,oper_type varchar2)return clob
+			  is
+			    out_clob clob;
+			  begin
+			    for r in (select text
+			              from sources 
+			              where name = (select m.id from METHODS m where m.class_id = class_name and m.short_name = method_name)
+			                and type = oper_type order by line)
+			    loop
+			      out_clob := out_clob || r.text || chr(10);
+			    end loop;
+			    return ltrim(out_clob,chr(10));
+			  end;
+			begin
+			  class_name := :class_name;
+			  method_name := :method_name;
+			  :e := get_part(class_name,method_name,'EXECUTE');
+			  :v := get_part(class_name,method_name,'VALIDATE');
+			  :g := get_part(class_name,method_name,'PUBLIC');
+			  :l := get_part(class_name,method_name,'PRIVATE');
+			  :s := get_part(class_name,method_name,'VBSCRIPT');
+			end;
+			"""
+			,class_name  = 'EPL_REQUESTS'
+			,method_name = 'REZERV_ACC'
+			,e = cx_Oracle.CLOB
+			,v = cx_Oracle.CLOB
+			,g = cx_Oracle.CLOB
+			,l = cx_Oracle.CLOB
+			,s = cx_Oracle.CLOB
+			)
+		#print "KEYS=",[(k,len(v)) for k,v in s.items()]
+
+		def get_section_with_header(section_name,text):
+			value  ='╒══════════════════════════════════════════════════════════════════════════════╕\n'.decode('utf-8')
+			value +=('│ %-10s                                                                   │\n'%section_name).decode('utf-8')
+			value += re.sub(r'\n',r'\n\t','\t' + text).rstrip('\t') #добавим служебный таб в начало каждой строки
+			value +='└──────────────────────────────────────────────────────────────────────────────┘\n'.decode('utf-8')
+			return value
+		print get_section_with_header("e",s["e"])
+
+class get_sourceCommand(sublime_plugin.TextCommand):
+	def run(self, edit):
+		d.method_source()
 
 class cache_fileCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
@@ -2321,16 +2409,17 @@ class zip_printCommand(sublime_plugin.TextCommand):
 
 class dynmenuCommand(sublime_plugin.TextCommand):
 	def run(self,edit):
-		fr = open(os.path.join(sublime.packages_path(),plugin_name,'Main.sublime-menu.template'),'r')
-		menu_json = fr.read()
-		#print "MENU=",menu_json
-		fr.close()
-		fw = open(os.path.join(sublime.packages_path(),plugin_name,'Main.sublime-menu'),'w')
-		menu = json.loads(menu_json)
-		#print "M1=",menu[0]["children"]
-		menu[0]["children"].append({u'caption':u'Проверка',u'command':u''})
-		fw.write(json.dumps(menu, ensure_ascii=False).encode('utf8'))
-		fw.close()
+		pass
+		# fr = open(os.path.join(sublime.packages_path(),plugin_name,'Main.sublime-menu.template'),'r')
+		# menu_json = fr.read()
+		# #print "MENU=",menu_json
+		# fr.close()
+		# fw = open(os.path.join(sublime.packages_path(),plugin_name,'Main.sublime-menu'),'w')
+		# menu = json.loads(menu_json)
+		# #print "M1=",menu[0]["children"]
+		# menu[0]["children"].append({u'caption':u'Проверка',u'command':u''})
+		# fw.write(json.dumps(menu, ensure_ascii=False).encode('utf8'))
+		# fw.close()
 
 #КЭШ
 class get_cache(sublime_plugin.WindowCommand):
