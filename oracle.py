@@ -1960,7 +1960,7 @@ class el(sublime_plugin.EventListener):
 		#completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS | sublime.INHIBIT_WORD_COMPLETIONS
 		#completion_flags = sublime.INHIBIT_WORD_COMPLETIONS
 		completion_flags = sublime.INHIBIT_EXPLICIT_COMPLETIONS
-		t.print_time("ON_QUERY_COMPLETIONS")
+		#t.print_time("ON_QUERY_COMPLETIONS")
 		return (a,completion_flags)
 	def on_selection_modified(self, view):
 		row, col = view.rowcol(view.sel()[0].a)
@@ -2212,7 +2212,7 @@ class db_class(object):
 
 	def cached(fn):
 		def wrapped(*args,**kwargs):
-			key = tuple([fn.__name__])+args[1:]
+			key = tuple([fn.__name__]) + args[1:]
 			c = args[0].cache.get(key)
 			if c:
 				return c
@@ -2267,7 +2267,13 @@ class db_class(object):
 			self.cache["methods",p[0].class_id] = p
 
 		return s
-	def method_source(self):
+
+	@cached
+	def methods_list(self,class_id):
+		#return [a.text for a in d.methods(d.classes[class_id].id)]
+		return [a.text for a in d.methods(class_id)]
+	@cached
+	def method_source(self,class_name,method_name):
 		s = self.execute("""
 			declare 
 			  c clob;
@@ -2288,32 +2294,34 @@ class db_class(object):
 			    return ltrim(out_clob,chr(10));
 			  end;
 			begin
-			  class_name := :class_name;
+			  class_name  := :class_name;
 			  method_name := :method_name;
-			  :e := get_part(class_name,method_name,'EXECUTE');
-			  :v := get_part(class_name,method_name,'VALIDATE');
-			  :g := get_part(class_name,method_name,'PUBLIC');
-			  :l := get_part(class_name,method_name,'PRIVATE');
-			  :s := get_part(class_name,method_name,'VBSCRIPT');
+			  :EXECUTE    := get_part(class_name,method_name,'EXECUTE');
+			  :VALIDATE   := get_part(class_name,method_name,'VALIDATE');
+			  :PUBLIC     := get_part(class_name,method_name,'PUBLIC');
+			  :PRIVATE    := get_part(class_name,method_name,'PRIVATE');
+			  :VBSCRIPT   := get_part(class_name,method_name,'VBSCRIPT');
 			end;
 			"""
-			,class_name  = 'EPL_REQUESTS'
-			,method_name = 'REZERV_ACC'
-			,e = cx_Oracle.CLOB
-			,v = cx_Oracle.CLOB
-			,g = cx_Oracle.CLOB
-			,l = cx_Oracle.CLOB
-			,s = cx_Oracle.CLOB
+			,class_name  = class_name
+			,method_name = method_name
+			,EXECUTE 	 = cx_Oracle.CLOB
+			,VALIDATE 	 = cx_Oracle.CLOB
+			,PUBLIC 	 = cx_Oracle.CLOB
+			,PRIVATE 	 = cx_Oracle.CLOB
+			,VBSCRIPT 	 = cx_Oracle.CLOB
 			)
-		#print "KEYS=",[(k,len(v)) for k,v in s.items()]
 
-		def get_section_with_header(section_name,text):
-			value  ='╒══════════════════════════════════════════════════════════════════════════════╕\n'.decode('utf-8')
+		value = u""
+		for section_name in ["EXECUTE","VALIDATE","PUBLIC","PRIVATE","VBSCRIPT"]:
+			text   = s[section_name]
+			value += '╒══════════════════════════════════════════════════════════════════════════════╕\n'.decode('utf-8')
 			value +=('│ %-10s                                                                   │\n'%section_name).decode('utf-8')
 			value += re.sub(r'\n',r'\n\t','\t' + text).rstrip('\t') #добавим служебный таб в начало каждой строки
-			value +='└──────────────────────────────────────────────────────────────────────────────┘\n'.decode('utf-8')
-			return value
-		print get_section_with_header("e",s["e"])
+			value += '└──────────────────────────────────────────────────────────────────────────────┘\n'.decode('utf-8')
+			#return value
+		return value
+		#print get_section_with_header("EXECUTE",s["EXECUTE"])
 
 class get_sourceCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
@@ -2373,14 +2381,16 @@ class open_classCommand(sublime_plugin.WindowCommand):
 	def open_methods(self, selected_class):
 		#print "S=",d.classes.__class__
 		t = timer()
-		print d.methods(d.classes[selected_class].id)[0:10]
-		a = [a.text for a in d.methods(d.classes[selected_class].id)]
+		#print d.methods(d.classes[selected_class].id)[0:10]
+		#a = [a.text for a in d.methods(d.classes[selected_class].id)]
 		print u"Загрузка списка методов за",t.interval()
-		self.window.show_quick_panel(a,self.method,sublime.MONOSPACE_FONT)
+		self.selected_class_id = d.classes[selected_class].id
+		self.window.show_quick_panel(d.methods_list(self.selected_class_id),self.method,sublime.MONOSPACE_FONT)
 
 
 	def method(self,selected_method):
-		print "METHOD=",selected_method
+		method_name = d.methods(self.selected_class_id)[selected_method].short_name
+		print "METHOD=", d.method_source(self.selected_class_id,method_name)
 
 class zip_writeCommand(sublime_plugin.TextCommand):
 	def run(self,edit):
