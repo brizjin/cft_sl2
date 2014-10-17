@@ -9,8 +9,12 @@
             {"caption"  : "КЭШ",
              "children" :
                 [
-                    {"command": "save_cache","caption": "Сохранить"},
-                    {"command": "get_cache","caption": "Прогрузить"}
+                    {"command": "save_cache","caption": "Сохранить и сжать"},
+                    {"command": "save_cache_news","caption": "Сохранить изменения"},
+                    {"command": "class_methods_load","caption": "Прогрузить методы класса"},
+                    {"command": "load_all_text","caption": "Прогрузить все методы"},
+                    {"command": "get_cache","caption": "Прогрузить"} 
+
                 ]
             },
             

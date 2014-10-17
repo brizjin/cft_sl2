@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import cPickle as pickle
+#import pickle as pickle
 import gzip
 import os
 import sublime
@@ -35,9 +36,17 @@ class timer(object):
 
 class cache(dict):
 	def __init__(self,file_name):
+		t = timer()	
 		super(cache,self).__init__()
 		self.file_name = file_name
-	
+		if os.path.isfile(self.file_name):	
+			self.z = zipfile.ZipFile(self.file_name, "r")
+		print u'Инициализация кэша %s за %s'%(file_name,t.interval())
+
+	def __del__(self):
+		if hasattr(self,"z"):
+			self.z.close()
+
 	def get_key(self,key):
 		val = ''
 		if type(key) == tuple:
@@ -53,18 +62,14 @@ class cache(dict):
 		super(cache,self).__setitem__(key,value)
 
 	def __getitem__(self,key):
-		#print "key=",key
 		key = self.get_key(key)
-		#print "key2=",key
 		if key in super(cache,self).keys():
 			return super(cache,self).__getitem__(key)
 		else:
 			if os.path.isfile(self.file_name):						
-				t = timer()
-				z = zipfile.ZipFile(self.file_name, "r")
-				obj_bin  = z.read(key)			
-				z.close()
-				obj = pickle.loads(obj_bin)
+				t = timer()				
+				obj_bin  = self.z.read(key)
+				obj = pickle.loads(obj_bin)	
 				super(cache,self).__setitem__(key,obj)
 				print u"Чтение кэша %s с диска за %s"%(key,t.interval())
 				return obj
@@ -73,16 +78,18 @@ class cache(dict):
 		try:
 			return self[key]
 		except KeyError as e:
+			#print "KEY ERROR"
 			params, = e.args
-			#print "ERR=",params
+			#print "KEY ERROR2",params
 			return default
 
-	def save_cache(self):
+	def save_news(self):
 		z = zipfile.ZipFile(self.file_name,"a",zipfile.ZIP_DEFLATED)
 		for k,v in self.items():
 			#z.writestr(k,json.dumps(v, ensure_ascii=False).encode('utf8'))
 			z.writestr(k,pickle.dumps(v, 1))
 		z.close()
+
 	def save(self):
 		
 		new_filename = self.file_name + ".new"		
@@ -95,34 +102,14 @@ class cache(dict):
 		if os.path.isfile(old_filename):
 			zold = zipfile.ZipFile(old_filename,"r",zipfile.ZIP_DEFLATED)
 			for k in set(zold.namelist()) - set(self.keys()) :	#перезаписываем на диске
-				znew.writestr(k,pickle.dumps(zold.read(k), 1))
+				#znew.writestr(k,pickle.dumps(zold.read(k), 1))
+				znew.writestr(k,zold.read(k))
 			zold.close()
 			os.remove(old_filename)			
 		znew.close()		
 		os.rename(new_filename,old_filename)
 
-	def load(self,file_in_zip):
-		z = zipfile.ZipFile(self.file_name,  "r")
-		obj_json = z.read(file_in_zip)
-		#print "C1=",obj_json
-		#z.infolist()[1].comment = "TEST"
-		#info = z.infolist()[0]
-		#z.writestr(info, "TEST")
-		z.close()
-		return obj_json
-		return json.loads(obj_json)
-		#print obj["hello"]
-
-
-	def write(self,key,value):
-		z = zipfile.ZipFile(self.file_name, "a")
-		#self[key] = value
-		#self.z.writestr("hello\\"+hashlib.md5(key).hexdigest(), value)
-		z.writestr(key, json.dumps(value, ensure_ascii=False).encode('utf8'))
-		z.close()
-
-
-c = cache(os.path.join(cache_path,"test3.zip"))
+#c = cache(os.path.join(cache_path,"test3.zip"))
 class test_cacheCommand(sublime_plugin.WindowCommand):
 	def run(self, paths = []):
 		# self.window.set_layout({

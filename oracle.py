@@ -990,16 +990,11 @@ class cft_openCommand(sublime_plugin.WindowCommand):
 		pass
 class save_methodCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
-		#import cProfile
-		#self.profiler = cProfile.Profile()
 		if not db.is_connected():
 			db.on_classes_cache_loaded += lambda:sublime.set_timeout(self.save,0)
-			#db.on_classes_cache_loaded += lambda:self.profiler.runcall(lambda:sublime.set_timeout(self.save,0))
 			sublime.active_window().run_command('connect',{})
 		else:
 			self.save()
-			#self.profiler.runcall(self.save)
-
 	def save(self):
 		try:
 			#print "\n"
@@ -2035,11 +2030,12 @@ class db_select(object):
 			return u''
 		if not columns:
 		 	columns = self.desc
-		def part_max_len(arr,part):
-			return sorted(arr)[int(len(arr)*part)-1]
+		#def part_max_len(arr,part):
+		#	return sorted(arr)[int(len(arr)*part)-1]
 		widths = {}
-		for c in columns:
-			m = part_max_len([len(row[c]) for row in self[0:first]],part)
+		for c in columns:			
+			m = [len(row[c]) for row in self[0:first]]
+			m = sorted(m)[int(len(m)*part)-1] 						#Определяет максимальную длину для например 80% больших записей
 			if not trim_desc and(not hide_nulls and m==0 or m>0):
 				m = max(len(c),m)
 			m = columns_widths.get(c,m)
@@ -2125,33 +2121,53 @@ class db_class(object):
 				print u"Ошибка соеденения с базой %s за %s. %s"%(self.name.upper(), t.interval(),e.args[0].message.decode('1251'))
 		call_async(make_connection)
 		return self
-	def select(self,sql,*args):
+	def select(self,sql,*args,**kwargs):
 		try:
-			t = timer()
-			
+			t = timer()			
 			conn = self.pool.acquire()#print "N=",self.pool.busy
 			delta_wait = t.interval()
 			t = timer()
+			value = ""
 
 			cursor = conn.cursor()
-			cursor.execute(sql,args)
-			desc = [unicode(d[0].lower(),'1251') for d in cursor.description]
-			rows = [[{type(None)	: lambda v: '',
-					  str  		 	: lambda v: unicode(v,'1251'),
-					  cx_Oracle.LOB : lambda v: unicode(v.read(),'1251'),
-					  }.get(v.__class__,lambda v:v)(v) for v in row] for row in cursor.fetchall()]
+			kwargs_v = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in kwargs.items())
+			if args:
+				cursor.execute(sql,args)
+			else:
+				cursor.execute(sql,**kwargs_v)
+
+			is_select = cursor.rowcount > 0
+			if is_select: #тогда это анонимный блок иначе селект
+				def read_clob(clob_val):
+					clob_val = clob_val.getvalue()
+					if clob_val:	clob_val = clob_val.read().decode('1251')
+					else:			clob_val = ""
+					return clob_val
+
+				value = dict((k,read_clob(v)) for k,v in kwargs_v.items() if type(v) == cx_Oracle.CLOB)
+			else:
+				desc = [unicode(d[0].lower(),'1251') for d in cursor.description]
+				rows = [[{type(None)	: lambda v: '',
+						  str  		 	: lambda v: unicode(v,'1251'),
+						  cx_Oracle.LOB : lambda v: unicode(v.read(),'1251'),
+						  }.get(v.__class__,lambda v:v)(v) for v in row] for row in cursor.fetchall()]
+				value = db_select(desc,rows)
+
 			cursor.close()
 			self.pool.release(conn)
-			
-			value = db_select(desc,rows)#desc
 
 			#self.cache[md5(sql).hexdigest()] = value
 			
 			s = re.sub(u'(\s|\n)+',u' ',sql)
 			s = re.sub(u'(.{1,100})',r'\t\1\n',s).strip('\t').strip('\n')
-			print u"%s ожидание%s,выборка %s\n\t[%s]\n"%(self.name.upper(),delta_wait,t.interval(),s)
+			s = md5(s).hexdigest()
+			print u"%s ожидание %s,выборка %s\t[%s]"%(self.name.upper(),delta_wait,t.interval(),s),args,dict((k,v) for k,v in kwargs.items() if type(v) != type)
 			
 			return value
+		except cx_Oracle.DatabaseError, exc:
+		   error, = exc
+		   print "Code: ORA-", error.code
+		   print "Message:", error.message
 		except Exception,e:
 		#except cx_Oracle.DatabaseError, exc:
 			print "*** Ошибка выполнения select:",sql,e
@@ -2159,62 +2175,57 @@ class db_class(object):
 				exc_type, exc_value, exc_traceback = sys.exc_info()
 				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)
 
-	def execute(self,sql,*args,**kwargs):
-		try:
-			t = timer()
+	# def execute(self,sql,*args,**kwargs):
+	# 	try:
+	# 		t = timer()
 			
-			conn = self.pool.acquire()#print "N=",self.pool.busy
-			delta_wait = t.interval()
-			t = timer()
+	# 		conn = self.pool.acquire()#print "N=",self.pool.busy
+	# 		delta_wait = t.interval()
+	# 		t = timer()
 
-			cursor = conn.cursor()
-			#print "KWARGS1=",kwargs
-			kwargs = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in kwargs.items() )
-			#print "KWARGS2=",kwargs
+	# 		cursor = conn.cursor()
+	# 		#print "KWARGS1=",kwargs
+	# 		kwargs_v = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in kwargs.items() )
+	# 		#print "KWARGS2=",kwargs
 			
-			cursor.execute(sql,*args,**kwargs)
-			def read_clob(clob_val):
-				clob_val = clob_val.getvalue()
-				if clob_val:	clob_val = clob_val.read().decode('1251')
-				else:			clob_val = ""
-				return clob_val
-
-			kwargs = dict((k,read_clob(v)) for k,v in kwargs.items() if type(v) == cx_Oracle.CLOB)
+	# 		cursor.execute(sql,*args,**kwargs_v)
 			
-			cursor.close()
-			self.pool.release(conn)
+			
+	# 		cursor.close()
+	# 		self.pool.release(conn)
 						
-			s = re.sub(u'(\s|\n)+',u' ',sql)
-			s = re.sub(u'(.{1,100})',r'\t\1\n',s).strip('\t').strip('\n')
-			print u"%s ожидание%s,выполнение процедуры %s\n\t[%s]\n"%(self.name.upper(),delta_wait,t.interval(),s)
+	# 		s = re.sub(u'(\s|\n)+',u' ',sql)
+	# 		s = re.sub(u'(.{1,100})',r'\t\1\n',s).strip('\t').strip('\n')
+	# 		s = md5(s).hexdigest()
+	# 		print u"%s ожидание %s,выполнение процедуры %s\t[%s]"%(self.name.upper(),delta_wait,t.interval(),s),args,dict((k,v) for k,v in kwargs.items() if type(v) != type)
 			
-			return kwargs
+	# 		return kwargs_v
 			
-		except Exception,e:
-		#except cx_Oracle.DatabaseError, exc:
-			print "*** Ошибка выполнения select:",sql,e
-			if sys != None:
-				exc_type, exc_value, exc_traceback = sys.exc_info()
-				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)					
-	# def select_cache(self,sql,callback,*args):
-	# 	value = None
-	# 	value = self.cache.get(md5(sql).hexdigest())
-	# 	if not value:
-	# 		call_async(lambda: self.select(sql,*args),callback)
-	# 	elif callback:			
-	# 		callback(value)		
-	# 	return value
-	# def get_key(self,name,*args):
-	# 	key = name
-	# 	for arg in args:
-	# 		key += '/' + arg
-	# 	return key.replace('\\','/')
+	# 	except Exception,e:
+	# 	#except cx_Oracle.DatabaseError, exc:
+	# 		print "*** Ошибка выполнения select:",sql,e
+	# 		if sys != None:
+	# 			exc_type, exc_value, exc_traceback = sys.exc_info()
+	# 			traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)					
+	# # def select_cache(self,sql,callback,*args):
+	# # 	value = None
+	# # 	value = self.cache.get(md5(sql).hexdigest())
+	# # 	if not value:
+	# # 		call_async(lambda: self.select(sql,*args),callback)
+	# # 	elif callback:			
+	# # 		callback(value)		
+	# # 	return value
+	# # def get_key(self,name,*args):
+	# # 	key = name
+	# # 	for arg in args:
+	# # 		key += '/' + arg
+	# # 	return key.replace('\\','/')
 
 	def cached(fn):
-		def wrapped(*args,**kwargs):
+		def wrapped(*args,**kwargs):			
 			key = tuple([fn.__name__]) + args[1:]
 			c = args[0].cache.get(key)
-			if c:
+			if c:				
 				return c
 			c = fn(*args, **kwargs)
 			args[0].cache[key] = c
@@ -2241,14 +2252,15 @@ class db_class(object):
 
 	#@property
 	@cached
-	def methods(self,id):
-		return self.select("""
+	def methods(self,class_id):
+		m = self.select("""
 			select m.id          as id
 			  ,m.short_name  as short_name
 			  ,m.name        as name
 			  ,rpad(m.name ,40,' ') || lpad(m.short_name ,30,' ') as text			  
 			from METHODS m
-			where m.class_id = :class_id""",id)
+			where m.class_id = :class_id""", class_id)
+		return m
 
 	def methods_all(self):
 		#print "1"
@@ -2270,11 +2282,28 @@ class db_class(object):
 
 	@cached
 	def methods_list(self,class_id):
-		#return [a.text for a in d.methods(d.classes[class_id].id)]
-		return [a.text for a in d.methods(class_id)]
+		ms = d.methods(class_id)
+		return [a.text for a in ms]
+	def methods_sources_by_class(self,class_id):
+		s = self.select("""
+			select
+			   m.short_name  short_name
+			  ,class_id 	 class_id
+			from METHODS m
+			where m.class_id = :class_id
+			""",class_id = class_id)
+		for r in s:
+			m = self.method_source(r.class_id,r.short_name)
+	def methods_sources_by_all_classes(self):
+		for r in self.classes:
+			t = timer()
+			print u"Загрузка класса %s"%r.id
+			m = self.methods_sources_by_class(r.id)
+			print u"Загруженно за %s"%t.interval()
+
 	@cached
 	def method_source(self,class_name,method_name):
-		s = self.execute("""
+		s = self.select("""
 			declare 
 			  c clob;
 			  class_name varchar2(200);
@@ -2379,18 +2408,40 @@ class open_classCommand(sublime_plugin.WindowCommand):
 		self.window.show_quick_panel(d.classes_list,self.open_methods,sublime.MONOSPACE_FONT)
 
 	def open_methods(self, selected_class):
-		#print "S=",d.classes.__class__
 		t = timer()
-		#print d.methods(d.classes[selected_class].id)[0:10]
-		#a = [a.text for a in d.methods(d.classes[selected_class].id)]
-		print u"Загрузка списка методов за",t.interval()
 		self.selected_class_id = d.classes[selected_class].id
+		print u"Загрузка списка методов за",t.interval()
 		self.window.show_quick_panel(d.methods_list(self.selected_class_id),self.method,sublime.MONOSPACE_FONT)
 
 
 	def method(self,selected_method):
 		method_name = d.methods(self.selected_class_id)[selected_method].short_name
-		print "METHOD=", d.method_source(self.selected_class_id,method_name)
+		text = d.method_source(self.selected_class_id,method_name)
+
+		v = View.new()
+		v.text = text
+class class_methods_loadCommand(sublime_plugin.WindowCommand):
+	def run(self):
+		self.window.show_quick_panel(d.classes_list,self.open_methods,sublime.MONOSPACE_FONT)
+	def open_methods(self, selected_class):
+				
+		self.selected_class_id = d.classes[selected_class].id
+		def load():
+			t = timer()
+			d.methods_sources_by_class(self.selected_class_id)
+			print u"Загрузка текстов методов за",t.interval()
+		call_async(load,msg=u"Загрузка текстов методов")
+class load_all_textCommand(sublime_plugin.WindowCommand):
+	def run(self):
+		def load():
+			t = timer()
+			d.methods_sources_by_all_classes()
+			print u"Все методы загруженны за",t.interval()
+		call_async(load,msg=u"Загрузка всех методов")
+		
+		
+
+
 
 class zip_writeCommand(sublime_plugin.TextCommand):
 	def run(self,edit):
@@ -2419,7 +2470,25 @@ class zip_printCommand(sublime_plugin.TextCommand):
 
 class dynmenuCommand(sublime_plugin.TextCommand):
 	def run(self,edit):
-		pass
+		# print d.select('''select chr(213) || rpad(chr(205),20) || chr(10)
+		# 				     || xmlagg(xmlelement(e,text,chr(10)).extract('//text()') order by line).GetClobVal()
+		# 				  from sources 
+		# 				 where name = (select m.id
+		# 				                 from METHODS m
+		# 				                where m.class_id = 'EPL_REQUESTS'
+		# 				                  and m.short_name = 'NEW_AUTO')
+		# 				   and type = 'EXECUTE'
+		# 				   ''')
+		a = cx_Oracle.DATETIME
+		b = cx_Oracle.DATETIME
+		d.select('''
+			begin
+				:a := sysdate;
+				:b := sysdate;
+			end;
+			''', a = a,b=b)
+		print a,b
+
 		# fr = open(os.path.join(sublime.packages_path(),plugin_name,'Main.sublime-menu.template'),'r')
 		# menu_json = fr.read()
 		# #print "MENU=",menu_json
@@ -2438,7 +2507,11 @@ class get_cache(sublime_plugin.WindowCommand):
 class save_cacheCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		#global d
-		call_async(d.cache.save,msg=u"Сохранение кэша")
+		call_async(d.cache.save,msg=u"Сохранение и сжатие кэша")
+class save_cache_newsCommand(sublime_plugin.WindowCommand):
+	def run(self):
+		#global d
+		call_async(d.cache.save_news,msg=u"Добавление изменений в кэш")		
 
 
 d = db_class("ibs/ibs@cfttest").connect()
