@@ -6,11 +6,12 @@ import os,sys,traceback,datetime,time,threading,thread
 import pyPEG
 from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
 from xml.sax.saxutils import escape
-import pickfile
+#import pickfile
 import traceback
 
 
-from md5 import md5
+#from md5 import md5
+import hashlib
 
 plugin_name = "CFT"
 plugin_path 			= os.path.join(sublime.packages_path(),plugin_name)
@@ -24,6 +25,92 @@ USE_PARSER = False
 beg_whites_regex  = re.compile(r'^\s*') #ищем начало строки без пробелов
 end_whites_regex  = re.compile(r'\s*$') #ищем конец строки без пробелов
 sections_regex    = re.compile(r'(╒═+╕\n│ ([A-Z]+) +│\n)(.*?)\n?(└─+┘\n)'.decode('utf-8'),re.S) #поиск секций
+
+
+import cPickle as pickle
+#import pickle as pickle
+import gzip
+import os
+import sublime
+import zipfile
+import sublime_plugin
+import hashlib
+import json
+import datetime
+class cache(dict):
+	def __init__(self,file_name):
+		t = timer()	
+		super(cache,self).__init__()
+		self.file_name = file_name
+		if os.path.isfile(self.file_name):	
+			self.z = zipfile.ZipFile(self.file_name, "r")
+		print u'Инициализация кэша %s за %s'%(file_name,t.interval())
+
+	def __del__(self):
+		if hasattr(self,"z"):
+			self.z.close()
+
+	def get_key(self,key):
+		val = ''
+		if type(key) == tuple:
+			val = key[0]		
+			for arg in key[1:]:
+				val += '/' + arg
+			return val.replace('\\','/')
+		else:
+			return key
+
+	def __setitem__(self,key,value):
+		key = self.get_key(key)
+		super(cache,self).__setitem__(key,value)
+
+	def __getitem__(self,key):
+		key = self.get_key(key)
+		if key in super(cache,self).keys():
+			return super(cache,self).__getitem__(key)
+		else:
+			if os.path.isfile(self.file_name):						
+				t = timer()				
+				obj_bin  = self.z.read(key)
+				obj = pickle.loads(obj_bin)	
+				super(cache,self).__setitem__(key,obj)
+				print u"Чтение кэша %s с диска за %s"%(key,t.interval())
+				return obj
+			return None
+	def get(self,key,default = ''):
+		try:
+			return self[key]
+		except KeyError as e:
+			#print "KEY ERROR"
+			params, = e.args
+			#print "KEY ERROR2",params
+			return default
+
+	def save_news(self):
+		z = zipfile.ZipFile(self.file_name,"a",zipfile.ZIP_DEFLATED)
+		for k,v in self.items():
+			#z.writestr(k,json.dumps(v, ensure_ascii=False).encode('utf8'))
+			z.writestr(k,pickle.dumps(v, 1))
+		z.close()
+
+	def save(self):
+		
+		new_filename = self.file_name + ".new"		
+		old_filename = self.file_name	
+
+		znew = zipfile.ZipFile(new_filename,"w",zipfile.ZIP_DEFLATED)
+		for k,v in self.items():							#сохранили обновления
+			znew.writestr(k,pickle.dumps(v, 1))
+
+		if os.path.isfile(old_filename):
+			zold = zipfile.ZipFile(old_filename,"r",zipfile.ZIP_DEFLATED)
+			for k in set(zold.namelist()) - set(self.keys()) :	#перезаписываем на диске
+				#znew.writestr(k,pickle.dumps(zold.read(k), 1))
+				znew.writestr(k,zold.read(k))
+			zold.close()
+			os.remove(old_filename)			
+		znew.close()		
+		os.rename(new_filename,old_filename)
 
 class NewCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
@@ -131,7 +218,9 @@ def call_async(call_func,on_complete=None,msg=None,async_callback=False):
 				# 		                          limit=10, file=sys.stdout)
 				
 				
-	RunInThread(on_complete).start()
+	th = RunInThread(on_complete)
+	th.start()
+	return th
 def sub(p_str,from_str,to_str,p_start=0):
 	"""
 	Функция возвращает подстроку между двумя строками
@@ -2098,29 +2187,39 @@ class db_class(object):
 		self.user = r.group('user')
 		self.pswd = r.group('pass')
 		self.name = r.group('dbname')
-		self.cache = pickfile.cache(os.path.join(cache_path,"db." + self.name + '.cache'))
+		#self.cache = pickfile.cache(os.path.join(cache_path,"db." + self.name + '.cache'))
+		self.cache = cache(os.path.join(cache_path,"db." + self.name + '.cache'))
+		self.is_connect = False
 
 	def connect(self):
-		t = timer()
-		cx_Oracle.client_identifier = "TEST"
-		def make_connection():
-			try:
-				self.pool = cx_Oracle.SessionPool(
-					 user = self.user
-					,password = self.pswd
-					,dsn = self.name
-					,min = 2   #2
-					,max = 4 #4
-					,increment = 1
-					,threaded = True
-					,getmode=cx_Oracle.SPOOL_ATTRVAL_WAIT#,getmode=cx_Oracle.SPOOL_ATTRVAL_FORCEGET#cx_Oracle.SPOOL_ATTRVAL_NOWAIT
-					)
-				print "Соединение c базой %s за %s "%(self.name,t.interval())
-			except cx_Oracle.DatabaseError, e:
-				self.pool = None	
-				print u"Ошибка соеденения с базой %s за %s. %s"%(self.name.upper(), t.interval(),e.args[0].message.decode('1251'))
-		call_async(make_connection)
+		try:
+			t = timer()
+			cx_Oracle.client_identifier = "TEST"
+			self.pool = cx_Oracle.SessionPool(
+				 user = self.user
+				,password = self.pswd
+				,dsn = self.name
+				,min = 2   #2
+				,max = 4 #4
+				,increment = 1
+				,threaded = True
+				,getmode=cx_Oracle.SPOOL_ATTRVAL_WAIT#,getmode=cx_Oracle.SPOOL_ATTRVAL_FORCEGET#cx_Oracle.SPOOL_ATTRVAL_NOWAIT
+				)
+			self.is_connect = True
+			print "Соединение c базой %s за %s "%(self.name,t.interval())
+		except cx_Oracle.DatabaseError, e:
+			self.pool = None	
+			print u"Ошибка соеденения с базой %s за %s. %s"%(self.name.upper(), t.interval(),e.args[0].message.decode('1251'))
+
+	def connect_async(self):		
+		call_async(self.connect)
 		return self
+
+	def __getattribute__(self,name):
+		if name == "select" and hasattr(self,"is_connect") and not self.is_connect:
+			self.connect()
+		return object.__getattribute__(self,name)
+
 	def select(self,sql,*args,**kwargs):
 		try:
 			t = timer()			
@@ -2160,7 +2259,7 @@ class db_class(object):
 			
 			s = re.sub(u'(\s|\n)+',u' ',sql)
 			s = re.sub(u'(.{1,100})',r'\t\1\n',s).strip('\t').strip('\n')
-			s = md5(s).hexdigest()
+			s = hashlib.md5(s).hexdigest()
 			print u"%s ожидание %s,выборка %s\t[%s]"%(self.name.upper(),delta_wait,t.interval(),s),args,dict((k,v) for k,v in kwargs.items() if type(v) != type)
 			
 			return value
@@ -2174,52 +2273,6 @@ class db_class(object):
 			if sys != None:
 				exc_type, exc_value, exc_traceback = sys.exc_info()
 				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)
-
-	# def execute(self,sql,*args,**kwargs):
-	# 	try:
-	# 		t = timer()
-			
-	# 		conn = self.pool.acquire()#print "N=",self.pool.busy
-	# 		delta_wait = t.interval()
-	# 		t = timer()
-
-	# 		cursor = conn.cursor()
-	# 		#print "KWARGS1=",kwargs
-	# 		kwargs_v = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in kwargs.items() )
-	# 		#print "KWARGS2=",kwargs
-			
-	# 		cursor.execute(sql,*args,**kwargs_v)
-			
-			
-	# 		cursor.close()
-	# 		self.pool.release(conn)
-						
-	# 		s = re.sub(u'(\s|\n)+',u' ',sql)
-	# 		s = re.sub(u'(.{1,100})',r'\t\1\n',s).strip('\t').strip('\n')
-	# 		s = md5(s).hexdigest()
-	# 		print u"%s ожидание %s,выполнение процедуры %s\t[%s]"%(self.name.upper(),delta_wait,t.interval(),s),args,dict((k,v) for k,v in kwargs.items() if type(v) != type)
-			
-	# 		return kwargs_v
-			
-	# 	except Exception,e:
-	# 	#except cx_Oracle.DatabaseError, exc:
-	# 		print "*** Ошибка выполнения select:",sql,e
-	# 		if sys != None:
-	# 			exc_type, exc_value, exc_traceback = sys.exc_info()
-	# 			traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)					
-	# # def select_cache(self,sql,callback,*args):
-	# # 	value = None
-	# # 	value = self.cache.get(md5(sql).hexdigest())
-	# # 	if not value:
-	# # 		call_async(lambda: self.select(sql,*args),callback)
-	# # 	elif callback:			
-	# # 		callback(value)		
-	# # 	return value
-	# # def get_key(self,name,*args):
-	# # 	key = name
-	# # 	for arg in args:
-	# # 		key += '/' + arg
-	# # 	return key.replace('\\','/')
 
 	def cached(fn):
 		def wrapped(*args,**kwargs):			
@@ -2405,9 +2458,12 @@ class cache_fileCommand(sublime_plugin.TextCommand):
 class open_classCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		#
+		#print "VERSION=",d.pool.acquire().version
 		self.window.show_quick_panel(d.classes_list,self.open_methods,sublime.MONOSPACE_FONT)
 
 	def open_methods(self, selected_class):
+		if selected_class == -1:
+			return
 		t = timer()
 		self.selected_class_id = d.classes[selected_class].id
 		print u"Загрузка списка методов за",t.interval()
@@ -2415,6 +2471,8 @@ class open_classCommand(sublime_plugin.WindowCommand):
 
 
 	def method(self,selected_method):
+		if selected_method == -1:
+			return
 		method_name = d.methods(self.selected_class_id)[selected_method].short_name
 		text = d.method_source(self.selected_class_id,method_name)
 
@@ -2513,5 +2571,8 @@ class save_cache_newsCommand(sublime_plugin.WindowCommand):
 		#global d
 		call_async(d.cache.save_news,msg=u"Добавление изменений в кэш")		
 
-
-d = db_class("ibs/ibs@cfttest").connect()
+#import pickfile
+try:
+	d = db_class("ibs/ibs@cfttest").connect_async()	
+except Exception,e:
+	print "Ошибка создания подключения."
