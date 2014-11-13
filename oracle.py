@@ -2229,6 +2229,7 @@ class db_class(object):
 			value = ""
 
 			cursor = conn.cursor()
+			#cursor.prepare('SELECT * FROM jobs WHERE min_salary>:min')
 			kwargs_v = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in kwargs.items())
 			if args:
 				cursor.execute(sql,args)
@@ -2236,20 +2237,18 @@ class db_class(object):
 				cursor.execute(sql,**kwargs_v)
 
 			is_select = cursor.rowcount > 0
-			if is_select: #тогда это анонимный блок иначе селект
-				def read_clob(clob_val):
-					clob_val = clob_val.getvalue()
-					if clob_val:	clob_val = clob_val.read().decode('1251')
-					else:			clob_val = ""
-					return clob_val
+			def convert(v):
+				return {type(None)		: lambda v: '',
+						str  		 	: lambda v: v.decode('1251'),
+						cx_Oracle.LOB 	: lambda v: v.read().decode('1251'),
+						cx_Oracle.CLOB 	: lambda v: convert(v.getvalue()), #getvalue вернет либо LOB либо None
+						}.get(v.__class__,lambda v:v)(v)
 
-				value = dict((k,read_clob(v)) for k,v in kwargs_v.items() if type(v) == cx_Oracle.CLOB)
+			if is_select: #тогда это анонимный блок иначе селект
+				value = dict((k,convert(v)) for k,v in kwargs_v.items())
 			else:
-				desc = [unicode(d[0].lower(),'1251') for d in cursor.description]
-				rows = [[{type(None)	: lambda v: '',
-						  str  		 	: lambda v: unicode(v,'1251'),
-						  cx_Oracle.LOB : lambda v: unicode(v.read(),'1251'),
-						  }.get(v.__class__,lambda v:v)(v) for v in row] for row in cursor.fetchall()]
+				desc = [d[0].lower().decode('1251') for d in cursor.description]
+				rows = [[convert(v) for v in row] for row in cursor.fetchall()]
 				value = db_select(desc,rows)
 
 			cursor.close()
@@ -2261,16 +2260,7 @@ class db_class(object):
 			s = re.sub(u'(.{1,100})',r'\t\1\n',s).strip('\t').strip('\n')
 			s = hashlib.md5(s).hexdigest()
 			
-			#для красивой записи
-			row_count = len(value)
-			row_count_ldigit = row_count%10
-			s_count = u''
-			if   row_count_ldigit == 1: 			s_count = u'запись'
-			elif row_count_ldigit in (2,3,4):		s_count = u'записи'
-			elif row_count_ldigit in (5,6,7,8,9,0):	s_count = u'записей'			
-			s_count = str(row_count) + ' %s'%s_count
-
-			print u"%s ожидание %s, выборка %s за %s\t[%s]"%(self.name.upper(),delta_wait,s_count,t.interval(),s),args,dict((k,v) for k,v in kwargs.items() if type(v) != type)
+			print u"%s ожидание %s, выборка %s записей за %s\t[%s]"%(self.name.upper(),delta_wait,str(len(value)),t.interval(),s),args,dict((k,v) for k,v in kwargs.items() if type(v) != type)
 			
 			return value
 		except cx_Oracle.DatabaseError, exc:
@@ -2283,6 +2273,7 @@ class db_class(object):
 			if sys != None:
 				exc_type, exc_value, exc_traceback = sys.exc_info()
 				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)
+
 
 	def cached(fn):
 		def wrapped(*args,**kwargs):			
