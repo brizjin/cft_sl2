@@ -2260,7 +2260,17 @@ class db_class(object):
 			s = re.sub(u'(\s|\n)+',u' ',sql)
 			s = re.sub(u'(.{1,100})',r'\t\1\n',s).strip('\t').strip('\n')
 			s = hashlib.md5(s).hexdigest()
-			print u"%s ожидание %s,выборка %s\t[%s]"%(self.name.upper(),delta_wait,t.interval(),s),args,dict((k,v) for k,v in kwargs.items() if type(v) != type)
+			
+			#для красивой записи
+			row_count = len(value)
+			row_count_ldigit = row_count%10
+			s_count = u''
+			if   row_count_ldigit == 1: 			s_count = u'запись'
+			elif row_count_ldigit in (2,3,4):		s_count = u'записи'
+			elif row_count_ldigit in (5,6,7,8,9,0):	s_count = u'записей'			
+			s_count = str(row_count) + ' %s'%s_count
+
+			print u"%s ожидание %s, выборка %s за %s\t[%s]"%(self.name.upper(),delta_wait,s_count,t.interval(),s),args,dict((k,v) for k,v in kwargs.items() if type(v) != type)
 			
 			return value
 		except cx_Oracle.DatabaseError, exc:
@@ -2496,11 +2506,7 @@ class load_all_textCommand(sublime_plugin.WindowCommand):
 			d.methods_sources_by_all_classes()
 			print u"Все методы загруженны за",t.interval()
 		call_async(load,msg=u"Загрузка всех методов")
-		
-		
-
-
-
+	
 class zip_writeCommand(sublime_plugin.TextCommand):
 	def run(self,edit):
 		import zipfile
