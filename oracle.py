@@ -2230,13 +2230,13 @@ class db_class(object):
 
 			cursor = conn.cursor()
 			#cursor.prepare('SELECT * FROM jobs WHERE min_salary>:min')
-			kwargs_v = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in kwargs.items())
+
 			if args:
 				cursor.execute(sql,args)
 			else:
+				kwargs_v = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in kwargs.items())
 				cursor.execute(sql,**kwargs_v)
 
-			is_select = cursor.rowcount > 0
 			def convert(v):
 				return {type(None)		: lambda v: '',
 						str  		 	: lambda v: v.decode('1251'),
@@ -2244,7 +2244,7 @@ class db_class(object):
 						cx_Oracle.CLOB 	: lambda v: convert(v.getvalue()), #getvalue вернет либо LOB либо None
 						}.get(v.__class__,lambda v:v)(v)
 
-			if is_select: #тогда это анонимный блок иначе селект
+			if cursor.rowcount > 0: #тогда это анонимный блок иначе селект
 				value = dict((k,convert(v)) for k,v in kwargs_v.items())
 			else:
 				desc = [d[0].lower().decode('1251') for d in cursor.description]
@@ -2253,14 +2253,8 @@ class db_class(object):
 
 			cursor.close()
 			self.pool.release(conn)
-
-			#self.cache[md5(sql).hexdigest()] = value
-			
-			s = re.sub(u'(\s|\n)+',u' ',sql)
-			s = re.sub(u'(.{1,100})',r'\t\1\n',s).strip('\t').strip('\n')
-			s = hashlib.md5(s).hexdigest()
-			
-			print u"%s ожидание %s, выборка %s записей за %s\t[%s]"%(self.name.upper(),delta_wait,str(len(value)),t.interval(),s),args,dict((k,v) for k,v in kwargs.items() if type(v) != type)
+		
+			print u"%s ожидание %s, выборка %s записей за %s\t[%s]"%(self.name.upper(),delta_wait,str(len(value)),t.interval(),hashlib.md5(sql).hexdigest()),args,dict((k,v) for k,v in kwargs.items() if type(v) != type)
 			
 			return value
 		except cx_Oracle.DatabaseError, exc:
