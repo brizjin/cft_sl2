@@ -2229,7 +2229,6 @@ class db_class(object):
 			value = ""
 
 			cursor = conn.cursor()
-			#cursor.prepare('SELECT * FROM jobs WHERE min_salary>:min')
 
 			def read_cursor():
 				def convert(v):
@@ -2250,21 +2249,9 @@ class db_class(object):
 				cursor.prepare(sql)
 				value = []
 				for arg in args[0]:
-					#print "ARG=",arg
 					kwargs_v = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in arg.items())
 					cursor.execute(None,kwargs_v)
 					value.append(read_cursor())
-				# cursor.prepare(sql)
-				# value = []
-				# params_arr = args[0]
-				# params_arr_values = []
-				# for arg in params_arr:				
-				# 	params_arr_values.append(dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in arg.items()))
-				# cursor.executemany(None,params_arr_values)
-				# print "P=",params_arr_values
-				# for s in params_arr_values:
-				# 	kwargs_v = s
-				# 	value.append(read_cursor())
 			else:
 				if args:
 					cursor.execute(sql,args)
@@ -2426,40 +2413,6 @@ class get_sourceCommand(sublime_plugin.TextCommand):
 			print a
 		print d.select("select :text a from dual","hello")
 		print d.select("select :text a from dual",text="hello")
-
-		for a in d.select("""
-			declare 
-			  c clob;
-			  class_name varchar2(200);
-			  method_name varchar2(200);
-
-			  function get_part(class_name varchar2,method_name varchar2,oper_type varchar2)return clob
-			  is
-			    out_clob clob;
-			  begin
-			    for r in (select text
-			              from sources 
-			              where name = (select m.id from METHODS m where m.class_id = class_name and m.short_name = method_name)
-			                and type = oper_type order by line)
-			    loop
-			      out_clob := out_clob || r.text || chr(10);
-			    end loop;
-			    return ltrim(out_clob,chr(10));
-			  end;
-			begin
-			  class_name  := :class_name;
-			  method_name := :method_name;
-			  :EXECUTE    := get_part(class_name,method_name,'EXECUTE');
-			  :VALIDATE   := get_part(class_name,method_name,'VALIDATE');
-			  :PUBLIC     := get_part(class_name,method_name,'PUBLIC');
-			  :PRIVATE    := get_part(class_name,method_name,'PRIVATE');
-			  :VBSCRIPT   := get_part(class_name,method_name,'VBSCRIPT');
-			end;
-			""",[{"class_name" : "EPL_REQUESTS","method_name" : "NEW_AUTO" ,"EXECUTE" : cx_Oracle.CLOB,"VALIDATE" : cx_Oracle.CLOB,"PUBLIC" : cx_Oracle.CLOB,"PRIVATE" : cx_Oracle.CLOB,"VBSCRIPT" : cx_Oracle.CLOB}
-				,{"class_name" : "EPL_REQUESTS","method_name" : "EDIT_AUTO","EXECUTE" : cx_Oracle.CLOB,"VALIDATE" : cx_Oracle.CLOB,"PUBLIC" : cx_Oracle.CLOB,"PRIVATE" : cx_Oracle.CLOB,"VBSCRIPT" : cx_Oracle.CLOB}]):
-			print "########################",a
-
-
 
 class cache_fileCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
