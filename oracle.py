@@ -2231,25 +2231,48 @@ class db_class(object):
 			cursor = conn.cursor()
 			#cursor.prepare('SELECT * FROM jobs WHERE min_salary>:min')
 
-			if args:
-				cursor.execute(sql,args)
-			else:
-				kwargs_v = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in kwargs.items())
-				cursor.execute(sql,**kwargs_v)
+			def read_cursor():
+				def convert(v):
+					return {type(None)		: lambda v: '',
+							str  		 	: lambda v: v.decode('1251'),
+							cx_Oracle.LOB 	: lambda v: v.read().decode('1251'),
+							cx_Oracle.CLOB 	: lambda v: convert(v.getvalue()), #getvalue вернет либо LOB либо None
+							}.get(v.__class__,lambda v:v)(v)
+				if cursor.rowcount > 0: #тогда это анонимный блок иначе селект
+					value = dict((k,convert(v)) for k,v in kwargs_v.items())
+				else:
+					desc = [d[0].lower().decode('1251') for d in cursor.description]
+					rows = [[convert(v) for v in row] for row in cursor.fetchall()]
+					value = db_select(desc,rows)
+				return value
 
-			def convert(v):
-				return {type(None)		: lambda v: '',
-						str  		 	: lambda v: v.decode('1251'),
-						cx_Oracle.LOB 	: lambda v: v.read().decode('1251'),
-						cx_Oracle.CLOB 	: lambda v: convert(v.getvalue()), #getvalue вернет либо LOB либо None
-						}.get(v.__class__,lambda v:v)(v)
-
-			if cursor.rowcount > 0: #тогда это анонимный блок иначе селект
-				value = dict((k,convert(v)) for k,v in kwargs_v.items())
+			if args and type(args[0]) == list: #тогда это будет prepared_select
+				cursor.prepare(sql)
+				value = []
+				for arg in args[0]:
+					#print "ARG=",arg
+					kwargs_v = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in arg.items())
+					cursor.execute(None,kwargs_v)
+					value.append(read_cursor())
+				# cursor.prepare(sql)
+				# value = []
+				# params_arr = args[0]
+				# params_arr_values = []
+				# for arg in params_arr:				
+				# 	params_arr_values.append(dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in arg.items()))
+				# cursor.executemany(None,params_arr_values)
+				# print "P=",params_arr_values
+				# for s in params_arr_values:
+				# 	kwargs_v = s
+				# 	value.append(read_cursor())
 			else:
-				desc = [d[0].lower().decode('1251') for d in cursor.description]
-				rows = [[convert(v) for v in row] for row in cursor.fetchall()]
-				value = db_select(desc,rows)
+				if args:
+					cursor.execute(sql,args)
+				else:
+					kwargs_v = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in kwargs.items())
+					cursor.execute(sql,kwargs_v)
+				value = read_cursor()
+
 
 			cursor.close()
 			self.pool.release(conn)
@@ -2257,17 +2280,12 @@ class db_class(object):
 			print u"%s ожидание %s, выборка %s записей за %s\t[%s]"%(self.name.upper(),delta_wait,str(len(value)),t.interval(),hashlib.md5(sql).hexdigest()),args,dict((k,v) for k,v in kwargs.items() if type(v) != type)
 			
 			return value
-		except cx_Oracle.DatabaseError, exc:
-		   error, = exc
-		   print "Code: ORA-", error.code
-		   print "Message:", error.message
+
 		except Exception,e:
-		#except cx_Oracle.DatabaseError, exc:
 			print "*** Ошибка выполнения select:",sql,e
 			if sys != None:
 				exc_type, exc_value, exc_traceback = sys.exc_info()
 				traceback.print_exception(exc_type, exc_value, exc_traceback,limit=10, file=sys.stdout)
-
 
 	def cached(fn):
 		def wrapped(*args,**kwargs):			
@@ -2400,9 +2418,48 @@ class db_class(object):
 		return value
 		#print get_section_with_header("EXECUTE",s["EXECUTE"])
 
+#Загрузить текст метода
 class get_sourceCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
-		d.method_source()
+
+		for a in  d.select("select :text a from dual",[{"text":"hello"},{"text":"hello2"}]):
+			print a
+		print d.select("select :text a from dual","hello")
+		print d.select("select :text a from dual",text="hello")
+
+		for a in d.select("""
+			declare 
+			  c clob;
+			  class_name varchar2(200);
+			  method_name varchar2(200);
+
+			  function get_part(class_name varchar2,method_name varchar2,oper_type varchar2)return clob
+			  is
+			    out_clob clob;
+			  begin
+			    for r in (select text
+			              from sources 
+			              where name = (select m.id from METHODS m where m.class_id = class_name and m.short_name = method_name)
+			                and type = oper_type order by line)
+			    loop
+			      out_clob := out_clob || r.text || chr(10);
+			    end loop;
+			    return ltrim(out_clob,chr(10));
+			  end;
+			begin
+			  class_name  := :class_name;
+			  method_name := :method_name;
+			  :EXECUTE    := get_part(class_name,method_name,'EXECUTE');
+			  :VALIDATE   := get_part(class_name,method_name,'VALIDATE');
+			  :PUBLIC     := get_part(class_name,method_name,'PUBLIC');
+			  :PRIVATE    := get_part(class_name,method_name,'PRIVATE');
+			  :VBSCRIPT   := get_part(class_name,method_name,'VBSCRIPT');
+			end;
+			""",[{"class_name" : "EPL_REQUESTS","method_name" : "NEW_AUTO" ,"EXECUTE" : cx_Oracle.CLOB,"VALIDATE" : cx_Oracle.CLOB,"PUBLIC" : cx_Oracle.CLOB,"PRIVATE" : cx_Oracle.CLOB,"VBSCRIPT" : cx_Oracle.CLOB}
+				,{"class_name" : "EPL_REQUESTS","method_name" : "EDIT_AUTO","EXECUTE" : cx_Oracle.CLOB,"VALIDATE" : cx_Oracle.CLOB,"PUBLIC" : cx_Oracle.CLOB,"PRIVATE" : cx_Oracle.CLOB,"VBSCRIPT" : cx_Oracle.CLOB}]):
+			print "########################",a
+
+
 
 class cache_fileCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
