@@ -2220,6 +2220,10 @@ class db_class(object):
 			self.connect()
 		return object.__getattribute__(self,name)
 
+	#for a in  d.select("select :text a from dual",[{"text":"hello"},{"text":"hello2"}]):
+	#	print a
+	#print d.select("select :text a from dual","hello")
+	#print d.select("select :text a from dual",text="hello")
 	def select(self,sql,*args,**kwargs):
 		try:
 			t = timer()			
@@ -2248,8 +2252,11 @@ class db_class(object):
 			if args and type(args[0]) == list: #тогда это будет prepared_select
 				cursor.prepare(sql)
 				value = []
+				i = 1
 				for arg in args[0]:
 					kwargs_v = dict((k,cursor.var(v)) if type(v) == type else (k,v) for k,v in arg.items())
+					print "Запуск %-4i"%i
+					i+=1
 					cursor.execute(None,kwargs_v)
 					value.append(read_cursor())
 			else:
@@ -2348,11 +2355,15 @@ class db_class(object):
 		for r in s:
 			m = self.method_source(r.class_id,r.short_name)
 	def methods_sources_by_all_classes(self):
+		i = 1
 		for r in self.classes:
 			t = timer()
 			print u"Загрузка класса %s"%r.id
 			m = self.methods_sources_by_class(r.id)
 			print u"Загруженно за %s"%t.interval()
+			i+=1
+			if i>20:
+				return
 
 	@cached
 	def method_source(self,class_name,method_name):
@@ -2404,15 +2415,187 @@ class db_class(object):
 			#return value
 		return value
 		#print get_section_with_header("EXECUTE",s["EXECUTE"])
+	def method_source2(self,class_name,mehtod_name):
+		value = {}
+		op = d.select("""select s.type,s.line,s.text
+			              from sources s
+			              where name = (select m.id from METHODS m where m.class_id = :class_name and m.short_name = :method_name)
+			                --and type = oper_type
+			              order by case when s.type = 'EXECUTE'  then 1
+			              				when s.type = 'VALIDATE' then 2
+			              				when s.type = 'PUBLIC'   then 3
+			              				when s.type = 'PRIVATE'  then 4
+			              				when s.type = 'VBSCRIPT' then 5
+			              		   end
+			              		  ,s.line"""
+			            ,class_name  = class_name#'EPL_REQUESTS'
+			            ,method_name = mehtod_name#'NEW_AUTO'
+			            )
+		for g in op.group('type'):
+			m = u""
+			for r in g:
+				m += r.text + u"\n"
+			value[g[0].type] = m
+		return value
+	def methods_sources_by_class2(self,class_name):
+		value = {}
+		class_methods = d.select("""select s.type,s.line,s.text,m.short_name short_name
+						              from sources s
+						              	  ,METHODS m
+						              where s.name = m.id 
+						                and m.class_id = :class_name
+						                --and m.short_name in ('NEW_AUTO','EDIT_AUTO')
+						              order by m.short_name
+						              		  ,case when s.type = 'EXECUTE'  then 1
+						              				when s.type = 'VALIDATE' then 2
+						              				when s.type = 'PUBLIC'   then 3
+						              				when s.type = 'PRIVATE'  then 4
+						              				when s.type = 'VBSCRIPT' then 5
+						              		   end
+						              		  ,s.line"""
+						            ,class_name  = class_name #'EPL_REQUESTS'
+						            #,method_name = mehtod_name#'NEW_AUTO'
+						            )
+		for oper_group in class_methods.group('short_name'):
+			oper = {}
+			for g in oper_group.group('type'):
+				m = u""
+				for r in g:
+					m += r.text + u"\n"
+				oper[g[0].type] = m
+			value[oper_group[0].short_name] = oper
+		return value
+	def methods_sources_by_all_classes2(self):
+		t_all = timer()
+		i = 1
+		for r in self.classes:
+			t = timer()
+			print u"%-4d Загрузка класса %s"%(i,r.id)
+			m = self.methods_sources_by_class2(r.id)
+			print u"%-4d Загруженно за %s"%(i,t.interval())
+			i+=1
+			#if i>20:
+			#	return
+		print "Всего операция заняла ",t_all.interval()
+	def methods_sources_by_all_classes3(self):
+		t_all = timer()
+		value = {}
+		classes = d.select("""select s.type,s.line,s.text,m.class_id class_id,m.short_name short_name
+						              from sources s
+						              	  ,METHODS m
+						              where s.name = m.id 
+						                --and m.class_id = :class_name
+						                --and m.short_name in ('NEW_AUTO','EDIT_AUTO')
+						              order by m.class_id
+						              		  ,m.short_name
+						              		  ,case when s.type = 'EXECUTE'  then 1
+						              				when s.type = 'VALIDATE' then 2
+						              				when s.type = 'PUBLIC'   then 3
+						              				when s.type = 'PRIVATE'  then 4
+						              				when s.type = 'VBSCRIPT' then 5
+						              		   end
+						              		  ,s.line"""
+						            #,class_name  = class_name #'EPL_REQUESTS'
+						            #,method_name = mehtod_name#'NEW_AUTO'
+						            )
+		i = 0
+		for class_group in classes.group('class_id'):
+			class_id = class_group[0].class_id
+			i+=1
+			print "i-4%i Загрузка класса %s"%(i,class_id)
+			class_value = {}
+			for oper_group in class_methods.group('short_name'):
+				oper = {}
+				for g in oper_group.group('type'):
+					m = u""
+					for r in g:
+						m += r.text + u"\n"
+					oper[g[0].type] = m
+				class_value[oper_group[0].short_name] = oper
+			value[class_id] = class_value
+		return value
+		print "Всего операция заняла ",t_all.interval()
+	def methods_sources_by_all_classes4(self):
+		i = 1
+		params = []
+		for r in d.select("""	select m.class_id class_id,m.short_name short_name,count(1)
+								from sources s
+								    ,METHODS m
+								where s.name = m.id
+								group by m.class_id,m.short_name
+								having count(1)>0
+								order by m.class_id,m.short_name"""):
+
+			t = timer()
+			#i+=1
+			#print u"%-4i Загрузка ::[%s].[%s]"%(r.class_id,r.short_name)
+			#m = self.methods_sources_by_class(r.id)
+			#print u"Загруженно за %s"%t.interval()
+			params.append({
+				 "class_name" 	: r.class_id
+				,"method_name"	: r.short_name
+				,"EXECUTE" 		: cx_Oracle.CLOB
+				,"VALIDATE" 	: cx_Oracle.CLOB
+				,"PUBLIC"		: cx_Oracle.CLOB
+				,"PRIVATE"		: cx_Oracle.CLOB
+				,"VBSCRIPT"		: cx_Oracle.CLOB}
+			)
+
+		s = self.select("""
+			declare 
+			  c clob;
+			  class_name varchar2(200);
+			  method_name varchar2(200);
+
+			  function get_part(class_name varchar2,method_name varchar2,oper_type varchar2)return clob
+			  is
+			    out_clob clob;
+			  begin
+			    for r in (select text
+			              from sources 
+			              where name = (select m.id from METHODS m where m.class_id = class_name and m.short_name = method_name)
+			                and type = oper_type order by line)
+			    loop
+			      out_clob := out_clob || r.text || chr(10);
+			    end loop;
+			    return ltrim(out_clob,chr(10));
+			  end;
+			begin
+			  class_name  := :class_name;
+			  method_name := :method_name;
+			  :EXECUTE    := get_part(class_name,method_name,'EXECUTE');
+			  :VALIDATE   := get_part(class_name,method_name,'VALIDATE');
+			  :PUBLIC     := get_part(class_name,method_name,'PUBLIC');
+			  :PRIVATE    := get_part(class_name,method_name,'PRIVATE');
+			  :VBSCRIPT   := get_part(class_name,method_name,'VBSCRIPT');
+			end;
+			""",params)
+
+		# value = u""
+		# for section_name in ["EXECUTE","VALIDATE","PUBLIC","PRIVATE","VBSCRIPT"]:
+		# 	text   = s[section_name]
+		# 	value += '╒══════════════════════════════════════════════════════════════════════════════╕\n'.decode('utf-8')
+		# 	value +=('│ %-10s                                                                   │\n'%section_name).decode('utf-8')
+		# 	value += re.sub(r'\n',r'\n\t','\t' + text).rstrip('\t') #добавим служебный таб в начало каждой строки
+		# 	value += '└──────────────────────────────────────────────────────────────────────────────┘\n'.decode('utf-8')
+		# 	#return value
+		value = ""
+		return value
+
 
 #Загрузить текст метода
 class get_sourceCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
-
-		for a in  d.select("select :text a from dual",[{"text":"hello"},{"text":"hello2"}]):
-			print a
-		print d.select("select :text a from dual","hello")
-		print d.select("select :text a from dual",text="hello")
+		#print d.method_source2('EPL_REQUESTS','NEW_AUTO')
+		#call_async(print d.methods_sources_by_class2('EPL_REQUESTS')
+		def f():
+			d.methods_sources_by_all_classes4()
+		call_async(f,msg=u"Загрузка всех методов")
+		#for a in  d.select("select :text a from dual",[{"text":"hello"},{"text":"hello2"}]):
+		#	print a
+		#print d.select("select :text a from dual","hello")
+		#print d.select("select :text a from dual",text="hello")
+		
 
 class cache_fileCommand(sublime_plugin.TextCommand):
 	def run(self, edit):
