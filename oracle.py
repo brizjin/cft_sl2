@@ -2357,9 +2357,8 @@ class db_class(object):
 	def methods_sources_by_all_classes(self):
 		i = 1
 		t_all = timer()
-		for r in self.classes:
+		for r in d.select("select c.id from classes c where exists(select 1 from methods m where c.id = m.class_id)"):
 			t = timer()
-			#print u"Загрузка класса %s"%r.id
 			m = self.methods_sources_by_class(r.id)
 			print u"%-4i Загруженно за %s"%(i,t.interval())
 			i+=1
