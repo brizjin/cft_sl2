@@ -2356,14 +2356,16 @@ class db_class(object):
 			m = self.method_source(r.class_id,r.short_name)
 	def methods_sources_by_all_classes(self):
 		i = 1
+		t_all = timer()
 		for r in self.classes:
 			t = timer()
-			print u"Загрузка класса %s"%r.id
+			#print u"Загрузка класса %s"%r.id
 			m = self.methods_sources_by_class(r.id)
-			print u"Загруженно за %s"%t.interval()
+			print u"%-4i Загруженно за %s"%(i,t.interval())
 			i+=1
-			if i>20:
-				return
+		print "Всего загрузка за ",t_all.interval()
+			#if i>20:
+			#	return
 
 	@cached
 	def method_source(self,class_name,method_name):
@@ -2468,7 +2470,8 @@ class db_class(object):
 	def methods_sources_by_all_classes2(self):
 		t_all = timer()
 		i = 1
-		for r in self.classes:
+		#for r in self.classes:
+		for r in d.select("select c.id from classes c where exists(select 1 from methods m where c.id = m.class_id)"):
 			t = timer()
 			print u"%-4d Загрузка класса %s"%(i,r.id)
 			m = self.methods_sources_by_class2(r.id)
@@ -2516,7 +2519,7 @@ class db_class(object):
 		return value
 		print "Всего операция заняла ",t_all.interval()
 	def methods_sources_by_all_classes4(self):
-		i = 1
+		#i = 1
 		params = []
 		for r in d.select("""	select m.class_id class_id,m.short_name short_name,count(1)
 								from sources s
@@ -2589,7 +2592,7 @@ class get_sourceCommand(sublime_plugin.TextCommand):
 		#print d.method_source2('EPL_REQUESTS','NEW_AUTO')
 		#call_async(print d.methods_sources_by_class2('EPL_REQUESTS')
 		def f():
-			d.methods_sources_by_all_classes4()
+			d.methods_sources_by_all_classes2()
 		call_async(f,msg=u"Загрузка всех методов")
 		#for a in  d.select("select :text a from dual",[{"text":"hello"},{"text":"hello2"}]):
 		#	print a
