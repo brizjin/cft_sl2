@@ -2429,62 +2429,10 @@ class get_sourceCommand(sublime_plugin.TextCommand):
 			d.methods_sources_by_all_classes()
 			call_async(d.cache.save_news,msg=u"Добавление изменений в кэш")
 		call_async(f,msg=u"Загрузка всех методов")
-		#for a in  d.select("select :text a from dual",[{"text":"hello"},{"text":"hello2"}]):
-		#	print a
-		#print d.select("select :text a from dual","hello")
-		#print d.select("select :text a from dual",text="hello")
-		
 
-class cache_fileCommand(sublime_plugin.TextCommand):
-	def run(self, edit):
-		t = timer()
-		global d
-		# sql = "select rownum n,v.* from classes v /*where rownum < 250*/"
-		# print md5(sql).hexdigest()
-		s = ''
-		a = """select rownum n,v.id  id
-	                ,v.name  name
-	                ,v.target_class_id  target_class_id
-	                ,v.base_class_id  base_class_id
-	                ,rpad(v.name,40,' ') || lpad(v.id,30,' ') text from classes v /*where rownum < 250*/"""#.text_table(columns_widths = {"entity_id": 4,"short_name":0,"name":20},part=0.8,trim_desc=True)
-		b = "select * from dual"
-		# call_async(a,msg='text0')
-		# call_async(b,msg='text1')
-		# call_async(b,msg='text2')
-		# call_async(b,msg='text3')
-		# call_async(b,msg='text4')
-		# call_async(a,msg='text5')
-
-		#d.select_cache(a)
-		print d.select_cache(b)
-		d.select_cache(b)
-		d.select_cache(b)
-		d.select_cache(b)
-		d.select_cache(b)
-		d.select_cache(b)
-		d.select_cache(a)
-		d.select_cache(b)
-		d.select_cache(b)
-		d.select_cache(b)
-		d.select_cache(b)
-		d.select_cache(b)
-		d.select_cache(b)
-		d.select_cache(a)
-		#print d.select_cache(a)[1:10]
-
-		sql = """select xmlelement(classes,xmlagg(xmlelement(class,XMLAttributes(cl.id as id
-																				,cl.name as name
-																				,cl.target_class_id as target_class_id
-																				,cl.base_class_id as base_class_id
-																				,rpad(cl.name,40,' ') || lpad(cl.id,30,' ')as text)))).getclobval() c from classes cl
-				 """
-		print "Загрузка за %s"%t.interval()
-		print d.cache.keys()
 
 class open_classCommand(sublime_plugin.WindowCommand):
 	def run(self):
-		#
-		#print "VERSION=",d.pool.acquire().version
 		self.window.show_quick_panel(d.classes_list,self.open_methods,sublime.MONOSPACE_FONT)
 
 	def open_methods(self, selected_class):
@@ -2494,7 +2442,6 @@ class open_classCommand(sublime_plugin.WindowCommand):
 		self.selected_class_id = d.classes[selected_class].id
 		print u"Загрузка списка методов за",t.interval()
 		self.window.show_quick_panel(d.methods_list(self.selected_class_id),self.method,sublime.MONOSPACE_FONT)
-
 
 	def method(self,selected_method):
 		if selected_method == -1:
@@ -2547,38 +2494,6 @@ class zip_printCommand(sublime_plugin.TextCommand):
 		print z.read('file1.txt')
 		print t.interval()
 		z.close()
-
-class dynmenuCommand(sublime_plugin.TextCommand):
-	def run(self,edit):
-		# print d.select('''select chr(213) || rpad(chr(205),20) || chr(10)
-		# 				     || xmlagg(xmlelement(e,text,chr(10)).extract('//text()') order by line).GetClobVal()
-		# 				  from sources 
-		# 				 where name = (select m.id
-		# 				                 from METHODS m
-		# 				                where m.class_id = 'EPL_REQUESTS'
-		# 				                  and m.short_name = 'NEW_AUTO')
-		# 				   and type = 'EXECUTE'
-		# 				   ''')
-		a = cx_Oracle.DATETIME
-		b = cx_Oracle.DATETIME
-		d.select('''
-			begin
-				:a := sysdate;
-				:b := sysdate;
-			end;
-			''', a = a,b=b)
-		print a,b
-
-		# fr = open(os.path.join(sublime.packages_path(),plugin_name,'Main.sublime-menu.template'),'r')
-		# menu_json = fr.read()
-		# #print "MENU=",menu_json
-		# fr.close()
-		# fw = open(os.path.join(sublime.packages_path(),plugin_name,'Main.sublime-menu'),'w')
-		# menu = json.loads(menu_json)
-		# #print "M1=",menu[0]["children"]
-		# menu[0]["children"].append({u'caption':u'Проверка',u'command':u''})
-		# fw.write(json.dumps(menu, ensure_ascii=False).encode('utf8'))
-		# fw.close()
 
 #КЭШ
 class get_cache(sublime_plugin.WindowCommand):
