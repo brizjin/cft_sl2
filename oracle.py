@@ -2469,16 +2469,29 @@ class db_class(object):
 		return value
 	def methods_sources_by_all_classes2(self):
 		t_all = timer()
-		i = 1
+		#i = 1
 		#for r in self.classes:
+		#from multiprocessing import Queue
+		from Queue import Queue
+		def f():
+			while 1:
+				t = timer()
+				i,class_n = q.get()				
+				print u"%-4i Загрузка класса %s"%(i,class_n)
+				m = self.methods_sources_by_class2(class_n)
+				print u"%-4i Загруженно за %s"%(i,t.interval())
+				q.task_done()
+				#i+=1
+		q = Queue()
+		i = 1
 		for r in d.select("select c.id from classes c where exists(select 1 from methods m where c.id = m.class_id)"):
-			t = timer()
-			print u"%-4d Загрузка класса %s"%(i,r.id)
-			m = self.methods_sources_by_class2(r.id)
-			print u"%-4d Загруженно за %s"%(i,t.interval())
-			i+=1
+			q.put((i,r.id))
+			i += 1
+		for i in range(8):
+			call_async(f)
 			#if i>20:
 			#	return
+		q.join()
 		print "Всего операция заняла ",t_all.interval()
 	def methods_sources_by_all_classes3(self):
 		t_all = timer()
