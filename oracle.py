@@ -2502,58 +2502,18 @@ class save_cache_newsCommand(sublime_plugin.WindowCommand):
 #Подключение
 class connectCommand(sublime_plugin.WindowCommand):
 	def run(self,connection_string = "ibs/ibs@cfttest"):
-		print "CONNECT"
+		self.on_change = None
+		self.on_cancel = None
 		self.window.show_input_panel(u"Схема/Пользователь@База_данных:",connection_string, self.on_done, self.on_change, self.on_cancel)
 	def on_done(self, input):
 		self.window.run_command('show_panel', {"panel": "console", "toggle": "true"})
-		#db.connect(input)
-		try:
-			#d = db_class("ibs/ibs@cfttest").connect_async()
-			d = db_class(str(input)).connect_async()
-			c = dm.cache.get("connections",{})
-			c[d.name] = input
-			dm.cache["connections"] = c
-			#print "CON1=",dm.cache
-			dm.update()
-		except Exception,e:			
-			print "Ошибка создания подключения..."
-	def on_change(self, input):
-		pass		
-	def on_cancel(self):
-		pass
-#Динамическое меню
-class dynmenu(object):
-	def __init__(self):
-		self.last_menu = None
-		self.cache = cache(os.path.join(cache_path,"menu.cache"))
-	def update(self):
-		with open(os.path.join(sublime.packages_path(),plugin_name,'Main.sublime-menu.template'),'r') as fr:
-			menu_json = fr.read()
-		
-		menu = json.loads(menu_json)
-		menu_json = json.dumps(menu, ensure_ascii=False).encode('utf8')
+		d = db_class(str(input)).connect_async()
+	# def on_change(self, input):
+	# 	pass		
+	# def on_cancel(self):
+	# 	pass
 
-		#menu[0]["children"].append({u'caption':u'Проверка2',u'command':u''})
-		connections = self.cache.get("connections",[])
-		#print "CON=",connections
-		if len(connections)>0:
-			menu[0]["children"].insert(0,{u'caption':u'Недавние подключения',u'children':[]})
-			for k,v in connections.items():
-				menu[0]["children"][0]["children"].append({u'caption':k,u'command':u'connect',u"args":{"connection_string":v}})
-		new_menu_json = json.dumps(menu, ensure_ascii=False).encode('utf8')
-		if new_menu_json != menu_json:
-			if self.last_menu != new_menu_json:
-				self.last_menu = new_menu_json
-				with open(os.path.join(sublime.packages_path(),plugin_name,'Main.sublime-menu'),'w') as fw:
-					fw.write(new_menu_json)
-				self.cache.save()
-
-dm = dynmenu()
-		
-class dynmenuCommand(sublime_plugin.TextCommand):
-	def run(self,edit):
-		dm.update()
-# try:
-# 	d = db_class("ibs/ibs@cfttest").connect_async()	
-# except Exception,e:
-# 	print "Ошибка создания подключения."
+try:
+	d = db_class("ibs/ibs@cfttest").connect_async()	
+except Exception,e:
+	print "Ошибка создания подключения."
