@@ -10,6 +10,25 @@ from xml.sax.saxutils import escape
 import traceback
 
 
+if "C:\Python\Python265\DLLs" not in sys.path:
+	sys.path.append("C:\Python\Python265\DLLs")
+	print "PATH=",sys.path
+import ptvsd
+try:
+    #tcp://sublime@localhost
+
+    #ptvsd.enable_attach(secret = 'sublime')
+    #print "V=",ptvsd.is_attached()
+    #if not hasattr(ptvsd,"is_attached") or hasattr(ptvsd,"is_attached") and not ptvsd.is_attached:
+    
+    #if not ptvsd.is_attached():
+    print u"Отладка успешно включенна"
+    ptvsd.enable_attach(secret = 'sublime')
+except Exception, e:
+	pass
+
+
+
 #from md5 import md5
 import hashlib
 
@@ -85,7 +104,7 @@ class cache(dict):
 			else:
 				return default
 		except KeyError as e:
-			print "KEY ERROR"
+			print "KEY ERROR",e
 			#params, = e.args
 			#print "KEY ERROR2",params
 			return default
@@ -2200,7 +2219,7 @@ class db_class(object):
 				,getmode=cx_Oracle.SPOOL_ATTRVAL_WAIT#,getmode=cx_Oracle.SPOOL_ATTRVAL_FORCEGET#cx_Oracle.SPOOL_ATTRVAL_NOWAIT
 				)
 			self.is_connect = True
-			print "Соединение c базой %s за %s "%(self.name,t.interval())
+			print u"Соединение c базой %s за %s "%(self.name,t.interval())
 		except cx_Oracle.DatabaseError, e:
 			self.pool = None	
 			print u"Ошибка соеденения с базой %s за %s. %s"%(self.name.upper(), t.interval(),e.args[0].message.decode('1251'))
@@ -2422,7 +2441,7 @@ class get_sourceCommand(sublime_plugin.TextCommand):
 			call_async(d.cache.save_news,msg=u"Добавление изменений в кэш")
 		call_async(f,msg=u"Загрузка всех методов")
 
-
+#F6 Открытие списка классов-затем методов-затем текст метода
 class open_classCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		self.window.show_quick_panel(d.classes_list,self.open_methods,sublime.MONOSPACE_FONT)
@@ -2441,8 +2460,13 @@ class open_classCommand(sublime_plugin.WindowCommand):
 		method_name = d.methods(self.selected_class_id)[selected_method].short_name
 		text = d.method_source(self.selected_class_id,method_name)
 
-		v = View.new()
-		v.text = text
+		view = View.new()
+		view.text = text
+		view.set_name(method_name)
+		view.set_scratch(True)
+		view.set_syntax_file("Packages/CFT/PL_SQL (Oracle).tmLanguage")
+		view.set_encoding("utf-8")
+		
 class class_methods_loadCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		self.window.show_quick_panel(d.classes_list,self.open_methods,sublime.MONOSPACE_FONT)
@@ -2499,7 +2523,7 @@ class save_cache_newsCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		#global d
 		call_async(d.cache.save_news,msg=u"Добавление изменений в кэш")		
-#Подключение
+#F12 Подключение
 class connectCommand(sublime_plugin.WindowCommand):
 	def run(self,connection_string = "ibs/ibs@cfttest"):
 		self.on_change = None
@@ -2508,10 +2532,6 @@ class connectCommand(sublime_plugin.WindowCommand):
 	def on_done(self, input):
 		self.window.run_command('show_panel', {"panel": "console", "toggle": "true"})
 		d = db_class(str(input)).connect_async()
-	# def on_change(self, input):
-	# 	pass		
-	# def on_cancel(self):
-	# 	pass
 
 try:
 	d = db_class("ibs/ibs@cfttest").connect_async()	
