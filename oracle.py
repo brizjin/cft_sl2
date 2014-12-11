@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import with_statement
-import sublime, sublime_plugin, sublime_plugin
+
+
+
 import re,cx_Oracle,json,xml.parsers.expat
 import os,sys,traceback,datetime,time,threading,thread
 import pyPEG
@@ -8,6 +10,14 @@ from pyPEG import parse,parseLine,keyword, _and, _not, ignore,Symbol
 from xml.sax.saxutils import escape
 #import pickfile
 import traceback
+
+try:
+	import sublime, sublime_plugin
+	plugin_name = "CFT"
+	plugin_path = os.path.join(sublime.packages_path(),plugin_name)
+except Exception, e:
+	pass
+	plugin_path = os.getcwd()
 
 
 if "C:\Python\Python265\DLLs" not in sys.path:
@@ -27,13 +37,10 @@ try:
 except Exception, e:
 	pass
 
-
-
 #from md5 import md5
 import hashlib
 
-plugin_name = "CFT"
-plugin_path 			= os.path.join(sublime.packages_path(),plugin_name)
+
 cache_path  			= os.path.join(plugin_path,"cache")
 used_classes_file_path 	= os.path.join(plugin_path,"cache","cft_settings.json")
 
@@ -50,25 +57,35 @@ import cPickle as pickle
 #import pickle as pickle
 import gzip
 import os
-import sublime
 import zipfile
-import sublime_plugin
 import hashlib
 import json
 import datetime
+
+class file_cache(dict):
+	def __init__(self):
+		pass
 class cache(dict):
-	def __init__(self,file_name):
+	def __init__(self,file_name,read = None,read_time_func = None):
 		t = timer()	
 		super(cache,self).__init__()
-		self.file_name = file_name
+		self.read_time_func = read_time_func
+		self.file_name 		= file_name
+		self.read 			= read
 		if os.path.isfile(self.file_name):	
 			self.z = zipfile.ZipFile(self.file_name, "r")
+			#if "read_time_index" in self.z.namelist():
+			#try:
+			#	obj_bin  = self.z.read("read_time_index")
+			#	self["read_time_index"] = pickle.loads(obj_bin)
+			#else:
+			#except Exception,e:
+			#	self["read_time_index"] = {}
+			#self.z.close()
 		print u'Инициализация кэша %s за %s'%(file_name,t.interval())
-
 	def __del__(self):
 		if hasattr(self,"z"):
 			self.z.close()
-
 	def get_key(self,key):
 		val = ''
 		if type(key) == tuple:
@@ -78,7 +95,6 @@ class cache(dict):
 			return val.replace('\\','/')
 		else:
 			return key
-
 	def __setitem__(self,key,value):
 		key = self.get_key(key)
 		super(cache,self).__setitem__(key,value)
@@ -86,16 +102,26 @@ class cache(dict):
 	def __getitem__(self,key):
 		key = self.get_key(key)
 		if key in super(cache,self).keys():
-			return super(cache,self).__getitem__(key)
-		else:
-			if os.path.isfile(self.file_name):						
-				t = timer()				
+			return super(cache,self).__getitem__(key)							#3.Чтение из памяти        (Самая быстрая)
+		elif os.path.isfile(self.file_name) and key in self.z.namelist():						
+				t = timer()
+				self.z = zipfile.ZipFile(self.file_name, "r")				
 				obj_bin  = self.z.read(key)
+				self.z.close()
 				obj = pickle.loads(obj_bin)	
-				super(cache,self).__setitem__(key,obj)
+				super(cache,self).__setitem__(key,obj)							#2.Чтение из архива        (Вторая по скорости)
 				print u"Чтение кэша %s с диска за %s"%(key,t.interval())
 				return obj
-			return None
+		try:
+			if hasattr(self,"read"): 
+				value = self.read(key)										    #1.Непосредственное чтение (По идее самое медленное)
+				super(cache,self).__setitem__(key,value)
+				if hasattr(self,"read_time_func"):
+					self["read_time_index"][key] = self.read_time_func(key)						
+				return value
+		except Exception,e:
+			pass
+		return None
 	def get(self,key,default = ''):
 		try:
 			k = self[key]
@@ -105,8 +131,6 @@ class cache(dict):
 				return default
 		except KeyError as e:
 			print "KEY ERROR",e
-			#params, = e.args
-			#print "KEY ERROR2",params
 			return default
 
 	def save_news(self):
@@ -122,16 +146,20 @@ class cache(dict):
 		old_filename = self.file_name	
 
 		znew = zipfile.ZipFile(new_filename,"w",zipfile.ZIP_DEFLATED)
-		for k,v in self.items():							#сохранили обновления
+		for k,v in self.items():										#сохранили обновления
 			znew.writestr(k,pickle.dumps(v, 1))
 
 		if os.path.isfile(old_filename):
 			zold = zipfile.ZipFile(old_filename,"r",zipfile.ZIP_DEFLATED)
-			for k in set(zold.namelist()) - set(self.keys()) :	#перезаписываем на диске
+			for k in set(zold.namelist()) - set(self.keys()) :			#перезаписываем на диске
 				#znew.writestr(k,pickle.dumps(zold.read(k), 1))
 				znew.writestr(k,zold.read(k))
-			zold.close()
-			os.remove(old_filename)			
+			zold.close()			
+			try:
+				os.remove(old_filename)				
+			except Exception, e:
+				print u"Ошибка удаления файла %s"%old_filename,e
+			
 		znew.close()		
 		os.rename(new_filename,old_filename)
 
@@ -2532,6 +2560,31 @@ class connectCommand(sublime_plugin.WindowCommand):
 	def on_done(self, input):
 		self.window.run_command('show_panel', {"panel": "console", "toggle": "true"})
 		d = db_class(str(input)).connect_async()
+#Тестирование нового кэша
+def read(key):			
+	file_path = os.path.join(plugin_path,"sql",key)
+	if not os.path.exists(file_path):
+		return None
+	with open(file_path,"r") as f:
+		text = f.read()
+	return text
+
+def read_time(key):
+	import datetime, os.path, time
+	#t_now      = datetime.datetime.now()
+	file_path  = os.path.join(plugin_path,"sql",key)
+	t_modified = datetime.datetime.fromtimestamp(os.path.getmtime(file_path))
+	#t2 = time.ctime(os.path.getmtime(file_path))
+	return t_modified
+
+text_cache = cache(os.path.join(cache_path,"new_cache_test.cache"),read,read_time)
+class cache_testCommand(sublime_plugin.WindowCommand):
+	def run(self):
+		c = text_cache
+		p1 = c[u"save_method_sources.tst"]
+		p2 = c[u"save_method_sources.tst"]
+		p1 = p2
+		c.save()
 
 try:
 	d = db_class("ibs/ibs@cfttest").connect_async()	
