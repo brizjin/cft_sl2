@@ -2493,7 +2493,7 @@ class cache_testCommand(sublime_plugin.WindowCommand):
 		p1 = c[u"save_method_sources.tst"]
 		p2 = c[u"save_method_sources.tst"]
 		p1 = p2
-		print "LEN=",len(p1)
+		#print "LEN=",len(p1)
 		c.save()
 
 try:
