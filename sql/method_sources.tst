@@ -1,5 +1,5 @@
 ﻿PL/SQL Developer Test script 3.0
-54
+27
 declare 
   c clob;
   class_name varchar2(200);
@@ -18,46 +18,19 @@ declare
     end loop;
     return ltrim(out_clob,chr(10));
   end;
-  
-  /*function cpad(text varchar2,n integer,c char)return varchar2
-  is
-  begin
-    return LPAD(RPAD(text,LENGTH(text) + (n - LENGTH(text)) / 2,c),n,c);
-  end;*/
-  
-  /*function get_with_header(class_name varchar2,method_name varchar2,oper_type varchar2)return clob
-  is
-    --out_clob clob;
-    d varchar2(2000);
-  begin
-    d := '';
-    --d := d || chr(10) || cpad('-',50,'-');
-    --d := d || chr(10) || '--' || cpad(oper_type,46,' ') || '--';
-    --d := d || chr(10) || cpad('-',50,'-') || chr(10);
-    d := d || chr(10) || '';
-    d := d || chr(10) || '' || cpad(oper_type,48,' ') || '';
-    d := d || chr(10) || '';
-    d := d || chr(10) ||  rtrim(get_part(class_name,method_name,oper_type),chr(10));
-    d := d || chr(10) || '';
-    return d;
-    --return rtrim(d || get_part(class_name,method_name,oper_type),chr(10));
-  end;*/
-  
-  
 begin
-  class_name := :class_name;
+  class_name  := :class_name;
   method_name := :method_name;
-  :e := get_part(class_name,method_name,'EXECUTE');
-  :v := get_part(class_name,method_name,'VALIDATE');
-  :g := get_part(class_name,method_name,'PUBLIC');
-  :l := get_part(class_name,method_name,'PRIVATE');
-  :s := get_part(class_name,method_name,'VBSCRIPT');
-
+  :EXECUTE    := get_part(class_name,method_name,'EXECUTE');
+  :VALIDATE   := get_part(class_name,method_name,'VALIDATE');
+  :PUBLIC     := get_part(class_name,method_name,'PUBLIC');
+  :PRIVATE    := get_part(class_name,method_name,'PRIVATE');
+  :VBSCRIPT   := get_part(class_name,method_name,'VBSCRIPT');
 end;
 9
 class_name
 1
-EXT_DOCS_SVOD
+EPL_REQUESTS
 5
 method_name
 1
@@ -71,23 +44,23 @@ out
 1
 <CLOB>
 -112
-e
+EXECUTE
 1
 <CLOB>
 112
-v
+VALIDATE
 1
 <CLOB>
 112
-g
+PUBLIC
 1
 <CLOB>
 112
-l
+PRIVATE
 1
 <CLOB>
 112
-s
+VBSCRIPT
 1
 <CLOB>
 112

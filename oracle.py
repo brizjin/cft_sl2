@@ -2306,35 +2306,7 @@ class db_class(object):
 
 	@cached
 	def method_source(self,class_name,method_name):
-		s = self.select("""
-			declare 
-			  c clob;
-			  class_name varchar2(200);
-			  method_name varchar2(200);
-
-			  function get_part(class_name varchar2,method_name varchar2,oper_type varchar2)return clob
-			  is
-			    out_clob clob;
-			  begin
-			    for r in (select text
-			              from sources 
-			              where name = (select m.id from METHODS m where m.class_id = class_name and m.short_name = method_name)
-			                and type = oper_type order by line)
-			    loop
-			      out_clob := out_clob || r.text || chr(10);
-			    end loop;
-			    return ltrim(out_clob,chr(10));
-			  end;
-			begin
-			  class_name  := :class_name;
-			  method_name := :method_name;
-			  :EXECUTE    := get_part(class_name,method_name,'EXECUTE');
-			  :VALIDATE   := get_part(class_name,method_name,'VALIDATE');
-			  :PUBLIC     := get_part(class_name,method_name,'PUBLIC');
-			  :PRIVATE    := get_part(class_name,method_name,'PRIVATE');
-			  :VBSCRIPT   := get_part(class_name,method_name,'VBSCRIPT');
-			end;
-			"""
+		s = self.select(sql_cache["method_sources.tst"]
 			,class_name  = class_name
 			,method_name = method_name
 			,EXECUTE 	 = cx_Oracle.CLOB
@@ -2353,6 +2325,37 @@ class db_class(object):
 			value += '└──────────────────────────────────────────────────────────────────────────────┘\n'.decode('utf-8')
 			#return value
 		return value
+	def set_sources(self,class_name,method_name,b,v,g,l,s):
+		try:
+			s = self.select(sql_cache["save_method_sources.tst"],
+				class_name 	= class_name,
+				method_name	= method_name,
+				b			= cx_Oracle.CLOB,
+				v			= cx_Oracle.CLOB,
+				g			= cx_Oracle.CLOB,
+				l			= cx_Oracle.CLOB,
+				s			= cx_Oracle.CLOB,
+				out 		= cx_Oracle.CLOB,
+				out_count 	= cx_Oracle.CLOB,
+				out_others 	= cx_Oracle.CLOB
+			)
+			# err_num = int(err_num.getvalue())
+			
+			# if out_others.getvalue():
+			# 	print unicode(out_others.getvalue().read(),'1251').strip()
+
+			# if err_num == 0:					
+			# 	pass
+			# else:
+			# 	sublime.status_message(u"Ошибок компиляции %s за %s сек" % (err_num,t.get_time()))					
+			# conn.commit()
+			# self.db.pool.release(conn)		
+		except Exception,e:
+			print "*** Ошибка выполнения method_row.set_sources:",e
+			# 	if sys != None:
+			# 		exc_type, exc_value, exc_traceback = sys.exc_info()
+			# 		traceback.print_exception(exc_type, exc_value, exc_traceback,
+			# 			                          limit=10, file=sys.stdout)	
 
 
 #Загрузить текст метода
@@ -2367,6 +2370,7 @@ class get_sourceCommand(sublime_plugin.TextCommand):
 		call_async(f,msg=u"Загрузка всех методов")
 
 #F6 Открытие списка классов-затем методов-затем текст метода
+#F6 Показать список классов, для выбранного класса список методов, и открыть текст метода
 class open_classCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		self.window.show_quick_panel(d.classes_list,self.open_methods,sublime.MONOSPACE_FONT)
@@ -2391,7 +2395,323 @@ class open_classCommand(sublime_plugin.WindowCommand):
 		view.set_scratch(True)
 		view.set_syntax_file("Packages/CFT/PL_SQL (Oracle).tmLanguage")
 		view.set_encoding("utf-8")
+
+#F7 Показать список классов, для выбранного класса список методов, и открыть текст метода
+# class open_methodCommand(sublime_plugin.WindowCommand):
+# 	def run(self):
+# 		print "NEW"
+class open_methodCommand(sublime_plugin.TextCommand):
+	def run(self, edit):
+		#self.view.insert(edit, 0, "Hello, World!")
+
+		import os, sys, inspect
+		#print sys.version_info
+		# realpath() with make your script run, even if you symlink it :)
+		#cmd_folder = os.path.realpath(os.path.abspath(os.path.split(inspect.getfile( inspect.currentframe() ))[0]))
+		#if cmd_folder not in sys.path:
+		#	sys.path.insert(0, cmd_folder)
+
+		# use this if you want to include modules from a subforder
+		#cmd_subfolder = os.path.realpath(os.path.abspath(os.path.join(os.path.split(inspect.getfile( inspect.currentframe() ))[0],"User")))
+		#if cmd_subfolder not in sys.path:
+		#	sys.path.insert(0, cmd_subfolder)
+		#user = "C:\Users\Ivan\AppData\Roaming\Sublime Text 2\Packages\User"
+		#if user not in sys.path:
+		#	sys.path.insert(0, user)
+		#print sys.path
+
+
+		from PyQt4 import QtCore, QtGui
+
+		try:
+		    _fromUtf8 = QtCore.QString.fromUtf8
+		except AttributeError:
+		    def _fromUtf8(s):
+		        return s
+
+		try:
+		    _encoding = QtGui.QApplication.UnicodeUTF8
+		    def _translate(context, text, disambig):
+		        return QtGui.QApplication.translate(context, text, disambig, _encoding)
+		except AttributeError:
+		    def _translate(context, text, disambig):
+		        return QtGui.QApplication.translate(context, text, disambig)
+
 		
+		class Ui_Form(object):
+			i = 0
+			def hello(self):
+				self.i+=1
+				print "Hello world %s"%self.i
+			def retranslateUi(self, Form):
+				Form.setWindowTitle(_translate("Form", "Form", None))
+				self.pushButton.setText(_translate("Form", "PushButton", None))
+				self.pushButton2.setText(_translate("Form", "Закрыть", None))
+				
+
+			def setupUi(self, Form):
+				Form.setObjectName(_fromUtf8("Form"))
+				Form.resize(400, 300)
+				Form.setWindowFlags(QtCore.Qt.FramelessWindowHint)
+				#layout.addWidget(QtGui.QSizeGrip(Form), 0, QtCore.Qt.AlignBottom | QtCore.Qt.AlignRight);
+				#self.grip = QtGui.QSizeGrip(Form)
+				#self.grip.setGeometry(QtCore.QRect(200, 160, 75, 50))
+				#grip_layout = QtGui.QVBoxLayout(Form);
+				      
+				#grip_layout.setSpacing(0);
+				
+				
+				self.pushButton = QtGui.QPushButton(Form)
+				self.pushButton.setGeometry(QtCore.QRect(160, 120, 75, 23))
+				self.pushButton.setObjectName(_fromUtf8("pushButton"))
+				self.pushButton2 = QtGui.QPushButton(Form)
+				self.pushButton2.setGeometry(QtCore.QRect(160, 160, 75, 23))
+				self.pushButton2.setObjectName(_fromUtf8("Close"))
+				def item_click(item):
+					print "CLICKED=", str(item.text())
+				def item_changed(item):
+					print "CHANGED=",item, str(item.text())
+				def current_item_changed(item_new,item_old):					
+					text1 = text2 = None
+					if item_new:
+						text1 = str(item_new.text())
+					if item_old:
+						text2 = str(item_old.text())
+					print "CURRENT_CHANGED NEW=%s,OLD=%s"%(text1,text2)
+				#QtCore.QObject.connect(self.pushButton, QtCore.SIGNAL(_fromUtf8("clicked()")), Form.slot1)
+				QtCore.QObject.connect(self.pushButton,  QtCore.SIGNAL(_fromUtf8("clicked()")), self.hello)
+				QtCore.QObject.connect(self.pushButton2, QtCore.SIGNAL(_fromUtf8("clicked()")), Form.close)
+				#QtCore.QObject.connect(Form, QtCore.SIGNAL(_fromUtf8("focusOutEvent()")), self.focus_losts)
+				
+				def FormEventFilter(object, event):
+					# if event.type() == QtCore.QEvent.WindowActivate:
+					# 	print "widget window has gained focus"
+					# elif event.type()== QtCore.QEvent.WindowDeactivate:
+					# 	print "widget window has lost focus"
+					# elif event.type()== QtCore.QEvent.FocusIn:
+					# 	print "widget has gained keyboard focus"
+					# elif event.type()== QtCore.QEvent.FocusOut:
+					# 	print "widget has lost keyboard focus"
+					# el
+					if event.type() == QtCore.QEvent.Leave: #11
+						#print "Mouse leaves widget's boundaries."
+						try:
+							object.close()
+						except Exception, e:
+							print e
+
+
+					#else:
+					#	print "EVENT=",object,event.type()
+					return False
+				def ListEventFilter(object, event):
+					# if event.type() == QtCore.QEvent.WindowActivate:
+					# 	print "widget window has gained focus"
+					# elif event.type()== QtCore.QEvent.WindowDeactivate:
+					# 	print "widget window has lost focus"
+					# elif event.type()== QtCore.QEvent.FocusIn:
+					# 	print "widget has gained keyboard focus"
+					# elif event.type()== QtCore.QEvent.FocusOut:
+					# 	print "widget has lost keyboard focus"
+					# elif event.type() == QtCore.QEvent.Leave: #11
+					# 	print "Mouse leaves widget's boundaries."
+					# 	# try:
+					# 	# 	object.close()
+					# 	# except Exception, e:
+					# 	# 	print e
+					# else:
+					# 	print "EVENT=",object,event.type()
+					return False
+
+				Form.eventFilter = FormEventFilter
+				Form.installEventFilter(Form)
+
+				# layout = QtGui.QVBoxLayout(Form);    
+				# layout.setContentsMargins(QtCore.QMargins());         
+				# layout.setSpacing(0);
+				#grip_layout2 = QtGui.QGridLayout(Form)
+				#grip_layout2.setContentsMargins(QtCore.QMargins());
+				#grip_layout2.addWidget(QtGui.QSizeGrip(Form),0,1, QtCore.Qt.AlignBottom | QtCore.Qt.AlignRight);
+				
+				grip_layout = QtGui.QGridLayout(Form)			
+				grip_layout.setContentsMargins(QtCore.QMargins());
+
+				#grip_layout2 = QtGui.QGridLayout(Form)			
+				#grip_layout2.setContentsMargins(QtCore.QMargins());
+				#stack = QtGui.QStackedLayout(Form)
+				#base_lay.addLayout(stack,0,0)
+				
+
+				#grip_layout.addLayout(stack,0,0); 
+
+				self.list = QtGui.QListWidget(Form)
+				#self.list.setStyleSheet("background-color:red;");
+				self.list.addItems(['Item %s' % (i + 1) for i in range(10)])
+				#self.list.setGeometry(QtCore.QRect(200, 160, 75, 50))
+				self.list.itemClicked.connect(item_click)
+				self.list.itemChanged.connect(item_changed)
+				self.list.currentItemChanged.connect(current_item_changed)
+				self.list.eventFilter = ListEventFilter
+				self.list.installEventFilter(self.list)
+
+				#self.grip = QtGui.QSizeGrip(Form)
+				#self.grip.setAlignment(QtCore.Qt.AlignVCenter)
+				
+				grip_layout.addWidget(self.list, 0,0);
+				#grip_layout.addStretch()
+				grip_layout.addWidget(QtGui.QSizeGrip(Form),0,0, QtCore.Qt.AlignBottom | QtCore.Qt.AlignRight);
+				#grip_layout2.addWidget(self.list);
+				#grip_layout2 = QtGui.QGridLayout(Form)
+				#grip_layout2.addWidget(QtGui.QSizeGrip(Form),0,0, QtCore.Qt.AlignBottom | QtCore.Qt.AlignRight);
+				#stack.addWidget()
+				#lay = QtGui.QGridLayout(Form)				
+				#lay.addWidget(QtGui.QListWidget(Form),0,0)
+				#lay.addWidget(QtGui.QSizeGrip(Form),0,1, QtCore.Qt.AlignBottom | QtCore.Qt.AlignRight);
+				#lay.addWidget(QtGui.QSizeGrip(Form),0,0, QtCore.Qt.AlignBottom | QtCore.Qt.AlignRight);
+				#lay.addWidget(self.list,0,0)
+				#stack.addItem(lay)
+				
+				#stack.setStackingMode(QtGui.QStackedLayout.StackAll)
+				
+				#grip_layout.addWidget(QtGui.QSizeGrip(Form),0, 1, QtCore.Qt.AlignBottom | QtCore.Qt.AlignRight);
+				 
+				#grip = QtGui.QSizeGrip(Form)
+				#Form.setAlignment(grip,QtCore.Qt.AlignBottom | QtCore.Qt.AlignRight)
+				#grip_layout2.addWidget(grip,0,1);
+				#grip_layout2.addWidget(QtGui.QSizeGrip(Form),0,0)
+
+				#self.grip = QtGui.QSizeGrip(Form)
+				#grip.setGeometry(QtCore.QRect(350, 250, 50, 50))
+
+				QtCore.QMetaObject.connectSlotsByName(Form)
+				self.retranslateUi(Form)
+
+
+
+		class EvolutionSearch(QtGui.QLineEdit):
+			def __init__(self, parent=None, delay=1000, callback=None, icon=None):
+				super(EvolutionSearch, self).__init__(parent)
+				self.icon = icon
+				self.delay = delay
+				self.callback = callback
+				self.timer = QtCore.QTimer(self)
+				self.timer.setSingleShot(True)
+
+				self.search_button = QtGui.QToolButton(self)
+				if self.icon:
+				    self.search_button.setIcon(self.icon)
+				self.search_button.setAutoRaise(True)
+
+				self.hbox = QtGui.QHBoxLayout(self)
+				self.hbox.setAlignment(QtCore.Qt.AlignVCenter)
+				self.hbox.setContentsMargins(0,0,0,0)
+				self.hbox.addStretch()
+				self.hbox.addWidget(self.search_button)
+
+				self.setTextMargins(0, 0, 20, 0)
+
+				self.connect(self, QtCore.SIGNAL("textEdited(QString)"),
+				        self.eventDelay)
+				self.connect(self.timer, QtCore.SIGNAL("timeout()"),
+				        self.startCallback)
+				self.connect(self.search_button, QtCore.SIGNAL("clicked()"),
+				        self.startSearch)
+
+			def eventDelay(self, text):
+				self.timer.stop()
+				self.timer.start(self.delay)
+
+			def startCallback(self):
+				text = unicode(self.text())
+				if self.callback:
+				    self.callback(text)
+
+			def startSearch(self):
+				self.timer.stop()
+				text = unicode(self.text())
+				self.callback(text)
+
+			def setIcon(self, icon):
+				self.search_button.setIcon(icon)    
+		def callback(text):
+			"""
+			Function that does something.
+			"""
+			print text
+		class MyWidget(QtGui.QWidget):
+			def __init__(self, parent=None):
+				super(MyWidget, self).__init__(parent)
+				self.hbox = QtGui.QHBoxLayout(self)
+				self.search_edit = EvolutionSearch(self, callback=callback)
+				icon = QtGui.QIcon("system-search.png")
+				list_of_values = QtCore.QStringList()
+				list_of_values << 'pippo' << 'pluto' << 'plurimo' << 'pipare'
+				self.search_edit.setIcon(icon)
+				self.completer = QtGui.QCompleter(list_of_values, self.search_edit)
+				self.completer.setCompletionMode(QtGui.QCompleter.PopupCompletion)
+				self.completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+				self.search_edit.setCompleter(self.completer)
+		class MySearchLineEdit(QtGui.QLineEdit):
+			def __init__(self, parent=None, delay=1000, callback=None):
+				super(MySearchLineEdit, self).__init__(parent)
+				self.delay = delay
+				self.callback = callback
+				self.timer = QtCore.QTimer(self)
+				self.timer.setSingleShot(True)
+				self.setTextMargins(0, 0, 20, 0)
+				self.connect(self, QtCore.SIGNAL("textEdited(QString)"),
+				        self.eventDelay)
+				self.connect(self.timer, QtCore.SIGNAL("timeout()"),
+				        self.startCallback)
+
+			def eventDelay(self, text):
+				self.timer.stop()
+				self.timer.start(self.delay)
+
+			def startCallback(self):
+				text = unicode(self.text())
+				if self.callback:
+				    self.callback(text)
+
+			def paintEvent(self, event=None):
+				super(MySearchLineEdit, self).paintEvent(event)
+				pixmap = QtGui.QPixmap("system-search.png")
+				painter = QtGui.QPainter(self)
+				pixmap_width = pixmap.width()
+				pixmap_height = pixmap.height()
+				right_border = 3
+				painter.drawPixmap((self.width() - pixmap.width() - right_border),
+				                   (self.height() - pixmap.height()) / 2,
+				                   pixmap)
+
+			def callback(text):
+				"""
+				Function that does something.
+				"""
+				print text
+		#if __name__ == "__main__":
+		import sys
+		#app = QtGui.QApplication(sys.argv)
+		argv = [""]
+		app = QtGui.QApplication(argv)
+		Form = QtGui.QWidget()
+		#Form = QtGui.QMainWindow()
+		ui = Ui_Form()
+		ui.setupUi(Form)
+		Form.show()
+
+		# window1 = MyWidget()
+		# window1.show()
+
+		# window2 = MySearchLineEdit(callback=callback)
+		# window2.show()
+
+		app.exec_()
+		#sys.exit(app.exec_())
+
+		print "end"
+		
+
 class class_methods_loadCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		self.window.show_quick_panel(d.classes_list,self.open_methods,sublime.MONOSPACE_FONT)
@@ -2403,6 +2723,7 @@ class class_methods_loadCommand(sublime_plugin.WindowCommand):
 			d.methods_sources_by_class(self.selected_class_id)
 			print u"Загрузка текстов методов за",t.interval()
 		call_async(load,msg=u"Загрузка текстов методов")
+
 class load_all_textCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		def load():
@@ -2457,33 +2778,34 @@ class connectCommand(sublime_plugin.WindowCommand):
 	def on_done(self, input):
 		self.window.run_command('show_panel', {"panel": "console", "toggle": "true"})
 		d = db_class(str(input)).connect_async()
-#Тестирование нового кэша
-def read(key):			
-	file_path = os.path.join(plugin_path,"sql",key)
-	if not os.path.exists(file_path):
-		return None
-	with open(file_path,"r") as f:
-		text = f.read()
-	return text
 
-def read_time(key):
-	import datetime, os.path, time
-	#t_now      = datetime.datetime.now()
-	file_path  = os.path.join(plugin_path,"sql",key)
-	t_modified = datetime.datetime.fromtimestamp(os.path.getmtime(file_path))
-	#t2 = time.ctime(os.path.getmtime(file_path))
-	return t_modified
 
-text_cache = None
-try:
-	
+sql_cache = None
+try:	
 	def load_async():
-		global text_cache
-		text_cache = cache(os.path.join(cache_path,"new_cache_test.cache"),read,read_time)
-		return text_cache
-	def callback(value):
-		text_cache = value
-	call_async(load_async,callback)
+		global sql_cache
+		#Тестирование нового кэша
+		def read(key):			
+			file_path = os.path.join(plugin_path,"sql",key)
+			if not os.path.exists(file_path):
+				return None
+			with open(file_path,"r") as f:
+				text = f.read()
+			fileName, fileExtension = os.path.splitext(file_path)
+			if fileExtension == '.tst':
+				m = re.search(r"(?P<body>declare.+end;)",text,re.S)
+				text = m.group("body")
+			return text
+		def read_time(key):
+			import datetime, os.path, time
+			file_path  = os.path.join(plugin_path,"sql",key)
+			t_modified = datetime.datetime.fromtimestamp(os.path.getmtime(file_path))
+			return t_modified
+		sql_cache = cache(os.path.join(cache_path,"sql.cache"),read,read_time)
+		return sql_cache
+	#def callback(value):
+	#	sql_cache = value
+	call_async(load_async)
 except Exception, e:
 	raise e
 
